@@ -4,6 +4,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sort"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
@@ -25,18 +27,26 @@ type screen int
 const (
 	screenPRs screen = iota
 	screenInstances
+	screenThread
 )
 
 type tabDef struct {
 	label string
-	rel   provider.Relation // 0 = all
+	kind  provider.Kind
+	rel   provider.Relation // 0 = all of the kind
 }
 
+// firstIssueTab is the index of the first issues tab.
+const firstIssueTab = 4
+
 var tabs = []tabDef{
-	{"Revisar", provider.ReviewRequested},
-	{"Meus", provider.Authored},
-	{"Atribuídos", provider.Assigned},
-	{"Todos", 0},
+	{"Revisar", provider.KindPR, provider.ReviewRequested},
+	{"Meus", provider.KindPR, provider.Authored},
+	{"Atribuídos", provider.KindPR, provider.Assigned},
+	{"Todos", provider.KindPR, 0},
+	{"Atribuídas", provider.KindIssue, provider.Assigned},
+	{"Criadas", provider.KindIssue, provider.Authored},
+	{"Menções", provider.KindIssue, provider.Mentioned},
 }
 
 type modalKind int
@@ -48,6 +58,7 @@ const (
 	modalForm
 	modalHelp
 	modalMessage
+	modalCompose
 )
 
 type menuItem struct {
@@ -75,7 +86,7 @@ type Model struct {
 	cfg     *config.Config
 	clients map[string]provider.Client
 
-	prs      []provider.PR
+	prs      []provider.Item
 	instErr  map[string]error
 	clones   map[string]string // PR key -> local clone path
 	wts      map[string]string // PR key -> existing worktree path
@@ -102,6 +113,10 @@ type Model struct {
 	confirm   *confirm
 	form      *form
 	message   []string
+
+	thread     *threadView
+	compose    *textarea.Model
+	composeFor provider.Item
 
 	pending map[string]string // PR key -> running action label
 
@@ -150,7 +165,7 @@ type (
 	autoRefreshMsg struct{ gen int }
 	refreshMsg     struct {
 		gen    int
-		prs    map[string][]provider.PR
+		prs    map[string][]provider.Item
 		errs   map[string]error
 		clones map[string]string
 	}
@@ -159,7 +174,9 @@ type (
 		ok      string
 		err     error
 		refresh bool
-		dirty   *provider.PR // worktree removal blocked by local changes
+		dirty   *provider.Item // worktree removal blocked by local changes
+		// reloadThread reloads the open conversation of key.
+		reloadThread bool
 	}
 	launchMsg struct {
 		key, dir, label string
@@ -167,7 +184,7 @@ type (
 		note            string
 	}
 	needPathMsg struct {
-		pr     provider.PR
+		pr     provider.Item
 		action string
 	}
 	execDoneMsg struct{ err error }
@@ -199,7 +216,7 @@ func (m *Model) refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		res := refreshMsg{gen: gen, prs: map[string][]provider.PR{}, errs: map[string]error{}, clones: map[string]string{}}
+		res := refreshMsg{gen: gen, prs: map[string][]provider.Item{}, errs: map[string]error{}, clones: map[string]string{}}
 		var mu sync.Mutex
 		var wg sync.WaitGroup
 		for _, c := range clients {
@@ -237,7 +254,7 @@ func (m *Model) scheduleRefresh() tea.Cmd {
 }
 
 func (m *Model) applyRefresh(msg refreshMsg) {
-	byInst := map[string][]provider.PR{}
+	byInst := map[string][]provider.Item{}
 	for _, pr := range m.prs {
 		byInst[pr.Instance] = append(byInst[pr.Instance], pr)
 	}
@@ -268,9 +285,9 @@ func (m *Model) applyRefresh(msg refreshMsg) {
 	m.scanWorktrees()
 	first := m.lastSync.IsZero()
 	m.lastSync = time.Now()
-	if first && !m.tabTouched && m.count(tabs[m.tab].rel) == 0 {
+	if first && !m.tabTouched && m.count(tabs[m.tab]) == 0 {
 		for i, t := range tabs {
-			if m.count(t.rel) > 0 {
+			if m.count(t) > 0 {
 				m.tab = i
 				break
 			}
@@ -289,17 +306,17 @@ func (m *Model) scanWorktrees() {
 }
 
 // visible returns the PRs of the current tab matching the filter.
-func (m *Model) visible() []*provider.PR {
-	rel := tabs[m.tab].rel
+func (m *Model) visible() []*provider.Item {
+	tab := tabs[m.tab]
 	q := strings.ToLower(strings.TrimSpace(m.filter.Value()))
-	var out []*provider.PR
+	var out []*provider.Item
 	for i := range m.prs {
 		pr := &m.prs[i]
-		if rel != 0 && pr.Relations&rel == 0 {
+		if !tab.match(pr) {
 			continue
 		}
 		if q != "" {
-			hay := strings.ToLower(pr.Title + " " + pr.Repo + " " + pr.Author + " " + pr.Ref() + " " + pr.SourceBranch + " " + pr.Instance)
+			hay := strings.ToLower(pr.Title + " " + pr.Repo + " " + pr.Author + " " + pr.Ref() + " " + pr.SourceBranch + " " + pr.Instance + " " + strings.Join(pr.Labels, " "))
 			if !strings.Contains(hay, q) {
 				continue
 			}
@@ -309,17 +326,21 @@ func (m *Model) visible() []*provider.PR {
 	return out
 }
 
-func (m *Model) count(rel provider.Relation) int {
+func (t tabDef) match(it *provider.Item) bool {
+	return it.Kind == t.kind && (t.rel == 0 || it.Relations&t.rel != 0)
+}
+
+func (m *Model) count(t tabDef) int {
 	n := 0
 	for i := range m.prs {
-		if rel == 0 || m.prs[i].Relations&rel != 0 {
+		if t.match(&m.prs[i]) {
 			n++
 		}
 	}
 	return n
 }
 
-func (m *Model) current() *provider.PR {
+func (m *Model) current() *provider.Item {
 	v := m.visible()
 	if m.cursor >= 0 && m.cursor < len(v) {
 		return v[m.cursor]
@@ -393,10 +414,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyRefresh(msg)
 		return m, m.scheduleRefresh()
 
+	case threadMsg:
+		m.applyThread(msg)
+		return m, nil
+
 	case actionDoneMsg:
 		delete(m.pending, msg.key)
 		m.scanWorktrees()
 		var cmds []tea.Cmd
+		if msg.reloadThread && msg.err == nil && m.thread != nil && m.thread.item.Key() == msg.key {
+			cmds = append(cmds, m.loadThread())
+		}
 		if msg.err != nil {
 			m.showMessage("Erro", msg.err.Error())
 			m.setStatus(stErr, msg.err.Error())
@@ -462,9 +490,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.MouseWheelDown:
 			delta = 1
 		}
-		if m.screen == screenInstances {
+		switch m.screen {
+		case screenInstances:
 			m.instCur = max(0, min(len(m.cfg.Instances)-1, m.instCur+delta))
-		} else {
+		case screenThread:
+			m.thread.offset += 3 * delta
+		default:
 			m.setCursor(m.cursor + delta)
 		}
 		return m, nil
@@ -473,6 +504,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.key(msg)
 	}
 
+	if m.modal == modalCompose && m.compose != nil {
+		var cmd tea.Cmd
+		*m.compose, cmd = m.compose.Update(msg)
+		return m, cmd
+	}
 	if m.modal == modalForm && m.form != nil {
 		// Forward non-key messages (cursor blink) to the focused input.
 		fl := m.form.fields[m.form.focus]
@@ -499,6 +535,8 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 	case modalForm:
 		res, cmd := m.form.update(msg)
 		return tea.Batch(cmd, m.formResult(res))
+	case modalCompose:
+		return m.composeKey(msg)
 	case modalNone:
 	default:
 		return m.modalKey(k)
@@ -526,6 +564,11 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 
 // press handles a shortcut; also used by clickable hints.
 func (m *Model) press(k string) tea.Cmd {
+	if m.screen == screenThread && m.thread != nil {
+		if cmd, ok := m.threadKey(k); ok {
+			return cmd
+		}
+	}
 	switch k {
 	case "q":
 		if m.screen == screenInstances {
@@ -543,6 +586,7 @@ func (m *Model) press(k string) tea.Cmd {
 		m.setStatus(stInfo, "atualizando…")
 		return m.refresh()
 	case "i":
+		m.thread = nil
 		if m.screen == screenInstances {
 			m.screen = screenPRs
 		} else {
@@ -565,7 +609,7 @@ func (m *Model) press(k string) tea.Cmd {
 	case "/":
 		m.filtering = true
 		return m.filter.Focus()
-	case "1", "2", "3", "4":
+	case "1", "2", "3", "4", "5", "6", "7":
 		n, _ := strconv.Atoi(k)
 		m.switchTab(n - 1)
 	case "tab", "right", "l":
@@ -703,7 +747,7 @@ func (m *Model) click(mouse tea.Mouse) tea.Cmd {
 		return m.press(k)
 	case strings.HasPrefix(id, "tab:"):
 		n, _ := strconv.Atoi(strings.TrimPrefix(id, "tab:"))
-		m.screen = screenPRs
+		m.screen, m.thread = screenPRs, nil
 		m.switchTab(n)
 	case strings.HasPrefix(id, "row:"):
 		n, _ := strconv.Atoi(strings.TrimPrefix(id, "row:"))
@@ -730,6 +774,10 @@ func (m *Model) click(mouse tea.Mouse) tea.Cmd {
 		return m.modalKey("n")
 	case id == "close":
 		m.modal = modalNone
+	case id == "compose:send":
+		return m.sendComment()
+	case id == "compose:cancel":
+		m.modal, m.compose = modalNone, nil
 	case id == "banner":
 		m.screen = screenInstances
 	case strings.HasPrefix(id, "form:"):
@@ -749,7 +797,18 @@ func (m *Model) click(mouse tea.Mouse) tea.Cmd {
 
 // ---------- PR actions ----------
 
-func (m *Model) openMenu(pr *provider.PR) {
+func (m *Model) openMenu(pr *provider.Item) {
+	m.menuTitle = pr.Repo + " " + pr.Ref() + " — " + pr.Title
+	m.menuCur = 0
+	m.modal = modalMenu
+	conversation := []menuItem{
+		{key: "v", label: fmt.Sprintf("Ver conversa (%d comentários)", pr.Comments)},
+		{key: "n", label: "Comentar"},
+	}
+	if pr.IsIssue() {
+		m.menu = append(conversation, menuItem{key: "o", label: "Abrir no navegador"})
+		return
+	}
 	_, hasWT := m.wts[pr.Key()]
 	noWT := ""
 	if !hasWT {
@@ -764,7 +823,7 @@ func (m *Model) openMenu(pr *provider.PR) {
 	if hasWT {
 		wtLabel = "Atualizar worktree"
 	}
-	m.menu = []menuItem{
+	m.menu = append(conversation, []menuItem{
 		{key: "w", label: wtLabel},
 		{key: "c", label: "Checkout no clone local", disabled: noTool},
 		{key: "d", label: "Ver diff (" + m.diffToolName() + ")"},
@@ -776,10 +835,13 @@ func (m *Model) openMenu(pr *provider.PR) {
 		{key: "x", label: "Remover worktree (sem aprovar)", disabled: noWT},
 		{key: "o", label: "Abrir no navegador"},
 		{key: "p", label: "Definir pasta local do repositório"},
+	}...)
+}
+
+func (m *Model) openBrowser(url string) {
+	if err := launch.Browser(url); err != nil {
+		m.setStatus(stErr, err.Error())
 	}
-	m.menuTitle = pr.Repo + " " + pr.Ref() + " — " + pr.Title
-	m.menuCur = 0
-	m.modal = modalMenu
 }
 
 func firstNonEmpty(s ...string) string {
@@ -798,13 +860,28 @@ func (m *Model) diffToolName() string {
 	return "git diff"
 }
 
-func (m *Model) prAction(pr *provider.PR, k string) tea.Cmd {
+func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 	if _, busy := m.pending[pr.Key()]; busy && k != "o" && k != "p" {
 		m.setStatus(stInfo, "aguarde: "+m.pending[pr.Key()])
 		return nil
 	}
 	client := m.clients[pr.Instance]
 	if client == nil {
+		return nil
+	}
+	switch k {
+	case "v":
+		return m.openThread(pr)
+	case "n":
+		return m.openCompose(pr)
+	case "o":
+		m.openBrowser(pr.URL)
+		return nil
+	}
+	if pr.IsIssue() {
+		if strings.Contains("wcdtaAmMxp", k) {
+			m.setStatus(stInfo, "ação disponível apenas para pull/merge requests")
+		}
 		return nil
 	}
 	p := *pr // copy: m.prs is replaced on refresh
@@ -821,10 +898,6 @@ func (m *Model) prAction(pr *provider.PR, k string) tea.Cmd {
 	}
 	cfg := m.cfg
 	switch k {
-	case "o":
-		if err := launch.Browser(p.URL); err != nil {
-			m.setStatus(stErr, err.Error())
-		}
 	case "p":
 		m.openRepoPathForm(p, "")
 		return m.form.setFocus(0)
@@ -919,7 +992,7 @@ func (m *Model) prAction(pr *provider.PR, k string) tea.Cmd {
 	return nil
 }
 
-func (m *Model) mergeOptions(pr *provider.PR) provider.MergeOptions {
+func (m *Model) mergeOptions(pr *provider.Item) provider.MergeOptions {
 	in, _ := m.cfg.Instance(pr.Instance)
 	opts := provider.MergeOptions{Method: "merge"}
 	if in != nil {
@@ -931,7 +1004,7 @@ func (m *Model) mergeOptions(pr *provider.PR) provider.MergeOptions {
 	return opts
 }
 
-func ensureWorktree(ctx context.Context, cfg *config.Config, client provider.Client, pr *provider.PR, action string) (string, tea.Msg) {
+func ensureWorktree(ctx context.Context, cfg *config.Config, client provider.Client, pr *provider.Item, action string) (string, tea.Msg) {
 	if wt, ok := gitops.WorktreeExists(cfg, pr); ok && action != "w" {
 		return wt, nil
 	}
@@ -946,7 +1019,7 @@ func ensureWorktree(ctx context.Context, cfg *config.Config, client provider.Cli
 	return wt, nil
 }
 
-func removeAfter(ctx context.Context, cfg *config.Config, pr *provider.PR, remove bool, ok string) tea.Msg {
+func removeAfter(ctx context.Context, cfg *config.Config, pr *provider.Item, remove bool, ok string) tea.Msg {
 	if !remove {
 		return actionDoneMsg{key: pr.Key(), ok: ok, refresh: true}
 	}
@@ -960,7 +1033,7 @@ func removeAfter(ctx context.Context, cfg *config.Config, pr *provider.PR, remov
 	return actionDoneMsg{key: pr.Key(), ok: strings.TrimPrefix(ok+" · worktree removido", " · "), refresh: ok != ""}
 }
 
-func (m *Model) confirmForceRemove(pr provider.PR) {
+func (m *Model) confirmForceRemove(pr provider.Item) {
 	cfg := m.cfg
 	key := pr.Key()
 	m.ask("O worktree tem alterações locais", "Remover mesmo assim", func() tea.Cmd {
@@ -976,7 +1049,7 @@ func (m *Model) confirmForceRemove(pr provider.PR) {
 	}, m.wts[key], "", sRed.Render("As alterações não commitadas serão perdidas."))
 }
 
-func diffCommand(ctx context.Context, cfg *config.Config, wt string, pr *provider.PR) ([]string, string) {
+func diffCommand(ctx context.Context, cfg *config.Config, wt string, pr *provider.Item) ([]string, string) {
 	base := "HEAD~1"
 	if up, err := gitops.Git(ctx, wt, "rev-parse", "--abbrev-ref", "@{upstream}"); err == nil || pr.TargetBranch != "" {
 		remote := "origin"
@@ -1005,7 +1078,7 @@ func filepathBase(p string) string {
 
 // ---------- forms ----------
 
-func (m *Model) openRepoPathForm(pr provider.PR, then string) {
+func (m *Model) openRepoPathForm(pr provider.Item, then string) {
 	cur := m.clones[pr.Key()]
 	remote := ""
 	if r, ok := m.cfg.Repo(pr.Instance, pr.Repo); ok {
@@ -1054,7 +1127,7 @@ func (m *Model) openRepoPathForm(pr provider.PR, then string) {
 	m.modal = modalForm
 }
 
-func (m *Model) find(key string) *provider.PR {
+func (m *Model) find(key string) *provider.Item {
 	for i := range m.prs {
 		if m.prs[i].Key() == key {
 			return &m.prs[i]
@@ -1147,7 +1220,7 @@ func (m *Model) instancesKey(k string) tea.Cmd {
 				}
 				m.instCur = max(0, min(m.instCur, len(m.cfg.Instances)-1))
 				m.rebuildClients()
-				m.prs = slices.DeleteFunc(m.prs, func(p provider.PR) bool { return p.Instance == name })
+				m.prs = slices.DeleteFunc(m.prs, func(p provider.Item) bool { return p.Instance == name })
 				return m.refresh()
 			}, "Os mapeamentos de pastas locais desta instância também serão removidos.")
 		}

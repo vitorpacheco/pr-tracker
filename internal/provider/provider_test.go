@@ -8,10 +8,10 @@ import (
 
 func TestAccumulatorMergesRelations(t *testing.T) {
 	a := newAccumulator()
-	pr := PR{Instance: "gh", Repo: "o/r", Number: 1}
+	pr := Item{Instance: "gh", Repo: "o/r", Number: 1}
 	a.add(pr, ReviewRequested)
 	a.add(pr, Assigned)
-	a.add(PR{Instance: "gh", Repo: "o/r", Number: 2}, Authored)
+	a.add(Item{Instance: "gh", Repo: "o/r", Number: 2}, Authored)
 	got := a.list()
 	if len(got) != 2 || got[0].Relations != ReviewRequested|Assigned || got[1].Relations != Authored {
 		t.Fatalf("got %+v", got)
@@ -78,5 +78,23 @@ func TestMissingTool(t *testing.T) {
 	_, err := run(t.Context(), "", nil, "gh", "api")
 	if !isMissing(err) {
 		t.Fatalf("expected MissingToolError, got %v", err)
+	}
+}
+
+func TestGitLabConvertIssue(t *testing.T) {
+	g := &gitlab{in: config.Instance{Name: "corp", Provider: config.GitLab, Host: "gitlab.corp"}}
+	it := g.convertIssue(glIssue{
+		IID: "9", Reference: "grp/sub/proj#9", WebURL: "https://gitlab.corp/grp/sub/proj/-/issues/9",
+		Notes: 3, Labels: glLabels{Nodes: []struct {
+			Title string `json:"title"`
+		}{{Title: "bug"}}},
+	})
+	if it.Repo != "grp/sub/proj" || it.RepoURL != "https://gitlab.corp/grp/sub/proj" || it.Number != 9 ||
+		!it.IsIssue() || it.Ref() != "#9" || it.Comments != 3 || len(it.Labels) != 1 {
+		t.Fatalf("got %+v", it)
+	}
+	mr := Item{Kind: KindPR, Instance: "corp", Repo: "grp/sub/proj", Number: 9}
+	if it.Key() == mr.Key() {
+		t.Fatal("issue and MR with the same number must have different keys")
 	}
 }

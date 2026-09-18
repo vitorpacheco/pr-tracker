@@ -36,7 +36,7 @@ func Git(ctx context.Context, dir string, args ...string) (string, error) {
 }
 
 // Hash is a short, stable identifier for a PR, used in worktree folder names.
-func Hash(pr *provider.PR) string {
+func Hash(pr *provider.Item) string {
 	sum := sha256.Sum256([]byte(pr.Host + "|" + pr.Repo + "|" + fmt.Sprint(pr.Number)))
 	return hex.EncodeToString(sum[:])[:8]
 }
@@ -45,7 +45,7 @@ var unsafe = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
 // WorktreePath is the deterministic worktree folder of a PR:
 // <worktree_dir>/<repo>-<number>-<hash>.
-func WorktreePath(cfg *config.Config, pr *provider.PR) (string, error) {
+func WorktreePath(cfg *config.Config, pr *provider.Item) (string, error) {
 	root, err := cfg.Worktrees()
 	if err != nil {
 		return "", err
@@ -55,7 +55,7 @@ func WorktreePath(cfg *config.Config, pr *provider.PR) (string, error) {
 }
 
 // WorktreeExists reports whether the PR worktree folder exists.
-func WorktreeExists(cfg *config.Config, pr *provider.PR) (string, bool) {
+func WorktreeExists(cfg *config.Config, pr *provider.Item) (string, bool) {
 	p, err := WorktreePath(cfg, pr)
 	if err != nil {
 		return "", false
@@ -65,18 +65,18 @@ func WorktreeExists(cfg *config.Config, pr *provider.PR) (string, bool) {
 }
 
 // LocalBranch is the branch created for a PR worktree.
-func LocalBranch(pr *provider.PR) string {
+func LocalBranch(pr *provider.Item) string {
 	return fmt.Sprintf("pr-tracker/%d-%s", pr.Number, Hash(pr))
 }
 
-func headRef(pr *provider.PR) string {
+func headRef(pr *provider.Item) string {
 	return fmt.Sprintf("refs/pr-tracker/heads/%d-%s", pr.Number, Hash(pr))
 }
 
 // ResolveClone finds the local clone of the PR repository: the configured
 // path first, then clone_roots (<root>/<name> and <root>/<owner>/<name>),
 // accepting a candidate only if one of its remotes points to the repo.
-func ResolveClone(ctx context.Context, cfg *config.Config, pr *provider.PR) (path, remote string, ok bool) {
+func ResolveClone(ctx context.Context, cfg *config.Config, pr *provider.Item) (path, remote string, ok bool) {
 	if r, found := cfg.Repo(pr.Instance, pr.Repo); found && r.Path != "" {
 		remote = r.Remote
 		if remote == "" {
@@ -104,7 +104,7 @@ func ResolveClone(ctx context.Context, cfg *config.Config, pr *provider.PR) (pat
 }
 
 // matchRemote returns the remote of dir whose URL points at the PR repo.
-func matchRemote(ctx context.Context, dir string, pr *provider.PR) (string, bool) {
+func matchRemote(ctx context.Context, dir string, pr *provider.Item) (string, bool) {
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
 		return "", false
 	}
@@ -141,7 +141,7 @@ func ValidateClone(ctx context.Context, path string) error {
 
 // CreateWorktree fetches the PR head and adds a worktree for it. When the
 // worktree already exists it is fast-forwarded to the latest PR head if clean.
-func CreateWorktree(ctx context.Context, cfg *config.Config, client provider.Client, pr *provider.PR, clone, remote string) (string, error) {
+func CreateWorktree(ctx context.Context, cfg *config.Config, client provider.Client, pr *provider.Item, clone, remote string) (string, error) {
 	wt, err := WorktreePath(cfg, pr)
 	if err != nil {
 		return "", err
@@ -182,7 +182,7 @@ func CreateWorktree(ctx context.Context, cfg *config.Config, client provider.Cli
 var ErrDirty = errors.New("worktree tem alterações locais")
 
 // RemoveWorktree removes the PR worktree and its local branch.
-func RemoveWorktree(ctx context.Context, cfg *config.Config, pr *provider.PR, force bool) error {
+func RemoveWorktree(ctx context.Context, cfg *config.Config, pr *provider.Item, force bool) error {
 	wt, exists := WorktreeExists(cfg, pr)
 	if !exists {
 		return nil

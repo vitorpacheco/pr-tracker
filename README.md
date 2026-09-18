@@ -1,11 +1,16 @@
 # pr-tracker
 
-Interface de terminal para acompanhar **pull requests** (GitHub) e **merge
-requests** (GitLab) de várias instâncias ao mesmo tempo, incluindo instâncias
+Interface de terminal para acompanhar **pull requests** (GitHub), **merge
+requests** (GitLab), **issues** e os **comentários** de ambos em várias instâncias
+ao mesmo tempo, incluindo instâncias
 self-hosted. Toda a comunicação passa pelos CLIs oficiais `gh` e `glab`, então a
 autenticação é a mesma que você já usa neles.
 
-- Tem abas **Revisar** (revisão pedida a você), **Meus**, **Atribuídos** e **Todos**.
+- Tem abas de PRs: **Revisar** (revisão pedida a você), **Meus**, **Atribuídos** e
+  **Todos**. As abas de issues abertas são **Atribuídas**, **Criadas** e **Menções**.
+- Mostra a **conversa** (`v`) com a descrição e os comentários em markdown
+  renderizado. Nos PRs, também aparecem reviews (aprovou / pediu alterações) e
+  comentários inline com `arquivo:linha`. Para **comentar**, use `n`.
 - Mostra o status de **pipeline/checks** (sucesso, falha, em andamento,
   cancelado) com a lista de jobs, além da revisão, aprovações, conflitos e
   tamanho do diff.
@@ -66,9 +71,11 @@ glab auth login --hostname gitlab.empresa.com
 | Tecla | Ação |
 |---|---|
 | `↑↓` `j k`, `g G`, `pgup pgdn` | navegar |
-| `1`–`4`, `tab` | trocar aba |
+| `1`–`4` / `5`–`7`, `tab` | abas de PRs / issues |
 | `/` | filtrar (título, repo, autor, branch) |
-| `enter` / clique | menu de ações do PR |
+| `enter` / clique | menu de ações do item |
+| `v` | ver a conversa (descrição, comentários e reviews) |
+| `n` | escrever um comentário (`ctrl+s` envia, `esc` cancela) |
 | `w` | checkout em worktree (ou atualizar um existente) |
 | `c` | checkout no clone local configurado (`gh pr checkout` / `glab mr checkout`) |
 | `d` | diff no hunk (ou `git diff`) dentro do worktree |
@@ -78,6 +85,10 @@ glab auth login --hostname gitlab.empresa.com
 | `x` | remover o worktree sem aprovar |
 | `o` | abrir no navegador |
 | `p` | definir a pasta local do repositório |
+
+Em issues só existem `v`, `n` e `o`. As ações de worktree, checkout, aprovação
+e merge valem apenas para PRs. Na tela de conversa, a navegação é com `↑↓`,
+`space`/`pgdn`, `g`/`G` e roda do mouse; `r` recarrega e `esc` volta.
 | `r` | atualizar agora |
 | `i` | instâncias (`n` nova, `e` editar, `space` ativar/desativar, `t` testar auth, `D` remover) |
 | `s` | configurações |
@@ -155,14 +166,27 @@ clone_roots = ["~/code", "~/work"]
 
 ## Como os dados são obtidos
 
-Cada instância faz **uma** chamada GraphQL por atualização:
+A cada atualização, cada instância faz poucas chamadas GraphQL:
 
-- GitHub: `gh api graphql --hostname <host>`, com três buscas
-  (`review-requested:@me`, `author:@me`, `assignee:@me`) mais o
-  `statusCheckRollup` do último commit.
-- GitLab: `glab api graphql --hostname <host>`, com
-  `currentUser.{reviewRequested,authored,assigned}MergeRequests` mais o
-  `headPipeline` e seus jobs.
+- GitHub, em **uma** chamada `gh api graphql --hostname <host>`: três buscas de
+  PRs (`review-requested:@me`, `author:@me`, `assignee:@me`, com o
+  `statusCheckRollup` do último commit) e três de issues (`assignee:@me`,
+  `author:@me`, `mentions:@me`).
+- GitLab, em **duas** chamadas `glab api graphql --hostname <host>`:
+  - `currentUser.{reviewRequested,authored,assigned}MergeRequests`, com o
+    `headPipeline` e seus jobs;
+  - `issues(assigneeUsernames|authorUsername)` e os to-dos pendentes de menção
+    (`mentioned`, `directly_addressed`).
+  As MRs ficam sem labels para respeitar o limite de complexidade de query do
+  GitLab.
+
+A conversa só é carregada quando você abre (`v`):
+
+- GitHub: `issueOrPullRequest`, com comentários, reviews e comentários inline.
+- GitLab: `notes(filter: ONLY_COMMENTS)`, que ignora as notas de sistema.
+
+Para comentar, o pr-tracker usa `gh pr|issue comment` e
+`glab api POST projects/:id/(merge_requests|issues)/:iid/notes`.
 
 As ações usam `gh pr review/merge/checkout -R host/owner/repo` e
 `glab mr approve/merge/checkout -R <url do projeto>`.

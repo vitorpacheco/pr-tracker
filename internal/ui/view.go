@@ -46,9 +46,12 @@ func (m *Model) View() tea.View {
 	bodyH := max(H-len(lines)-footerN-2, 3)
 
 	var body []string
-	if m.screen == screenInstances {
+	switch {
+	case m.screen == screenInstances:
 		body = m.instancesBody(W, bodyH, len(lines))
-	} else {
+	case m.screen == screenThread && m.thread != nil:
+		body = m.threadBody(W, bodyH)
+	default:
 		body = m.prsBody(W, bodyH, len(lines))
 	}
 	for len(body) < bodyH {
@@ -83,15 +86,33 @@ func (m *Model) header(W int) string {
 	title := sTitle.Render("⎇ PR Tracker")
 	x := lipgloss.Width(title) + 1
 	parts := []string{title, " "}
-	if m.screen == screenInstances {
-		parts = append(parts, sTabActive.Render("Instâncias"))
+	if m.screen == screenInstances || m.screen == screenThread {
+		name := "Instâncias"
+		if m.screen == screenThread {
+			name = "Conversa " + m.thread.item.Ref()
+		}
+		parts = append(parts, sTabActive.Render(name))
 		x += lipgloss.Width(parts[len(parts)-1])
-		back := sTab.Render("← PRs")
+		back := sTab.Render("← voltar")
 		m.zones.add("key:esc", x, 0, lipgloss.Width(back), 1)
 		parts = append(parts, back)
 	} else {
+		// Inactive tabs drop their label when the full row doesn't fit.
+		compact := W < 160
 		for i, t := range tabs {
-			label := fmt.Sprintf("%s %s %s", sKey.Render(itoa(i+1)), t.label, sMuted.Render(itoa(m.count(t.rel))))
+			if i == 0 || i == firstIssueTab {
+				group := "PRs"
+				if i == firstIssueTab {
+					group = "│ Issues"
+				}
+				g := sGroup.Render(group) + " "
+				x += lipgloss.Width(g)
+				parts = append(parts, g)
+			}
+			label := fmt.Sprintf("%s %s %s", sKey.Render(itoa(i+1)), t.label, sMuted.Render(itoa(m.count(t))))
+			if compact && i != m.tab {
+				label = fmt.Sprintf("%s %s", sKey.Render(itoa(i+1)), sMuted.Render(itoa(m.count(t))))
+			}
 			st := sTab
 			if i == m.tab {
 				st = sTabActive
@@ -148,6 +169,18 @@ func (m *Model) banners() []string {
 }
 
 func (m *Model) hints() []hint {
+	if m.screen == screenThread {
+		return []hint{
+			{"↑↓", "rolar"}, {"space", "página"}, {"g", "início"}, {"G", "fim"}, {"n", "comentar"},
+			{"o", "navegador"}, {"r", "recarregar"}, {"esc", "voltar"}, {"?", "ajuda"},
+		}
+	}
+	if cur := m.current(); m.screen == screenPRs && cur != nil && cur.IsIssue() {
+		return []hint{
+			{"enter", "ações"}, {"v", "conversa"}, {"n", "comentar"}, {"o", "navegador"},
+			{"/", "filtrar"}, {"r", "atualizar"}, {"i", "instâncias"}, {"s", "config"}, {"?", "ajuda"}, {"q", "sair"},
+		}
+	}
 	if m.screen == screenInstances {
 		return []hint{
 			{"n", "nova"}, {"e", "editar"}, {"space", "ativar/desativar"}, {"t", "testar auth"},
@@ -155,7 +188,7 @@ func (m *Model) hints() []hint {
 		}
 	}
 	return []hint{
-		{"enter", "ações"}, {"w", "worktree"}, {"d", "diff"}, {"t", "terminal"}, {"c", "checkout"},
+		{"enter", "ações"}, {"v", "conversa"}, {"n", "comentar"}, {"w", "worktree"}, {"d", "diff"}, {"t", "terminal"}, {"c", "checkout"},
 		{"a", "aprovar"}, {"m", "merge"}, {"x", "rm worktree"}, {"o", "navegador"},
 		{"/", "filtrar"}, {"r", "atualizar"}, {"i", "instâncias"}, {"s", "config"}, {"?", "ajuda"}, {"q", "sair"},
 	}
@@ -182,7 +215,8 @@ func (m *Model) statusLine(W int) string {
 		return fit(" "+sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)]+" "+strings.Join(labels, " · ")), W)
 	}
 	wt, _ := m.cfg.Worktrees()
-	return fit(sDim.Render(fmt.Sprintf(" %d PRs · terminal: %s · worktrees: %s", len(m.prs), m.mode, wt)), W)
+	issues := m.count(tabDef{kind: provider.KindIssue})
+	return fit(sDim.Render(fmt.Sprintf(" %d PRs · %d issues · terminal: %s · worktrees: %s", len(m.prs)-issues, issues, m.mode, wt)), W)
 }
 
 // ---------- PR list ----------
@@ -265,8 +299,8 @@ func (m *Model) widths(W int) colWidths {
 	if W >= 80 {
 		c.author = 12
 	}
-	// marker(2) ci(3) review(3) repo ref title author age(5) flags(4)
-	c.title = max(W-2-3-3-c.repo-1-c.ref-1-c.author-1-5-4, 8)
+	// marker(2) ci(3) review(3) repo ref title author comments(4) age(5) flags(4)
+	c.title = max(W-2-3-3-c.repo-1-c.ref-1-c.author-1-4-5-4, 8)
 	return c
 }
 
@@ -276,11 +310,11 @@ func (m *Model) columns(W int) string {
 	if c.author > 0 {
 		s += fit("AUTOR", c.author)
 	}
-	s += fit(" ATU.", 5)
+	s += fit("COM", 4) + fit(" ATU.", 5)
 	return sDim.Render(fit(s, W))
 }
 
-func (m *Model) row(pr *provider.PR, selected bool, W int) string {
+func (m *Model) row(pr *provider.Item, selected bool, W int) string {
 	c := m.widths(W)
 	marker := "  "
 	titleSt := lipgloss.NewStyle().Foreground(cText)
@@ -292,9 +326,20 @@ func (m *Model) row(pr *provider.PR, selected bool, W int) string {
 	if lipgloss.Width(repo) > c.repo {
 		repo = "…" + string([]rune(repo)[len([]rune(repo))-c.repo+1:])
 	}
-	title := pr.Title
+	title := titleSt.Render(pr.Title)
 	if pr.Draft {
-		title = "[draft] " + title
+		title = sMuted.Render("[draft] ") + title
+	}
+	if len(pr.Labels) > 0 {
+		title += " " + sDim.Render(strings.Join(pr.Labels, " · "))
+	}
+	ci := ciIcon(pr.CI)
+	if pr.IsIssue() {
+		ci = sGreen.Render("◉")
+	}
+	comments := ""
+	if pr.Comments > 0 {
+		comments = itoa(pr.Comments)
 	}
 	var flags []string
 	if _, busy := m.pending[pr.Key()]; busy {
@@ -306,21 +351,21 @@ func (m *Model) row(pr *provider.PR, selected bool, W int) string {
 	if pr.Conflicts {
 		flags = append(flags, sRed.Render("⚠"))
 	}
-	s := marker + ciIcon(pr.CI) + "  " + reviewIcon(pr) + "  " +
+	s := marker + ci + "  " + reviewIcon(pr) + "  " +
 		fit(sMuted.Render(repo), c.repo) + " " +
 		fit(sAccent.Render(pr.Ref()), c.ref) + " " +
-		fit(titleSt.Render(title), c.title) + " "
+		fit(title, c.title) + " "
 	if c.author > 0 {
-		s += fit(sMuted.Render(pr.Author), c.author)
+		s += fit(sMuted.Render(pr.Author), c.author-1) + " "
 	}
-	s += fit(sDim.Render(" "+age(pr.UpdatedAt)), 5) + strings.Join(flags, "")
+	s += fit(sMuted.Render(comments), 4) + fit(sDim.Render(" "+age(pr.UpdatedAt)), 5) + strings.Join(flags, "")
 	if selected {
 		return sRowSel.Render(fit(s, W))
 	}
 	return fit(s, W)
 }
 
-func (m *Model) detail(pr *provider.PR, W, H int) []string {
+func (m *Model) detail(pr *provider.Item, W, H int) []string {
 	if pr == nil {
 		return nil
 	}
@@ -336,6 +381,21 @@ func (m *Model) detail(pr *provider.PR, W, H int) []string {
 
 	kv := func(k, v string) { d = append(d, sLabel.Render(k)+v) }
 	kv("Autor", pr.Author)
+	if len(pr.Assignees) > 0 {
+		kv("Atribuído a", strings.Join(pr.Assignees, ", "))
+	}
+	if len(pr.Labels) > 0 {
+		kv("Labels", labels(pr.Labels))
+	}
+	kv("Comentários", fmt.Sprintf("%d ", pr.Comments)+sKey.Render("v")+sMuted.Render(" ver · ")+sKey.Render("n")+sMuted.Render(" comentar"))
+	if pr.IsIssue() {
+		kv("Você é", relations(pr))
+		kv("Atualizado", age(pr.UpdatedAt)+sDim.Render(" · criada "+age(pr.CreatedAt)))
+		if l, ok := m.pending[pr.Key()]; ok {
+			kv("Executando", sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)]+" "+l))
+		}
+		return d
+	}
 	branch := sBlue.Render(pr.SourceBranch) + sDim.Render(" → ") + pr.TargetBranch
 	if pr.FromFork {
 		branch += sYellow.Render(" (fork)")
@@ -357,17 +417,7 @@ func (m *Model) detail(pr *provider.PR, W, H int) []string {
 	if len(pr.ApprovedBy) > 0 {
 		kv("Aprovado por", strings.Join(pr.ApprovedBy, ", "))
 	}
-	var rel []string
-	if pr.Relations&provider.ReviewRequested != 0 {
-		rel = append(rel, "revisor")
-	}
-	if pr.Relations&provider.Authored != 0 {
-		rel = append(rel, "autor")
-	}
-	if pr.Relations&provider.Assigned != 0 {
-		rel = append(rel, "atribuído")
-	}
-	kv("Você é", strings.Join(rel, ", "))
+	kv("Você é", relations(pr))
 	if pr.Additions+pr.Deletions+pr.Files > 0 {
 		kv("Mudanças", sGreen.Render(fmt.Sprintf("+%d", pr.Additions))+" "+sRed.Render(fmt.Sprintf("-%d", pr.Deletions))+sMuted.Render(fmt.Sprintf(" em %d arquivos", pr.Files)))
 	}
@@ -398,6 +448,23 @@ func (m *Model) detail(pr *provider.PR, W, H int) []string {
 		d = append(d, "  "+ciIcon(c.State)+" "+c.Name)
 	}
 	return d
+}
+
+func relations(it *provider.Item) string {
+	var rel []string
+	if it.Relations&provider.ReviewRequested != 0 {
+		rel = append(rel, "revisor")
+	}
+	if it.Relations&provider.Authored != 0 {
+		rel = append(rel, "autor")
+	}
+	if it.Relations&provider.Assigned != 0 {
+		rel = append(rel, "atribuído")
+	}
+	if it.Relations&provider.Mentioned != 0 {
+		rel = append(rel, "mencionado")
+	}
+	return strings.Join(rel, ", ")
 }
 
 func centered(W, H int, content []string) []string {
@@ -544,6 +611,9 @@ func (m *Model) modalContent(W, H int, z *zones) string {
 	case modalForm:
 		return m.form.render(z)
 
+	case modalCompose:
+		return m.composeContent(z)
+
 	case modalMessage:
 		var b []string
 		b = append(b, sRed.Bold(true).Render(m.message[0]), "")
@@ -575,7 +645,8 @@ func (m *Model) helpContent(z *zones) string {
 	left := []string{
 		sec("Navegação"),
 		row("↑↓ / j k", "mover seleção"),
-		row("1-4 / tab", "trocar aba"),
+		row("1-4 / 5-7", "abas de PRs / issues"),
+		row("tab", "próxima aba"),
 		row("g / G", "início / fim"),
 		row("pgup / pgdn", "página"),
 		row("/", "filtrar"),
@@ -586,7 +657,9 @@ func (m *Model) helpContent(z *zones) string {
 		row("q / ctrl+c", "sair"),
 	}
 	right := []string{
-		sec("Ações no PR"),
+		sec("Ações"),
+		row("v", "ver conversa (comentários)"),
+		row("n", "comentar"),
 		row("w", "checkout em worktree"),
 		row("c", "checkout no clone local"),
 		row("d", "diff (hunk/git)"),
@@ -596,12 +669,13 @@ func (m *Model) helpContent(z *zones) string {
 		row("x", "remover worktree"),
 		row("o", "abrir no navegador"),
 		row("p", "definir pasta local"),
+		sDim.Render("  (w…x/p só em PRs)"),
 	}
 	legend := []string{
 		"",
 		sec("Legenda"),
 		"  " + ciIcon(provider.CISuccess) + " pipeline ok  " + ciIcon(provider.CIFailure) + " falhou  " + ciIcon(provider.CIPending) + " rodando  " + ciIcon(provider.CICanceled) + " cancelado",
-		"  " + sGreen.Render("✓") + " você aprovou  " + sGreen.Render("◆") + " aprovado  " + sRed.Render("±") + " alterações pedidas  " + sBlue.Render("⎇") + " worktree  " + sRed.Render("⚠") + " conflito",
+		"  " + sGreen.Render("◉") + " issue aberta  " + sGreen.Render("✓") + " você aprovou  " + sGreen.Render("◆") + " aprovado  " + sRed.Render("±") + " alterações pedidas  " + sBlue.Render("⎇") + " worktree  " + sRed.Render("⚠") + " conflito",
 		"",
 		sDim.Render("  Terminal: " + string(m.mode) + " · config: " + m.cfg.FilePath()),
 	}

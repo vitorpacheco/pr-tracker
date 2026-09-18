@@ -21,11 +21,11 @@ import (
 
 var version = "dev"
 
-const usage = `pr-tracker — acompanhe pull requests (GitHub) e merge requests (GitLab) no terminal
+const usage = `pr-tracker — acompanhe pull/merge requests e issues (GitHub, GitLab) no terminal
 
 Uso:
   pr-tracker                          abre a interface
-  pr-tracker list                     lista os PRs no stdout
+  pr-tracker list                     lista PRs e issues no stdout
   pr-tracker doctor                   verifica CLIs, autenticação e configuração
   pr-tracker config path              mostra o caminho do arquivo de configuração
   pr-tracker instance list
@@ -143,7 +143,7 @@ func list(cfg *config.Config) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "INSTÂNCIA\tREPO\tPR\tCI\tREVISÃO\tRELAÇÃO\tTÍTULO")
+	fmt.Fprintln(w, "INSTÂNCIA\tTIPO\tREPO\tNº\tCI\tREVISÃO\tCOMENT.\tRELAÇÃO\tTÍTULO")
 	var errs []string
 	for _, in := range cfg.Instances {
 		if in.Disabled {
@@ -165,11 +165,18 @@ func list(cfg *config.Config) error {
 			if pr.Relations&provider.Assigned != 0 {
 				rel = append(rel, "atribuído")
 			}
+			if pr.Relations&provider.Mentioned != 0 {
+				rel = append(rel, "mencionado")
+			}
+			kind := "pr"
+			if pr.IsIssue() {
+				kind = "issue"
+			}
 			ci := string(pr.CI)
 			if ci == "" {
 				ci = "-"
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", pr.Instance, pr.Repo, pr.Ref(), ci, orDash(pr.Review), strings.Join(rel, ","), pr.Title)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", pr.Instance, kind, pr.Repo, pr.Ref(), ci, orDash(pr.Review), pr.Comments, strings.Join(rel, ","), pr.Title)
 		}
 	}
 	w.Flush()

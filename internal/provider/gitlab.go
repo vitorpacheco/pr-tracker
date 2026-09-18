@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -19,7 +20,7 @@ func (g *gitlab) Tool() string              { return "glab" }
 func (g *gitlab) env() []string { return []string{"GITLAB_HOST=" + g.in.Host} }
 
 // repoArg is the -R value accepted by glab; the full URL pins the host.
-func (g *gitlab) repoArg(pr *PR) string {
+func (g *gitlab) repoArg(pr *Item) string {
 	if pr.RepoURL != "" {
 		return pr.RepoURL
 	}
@@ -35,8 +36,9 @@ query {
     assigned: assignedMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { nodes { ...mr } }
   }
 }
+# Labels/assignees are left out: GitLab caps query complexity at 200-250.
 fragment mr on MergeRequest {
-  iid title webUrl draft createdAt updatedAt
+  iid title webUrl draft createdAt updatedAt userNotesCount
   sourceBranch targetBranch conflicts approved
   diffStatsSummary { additions deletions fileCount }
   author { username }
@@ -60,6 +62,7 @@ type glMR struct {
 	TargetBranch string    `json:"targetBranch"`
 	Conflicts    bool      `json:"conflicts"`
 	Approved     bool      `json:"approved"`
+	Notes        int       `json:"userNotesCount"`
 	DiffStats    *struct {
 		Additions int `json:"additions"`
 		Deletions int `json:"deletions"`
@@ -92,6 +95,36 @@ type glMR struct {
 	} `json:"headPipeline"`
 }
 
+type glUser struct {
+	Username string `json:"username"`
+}
+
+type glUsers struct {
+	Nodes []glUser `json:"nodes"`
+}
+
+type glLabels struct {
+	Nodes []struct {
+		Title string `json:"title"`
+	} `json:"nodes"`
+}
+
+func (l glLabels) names() []string {
+	var out []string
+	for _, n := range l.Nodes {
+		out = append(out, n.Title)
+	}
+	return out
+}
+
+func (u glUsers) names() []string {
+	var out []string
+	for _, n := range u.Nodes {
+		out = append(out, n.Username)
+	}
+	return out
+}
+
 type glConn struct {
 	Nodes []glMR `json:"nodes"`
 }
@@ -110,7 +143,7 @@ type glResponse struct {
 	} `json:"errors"`
 }
 
-func (g *gitlab) List(ctx context.Context) ([]PR, error) {
+func (g *gitlab) List(ctx context.Context) ([]Item, error) {
 	out, err := run(ctx, "", g.env(), "glab", "api", "graphql", "--hostname", g.in.Host, "-f", "query="+glQuery)
 	if err != nil {
 		return nil, err
@@ -139,12 +172,232 @@ func (g *gitlab) List(ctx context.Context) ([]PR, error) {
 			acc.add(g.convert(n, u.Username), s.rel)
 		}
 	}
+	if err := g.listIssues(ctx, u.Username, acc); err != nil {
+		return nil, err
+	}
 	return acc.list(), nil
 }
 
-func (g *gitlab) convert(n glMR, me string) PR {
+const glIssuesQuery = `
+query($me: String!) {
+  assigned: issues(assigneeUsernames: [$me], state: opened, first: 50, sort: UPDATED_DESC) { nodes { ...issue } }
+  authored: issues(authorUsername: $me, state: opened, first: 50, sort: UPDATED_DESC) { nodes { ...issue } }
+  currentUser {
+    todos(action: [mentioned, directly_addressed], type: [ISSUE, WORKITEM], state: [pending], first: 50) {
+      nodes {
+        project { webUrl }
+        target {
+          ... on Issue { ...issue }
+          ... on WorkItem { iid title webUrl createdAt updatedAt state reference(full: true) author { username } }
+        }
+      }
+    }
+  }
+}
+fragment issue on Issue {
+  iid title webUrl createdAt updatedAt state reference(full: true) userNotesCount
+  author { username }
+  labels(first: 10) { nodes { title } }
+  assignees(first: 10) { nodes { username } }
+}`
+
+type glIssue struct {
+	IID       string    `json:"iid"`
+	Title     string    `json:"title"`
+	WebURL    string    `json:"webUrl"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	State     string    `json:"state"`
+	Reference string    `json:"reference"`
+	Notes     int       `json:"userNotesCount"`
+	Author    *glUser   `json:"author"`
+	Labels    glLabels  `json:"labels"`
+	Assignees glUsers   `json:"assignees"`
+}
+
+// listIssues adds open issues assigned to, authored by or mentioning the user.
+func (g *gitlab) listIssues(ctx context.Context, me string, acc *accumulator) error {
+	out, err := run(ctx, "", g.env(), "glab", "api", "graphql", "--hostname", g.in.Host,
+		"-f", "query="+glIssuesQuery, "-f", "me="+me)
+	if err != nil {
+		return err
+	}
+	var resp struct {
+		Data struct {
+			Assigned    struct{ Nodes []glIssue } `json:"assigned"`
+			Authored    struct{ Nodes []glIssue } `json:"authored"`
+			CurrentUser *struct {
+				Todos struct {
+					Nodes []struct {
+						Project *struct {
+							WebURL string `json:"webUrl"`
+						} `json:"project"`
+						Target glIssue `json:"target"`
+					} `json:"nodes"`
+				} `json:"todos"`
+			} `json:"currentUser"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(out, &resp); err != nil {
+		return fmt.Errorf("resposta inválida do glab: %w", err)
+	}
+	if len(resp.Errors) > 0 && resp.Data.CurrentUser == nil {
+		return fmt.Errorf("glab graphql (issues): %s", resp.Errors[0].Message)
+	}
+	for _, n := range resp.Data.Assigned.Nodes {
+		acc.add(g.convertIssue(n), Assigned)
+	}
+	for _, n := range resp.Data.Authored.Nodes {
+		acc.add(g.convertIssue(n), Authored)
+	}
+	if cu := resp.Data.CurrentUser; cu != nil {
+		for _, t := range cu.Todos.Nodes {
+			if t.Target.IID == "" || t.Target.State != "opened" {
+				continue
+			}
+			acc.add(g.convertIssue(t.Target), Mentioned)
+		}
+	}
+	return nil
+}
+
+func (g *gitlab) convertIssue(n glIssue) Item {
 	iid, _ := strconv.Atoi(n.IID)
-	pr := PR{
+	repo := n.Reference
+	if i := strings.LastIndex(repo, "#"); i > 0 {
+		repo = repo[:i]
+	}
+	repoURL, _, _ := strings.Cut(n.WebURL, "/-/")
+	it := Item{
+		Kind:      KindIssue,
+		Instance:  g.in.Name,
+		Provider:  config.GitLab,
+		Host:      g.in.Host,
+		Repo:      repo,
+		RepoURL:   repoURL,
+		Number:    iid,
+		Title:     n.Title,
+		URL:       n.WebURL,
+		CreatedAt: n.CreatedAt,
+		UpdatedAt: n.UpdatedAt,
+		Comments:  n.Notes,
+		Labels:    n.Labels.names(),
+		Assignees: n.Assignees.names(),
+	}
+	if n.Author != nil {
+		it.Author = n.Author.Username
+	}
+	return it
+}
+
+const glThreadQuery = `
+query($path: ID!, $iid: String!) {
+  project(fullPath: $path) {
+    %s(iid: $iid) {
+      description
+      notes(filter: ONLY_COMMENTS, last: 100) { nodes {
+        body createdAt system
+        author { username }
+        position { filePath newLine oldLine }
+      } }
+    }
+  }
+}`
+
+func (g *gitlab) Thread(ctx context.Context, it *Item) (*Thread, error) {
+	field := "mergeRequest"
+	if it.IsIssue() {
+		field = "issue"
+	}
+	out, err := run(ctx, "", g.env(), "glab", "api", "graphql", "--hostname", g.in.Host,
+		"-f", "query="+fmt.Sprintf(glThreadQuery, field), "-f", "path="+it.Repo, "-f", "iid="+strconv.Itoa(it.Number))
+	if err != nil {
+		return nil, err
+	}
+	type note struct {
+		Body      string    `json:"body"`
+		CreatedAt time.Time `json:"createdAt"`
+		System    bool      `json:"system"`
+		Author    *glUser   `json:"author"`
+		Position  *struct {
+			FilePath string `json:"filePath"`
+			NewLine  int    `json:"newLine"`
+			OldLine  int    `json:"oldLine"`
+		} `json:"position"`
+	}
+	var resp struct {
+		Data struct {
+			Project *struct {
+				MergeRequest *struct {
+					Description string `json:"description"`
+					Notes       struct {
+						Nodes []note `json:"nodes"`
+					} `json:"notes"`
+				} `json:"mergeRequest"`
+				Issue *struct {
+					Description string `json:"description"`
+					Notes       struct {
+						Nodes []note `json:"nodes"`
+					} `json:"notes"`
+				} `json:"issue"`
+			} `json:"project"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(out, &resp); err != nil {
+		return nil, fmt.Errorf("resposta inválida do glab: %w", err)
+	}
+	var desc string
+	var notes []note
+	switch p := resp.Data.Project; {
+	case p != nil && p.MergeRequest != nil:
+		desc, notes = p.MergeRequest.Description, p.MergeRequest.Notes.Nodes
+	case p != nil && p.Issue != nil:
+		desc, notes = p.Issue.Description, p.Issue.Notes.Nodes
+	case len(resp.Errors) > 0:
+		return nil, fmt.Errorf("glab graphql: %s", resp.Errors[0].Message)
+	default:
+		return nil, fmt.Errorf("%s%s não encontrado", it.Repo, it.Ref())
+	}
+	t := &Thread{Body: desc}
+	for _, n := range notes {
+		if n.System {
+			continue
+		}
+		c := Comment{Body: n.Body, CreatedAt: n.CreatedAt}
+		if n.Author != nil {
+			c.Author = n.Author.Username
+		}
+		if n.Position != nil {
+			c.Path, c.Line = n.Position.FilePath, n.Position.NewLine
+			if c.Line == 0 {
+				c.Line = n.Position.OldLine
+			}
+		}
+		t.Comments = append(t.Comments, c)
+	}
+	sortComments(t.Comments)
+	return t, nil
+}
+
+func (g *gitlab) AddComment(ctx context.Context, it *Item, body string) error {
+	kind := "merge_requests"
+	if it.IsIssue() {
+		kind = "issues"
+	}
+	endpoint := fmt.Sprintf("projects/%s/%s/%d/notes", url.PathEscape(it.Repo), kind, it.Number)
+	_, err := run(ctx, "", g.env(), "glab", "api", "--hostname", g.in.Host, "--method", "POST", endpoint, "-f", "body="+body)
+	return err
+}
+
+func (g *gitlab) convert(n glMR, me string) Item {
+	iid, _ := strconv.Atoi(n.IID)
+	pr := Item{
 		Instance:     g.in.Name,
 		Provider:     config.GitLab,
 		Host:         g.in.Host,
@@ -159,6 +412,7 @@ func (g *gitlab) convert(n glMR, me string) PR {
 		CreatedAt:    n.CreatedAt,
 		UpdatedAt:    n.UpdatedAt,
 		Conflicts:    n.Conflicts,
+		Comments:     n.Notes,
 	}
 	if n.SourceProject != nil && n.SourceProject.FullPath != n.Project.FullPath {
 		pr.FromFork = true
@@ -207,12 +461,12 @@ func glState(s string) CIState {
 	return CINone
 }
 
-func (g *gitlab) Approve(ctx context.Context, pr *PR) error {
+func (g *gitlab) Approve(ctx context.Context, pr *Item) error {
 	_, err := run(ctx, "", g.env(), "glab", "mr", "approve", strconv.Itoa(pr.Number), "-R", g.repoArg(pr))
 	return err
 }
 
-func (g *gitlab) Merge(ctx context.Context, pr *PR, opts MergeOptions) error {
+func (g *gitlab) Merge(ctx context.Context, pr *Item, opts MergeOptions) error {
 	args := []string{"mr", "merge", strconv.Itoa(pr.Number), "-R", g.repoArg(pr), "--yes",
 		"--auto-merge=" + strconv.FormatBool(opts.Auto)}
 	switch mergeMethod(opts.Method) {
@@ -228,12 +482,14 @@ func (g *gitlab) Merge(ctx context.Context, pr *PR, opts MergeOptions) error {
 	return err
 }
 
-func (g *gitlab) Checkout(ctx context.Context, pr *PR, dir string) error {
+func (g *gitlab) Checkout(ctx context.Context, pr *Item, dir string) error {
 	_, err := run(ctx, dir, g.env(), "glab", "mr", "checkout", strconv.Itoa(pr.Number), "-R", g.repoArg(pr))
 	return err
 }
 
-func (g *gitlab) HeadRef(pr *PR) string { return fmt.Sprintf("refs/merge-requests/%d/head", pr.Number) }
+func (g *gitlab) HeadRef(pr *Item) string {
+	return fmt.Sprintf("refs/merge-requests/%d/head", pr.Number)
+}
 
 func (g *gitlab) AuthStatus(ctx context.Context) error {
 	_, err := run(ctx, "", nil, "glab", "auth", "status", "--hostname", g.in.Host)

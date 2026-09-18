@@ -15,7 +15,7 @@ import (
 // fakeClient only provides HeadRef, the single method gitops needs.
 type fakeClient struct{ provider.Client }
 
-func (fakeClient) HeadRef(pr *provider.PR) string { return "refs/pull/5/head" }
+func (fakeClient) HeadRef(pr *provider.Item) string { return "refs/pull/5/head" }
 
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
@@ -26,7 +26,7 @@ func git(t *testing.T, dir string, args ...string) string {
 	return out
 }
 
-func setup(t *testing.T) (*config.Config, *provider.PR, string) {
+func setup(t *testing.T) (*config.Config, *provider.Item, string) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
@@ -58,7 +58,7 @@ func setup(t *testing.T) (*config.Config, *provider.PR, string) {
 	cfg := config.Default()
 	cfg.WorktreeDir = filepath.Join(root, "wt")
 	cfg.CloneRoots = []string{clones}
-	pr := &provider.PR{Instance: "gh", Host: "github.com", Repo: "o/r", Number: 5, SourceBranch: "feature", TargetBranch: "main"}
+	pr := &provider.Item{Instance: "gh", Host: "github.com", Repo: "o/r", Number: 5, SourceBranch: "feature", TargetBranch: "main"}
 	return cfg, pr, filepath.Join(clones, "r")
 }
 

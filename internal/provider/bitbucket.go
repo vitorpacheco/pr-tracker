@@ -18,9 +18,11 @@ func (b *bitbucket) err() error {
 	return fmt.Errorf("%w: Bitbucket (%s) — veja docs/bitbucket.md", ErrNotSupported, b.in.Host)
 }
 
-func (b *bitbucket) List(context.Context) ([]PR, error)             { return nil, b.err() }
-func (b *bitbucket) Approve(context.Context, *PR) error             { return b.err() }
-func (b *bitbucket) Merge(context.Context, *PR, MergeOptions) error { return b.err() }
-func (b *bitbucket) Checkout(context.Context, *PR, string) error    { return b.err() }
-func (b *bitbucket) HeadRef(pr *PR) string                          { return "" }
-func (b *bitbucket) AuthStatus(context.Context) error               { return b.err() }
+func (b *bitbucket) List(context.Context) ([]Item, error)             { return nil, b.err() }
+func (b *bitbucket) Thread(context.Context, *Item) (*Thread, error)   { return nil, b.err() }
+func (b *bitbucket) AddComment(context.Context, *Item, string) error  { return b.err() }
+func (b *bitbucket) Approve(context.Context, *Item) error             { return b.err() }
+func (b *bitbucket) Merge(context.Context, *Item, MergeOptions) error { return b.err() }
+func (b *bitbucket) Checkout(context.Context, *Item, string) error    { return b.err() }
+func (b *bitbucket) HeadRef(pr *Item) string                          { return "" }
+func (b *bitbucket) AuthStatus(context.Context) error                 { return b.err() }

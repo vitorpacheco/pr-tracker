@@ -23,6 +23,15 @@ const (
 	ReviewRequested Relation = 1 << iota
 	Authored
 	Assigned
+	Mentioned
+)
+
+// Kind distinguishes pull/merge requests from issues.
+type Kind uint8
+
+const (
+	KindPR Kind = iota
+	KindIssue
 )
 
 // CIState is the aggregated pipeline result.
@@ -50,8 +59,10 @@ const (
 	ReviewRequired         = "review_required"
 )
 
-// PR is a pull request (GitHub) or merge request (GitLab).
-type PR struct {
+// Item is a pull request (GitHub), merge request (GitLab) or an issue.
+// Fields about branches, reviews and pipelines only apply to KindPR.
+type Item struct {
+	Kind     Kind
 	Instance string
 	Provider config.Provider
 	Host     string
@@ -81,18 +92,46 @@ type PR struct {
 	CI     CIState
 	Checks []Check
 
+	Labels    []string
+	Assignees []string
+	Comments  int
+
 	Relations Relation
 }
 
-// Key identifies a PR across instances.
-func (p *PR) Key() string { return fmt.Sprintf("%s|%s#%d", p.Instance, p.Repo, p.Number) }
+// IsIssue reports whether the item is an issue.
+func (p *Item) IsIssue() bool { return p.Kind == KindIssue }
+
+// Key identifies an item across instances. GitLab numbers issues and merge
+// requests independently, so the kind is part of the key.
+func (p *Item) Key() string {
+	return fmt.Sprintf("%s|%s|%d#%d", p.Instance, p.Repo, p.Kind, p.Number)
+}
 
 // Ref is the display reference ("#12" or "!12").
-func (p *PR) Ref() string {
-	if p.Provider == config.GitLab {
+func (p *Item) Ref() string {
+	if p.Provider == config.GitLab && p.Kind == KindPR {
 		return fmt.Sprintf("!%d", p.Number)
 	}
 	return fmt.Sprintf("#%d", p.Number)
+}
+
+// Comment is one entry of a conversation.
+type Comment struct {
+	Author    string
+	Body      string
+	CreatedAt time.Time
+	// Review is set for PR reviews (approved, changes_requested, commented).
+	Review string
+	// Path and Line locate inline code comments.
+	Path string
+	Line int
+}
+
+// Thread is the description and the comments of an item, oldest first.
+type Thread struct {
+	Body     string
+	Comments []Comment
 }
 
 // MergeOptions controls how a PR is merged.
@@ -107,14 +146,19 @@ type Client interface {
 	Instance() config.Instance
 	// Tool is the CLI binary the client depends on.
 	Tool() string
-	List(ctx context.Context) ([]PR, error)
-	Approve(ctx context.Context, pr *PR) error
-	Merge(ctx context.Context, pr *PR, opts MergeOptions) error
+	// List returns open PRs and issues related to the current user.
+	List(ctx context.Context) ([]Item, error)
+	// Thread loads the description and comments of an item.
+	Thread(ctx context.Context, it *Item) (*Thread, error)
+	// AddComment posts a comment on an item.
+	AddComment(ctx context.Context, it *Item, body string) error
+	Approve(ctx context.Context, pr *Item) error
+	Merge(ctx context.Context, pr *Item, opts MergeOptions) error
 	// Checkout switches the clone at dir to the PR branch.
-	Checkout(ctx context.Context, pr *PR, dir string) error
+	Checkout(ctx context.Context, pr *Item, dir string) error
 	// HeadRef is the server-side ref that always points to the PR head,
 	// available on the base repository even for forks.
-	HeadRef(pr *PR) string
+	HeadRef(pr *Item) string
 	AuthStatus(ctx context.Context) error
 }
 

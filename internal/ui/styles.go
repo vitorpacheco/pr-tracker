@@ -41,6 +41,8 @@ var (
 	sLabel     = lipgloss.NewStyle().Foreground(cMuted).Width(14)
 	sModal     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(cAccent).Padding(0, 1)
 	sBanner    = lipgloss.NewStyle().Foreground(cYellow)
+	sLabelTag  = lipgloss.NewStyle().Foreground(cAccent2).Background(lipgloss.Color("#2A2540")).Padding(0, 1)
+	sGroup     = lipgloss.NewStyle().Foreground(cDim).Bold(true)
 )
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -73,8 +75,10 @@ func ciLabel(s provider.CIState) string {
 	return sDim.Render("sem pipeline")
 }
 
-func reviewIcon(pr *provider.PR) string {
+func reviewIcon(pr *provider.Item) string {
 	switch {
+	case pr.IsIssue():
+		return " "
 	case pr.ApprovedByMe:
 		return sGreen.Render("✓")
 	case pr.Review == provider.ReviewApproved:
@@ -85,7 +89,7 @@ func reviewIcon(pr *provider.PR) string {
 	return sDim.Render("◇")
 }
 
-func reviewLabel(pr *provider.PR) string {
+func reviewLabel(pr *provider.Item) string {
 	switch pr.Review {
 	case provider.ReviewApproved:
 		return sGreen.Render("aprovado")
