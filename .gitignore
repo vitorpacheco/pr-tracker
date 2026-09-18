@@ -1,0 +1,4 @@
+/pr-tracker
+/dist/
+*.tmp
+coverage.out
