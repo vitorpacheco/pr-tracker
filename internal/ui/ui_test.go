@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
 )
 
@@ -31,5 +32,36 @@ func TestTabMatch(t *testing.T) {
 	}
 	if !tabs[2].match(pr) || !tabs[3].match(pr) || tabs[4].match(pr) {
 		t.Fatal("PR tab matching")
+	}
+}
+
+func TestCloseWithoutMerge(t *testing.T) {
+	cfg := config.Default()
+	cfg.Instances = []config.Instance{{Name: "gh", Provider: config.GitHub, Host: "github.com"}}
+	m := New(cfg)
+	pr := provider.Item{Kind: provider.KindPR, Instance: "gh", Provider: config.GitHub, Repo: "o/r", Number: 3, SourceBranch: "feat"}
+
+	m.openMenu(&pr)
+	var keys []string
+	for _, it := range m.menu {
+		keys = append(keys, it.key)
+	}
+	if !strings.Contains(strings.Join(keys, ""), "X") || !strings.Contains(strings.Join(keys, ""), "C") {
+		t.Fatalf("menu keys %v lack close actions", keys)
+	}
+	m.modal = modalNone
+
+	if m.prAction(&pr, "C"); m.modal != modalNone {
+		t.Fatal("close and remove worktree needs an existing worktree")
+	}
+	m.prAction(&pr, "X")
+	if m.modal != modalConfirm || !strings.Contains(m.confirm.title, "Fechar #3") {
+		t.Fatalf("modal = %v, confirm = %+v", m.modal, m.confirm)
+	}
+
+	issue := provider.Item{Kind: provider.KindIssue, Instance: "gh", Repo: "o/r", Number: 4}
+	m.modal, m.confirm = modalNone, nil
+	if m.prAction(&issue, "X"); m.modal != modalNone {
+		t.Fatal("issues cannot be closed as PRs")
 	}
 }

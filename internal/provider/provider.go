@@ -154,6 +154,8 @@ type Client interface {
 	AddComment(ctx context.Context, it *Item, body string) error
 	Approve(ctx context.Context, pr *Item) error
 	Merge(ctx context.Context, pr *Item, opts MergeOptions) error
+	// Close closes a PR without merging it. The source branch is kept.
+	Close(ctx context.Context, pr *Item) error
 	// Checkout switches the clone at dir to the PR branch.
 	Checkout(ctx context.Context, pr *Item, dir string) error
 	// HeadRef is the server-side ref that always points to the PR head,

@@ -18,7 +18,7 @@ autenticação é a mesma que você já usa neles.
 - Aceita teclado e mouse: dá para clicar em abas, linhas, itens de menu, botões e
   nos atalhos do rodapé. Todo atalho aparece na própria interface (`?` abre a ajuda).
 - Faz checkout em **worktree** isolado ou no **clone configurado**, e depois
-  permite aprovar ou fazer merge, removendo o worktree ou não.
+  permite aprovar, fazer merge ou fechar sem merge, removendo o worktree ou não.
 - Integrações opcionais: **hunk** para o diff; **herdr** ou **tmux** para abrir
   terminal/diff em nova aba.
 
@@ -87,6 +87,7 @@ glab auth login --hostname gitlab.empresa.com
 | `t` | abrir terminal no worktree |
 | `a` / `A` | aprovar / aprovar e remover o worktree |
 | `m` / `M` | merge / merge e remover o worktree |
+| `X` / `C` | fechar sem merge / fechar sem merge e remover o worktree (a branch é mantida) |
 | `x` | remover o worktree sem aprovar |
 | `o` | abrir no navegador |
 | `p` | definir a pasta local do repositório |
@@ -96,12 +97,12 @@ glab auth login --hostname gitlab.empresa.com
 | `?` | ajuda |
 | `q` | sair |
 
-Em issues só existem `v`, `n` e `o`. As ações de worktree, checkout, aprovação
-e merge valem apenas para PRs. Na tela de conversa, a navegação é com `↑↓`,
+Em issues só existem `v`, `n` e `o`. As ações de worktree, checkout, aprovação,
+merge e fechamento valem apenas para PRs. Na tela de conversa, a navegação é com `↑↓`,
 `space`/`pgdn`, `g`/`G` e roda do mouse; `r` recarrega e `esc` volta.
 
-Aprovar, fazer merge, fazer checkout e remover sempre pedem confirmação. Se o
-worktree tiver alterações não commitadas, a remoção pede uma segunda
+Aprovar, fazer merge, fechar, fazer checkout e remover sempre pedem
+confirmação. Se o worktree tiver alterações não commitadas, a remoção pede uma segunda
 confirmação antes de forçar.
 
 ## Worktrees
@@ -193,8 +194,8 @@ A conversa só é carregada quando você abre (`v`):
 Para comentar, o pr-tracker usa `gh pr|issue comment` e
 `glab api POST projects/:id/(merge_requests|issues)/:iid/notes`.
 
-As ações usam `gh pr review/merge/checkout -R host/owner/repo` e
-`glab mr approve/merge/checkout -R <url do projeto>`.
+As ações usam `gh pr review/merge/close/checkout -R host/owner/repo` e
+`glab mr approve/merge/close/checkout -R <url do projeto>`.
 
 ## Desenvolvimento
 

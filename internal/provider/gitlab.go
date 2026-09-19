@@ -482,6 +482,11 @@ func (g *gitlab) Merge(ctx context.Context, pr *Item, opts MergeOptions) error {
 	return err
 }
 
+func (g *gitlab) Close(ctx context.Context, pr *Item) error {
+	_, err := run(ctx, "", g.env(), "glab", "mr", "close", strconv.Itoa(pr.Number), "-R", g.repoArg(pr))
+	return err
+}
+
 func (g *gitlab) Checkout(ctx context.Context, pr *Item, dir string) error {
 	_, err := run(ctx, dir, g.env(), "glab", "mr", "checkout", strconv.Itoa(pr.Number), "-R", g.repoArg(pr))
 	return err
