@@ -16,6 +16,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/vitorpacheco/pr-tracker/internal/cache"
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/gitops"
 	"github.com/vitorpacheco/pr-tracker/internal/launch"
@@ -85,6 +86,7 @@ const (
 type Model struct {
 	cfg     *config.Config
 	clients map[string]provider.Client
+	cache   *cache.Store
 
 	prs      []provider.Item
 	instErr  map[string]error
@@ -123,6 +125,7 @@ type Model struct {
 	status     string
 	statusKind statusKind
 	statusAt   time.Time
+	cacheErr   error
 
 	mode        launch.Mode
 	afterSubmit tea.Cmd
@@ -134,13 +137,14 @@ type Model struct {
 }
 
 // New creates the model.
-func New(cfg *config.Config) *Model {
+func New(cfg *config.Config, store *cache.Store) *Model {
 	fi := textinput.New()
 	fi.Prompt = "/ "
 	fi.Placeholder = "filtrar por título, repo, autor…"
 	fi.SetWidth(40)
 	m := &Model{
 		cfg:     cfg,
+		cache:   store,
 		instErr: map[string]error{},
 		clones:  map[string]string{},
 		wts:     map[string]string{},
@@ -163,11 +167,17 @@ func (m *Model) rebuildClients() {
 type (
 	clockMsg       struct{}
 	autoRefreshMsg struct{ gen int }
-	refreshMsg     struct {
-		gen    int
-		prs    map[string][]provider.Item
-		errs   map[string]error
-		clones map[string]string
+	cacheMsg       struct {
+		prs      map[string][]provider.Item
+		syncedAt time.Time
+		err      error
+	}
+	refreshMsg struct {
+		gen       int
+		prs       map[string][]provider.Item
+		errs      map[string]error
+		cacheErrs map[string]error
+		clones    map[string]string
 	}
 	actionDoneMsg struct {
 		key     string
@@ -194,9 +204,42 @@ func clock() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return clockMsg{} })
 }
 
-// Init starts the clock and the first refresh.
+// Init loads the local snapshot before starting the first remote refresh.
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(clock(), m.refresh())
+	return tea.Batch(clock(), tea.Sequence(m.loadCache(), m.refresh()))
+}
+
+func (m *Model) loadCache() tea.Cmd {
+	store := m.cache
+	instances := append([]config.Instance(nil), m.cfg.Instances...)
+	return func() tea.Msg {
+		msg := cacheMsg{prs: map[string][]provider.Item{}}
+		if store == nil {
+			return msg
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		var errs []error
+		for _, in := range instances {
+			if in.Disabled {
+				continue
+			}
+			snapshot, err := store.Load(ctx, in)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			if snapshot.SyncedAt.IsZero() {
+				continue
+			}
+			msg.prs[in.Name] = snapshot.Items
+			if snapshot.SyncedAt.After(msg.syncedAt) {
+				msg.syncedAt = snapshot.SyncedAt
+			}
+		}
+		msg.err = errors.Join(errs...)
+		return msg
+	}
 }
 
 func (m *Model) refresh() tea.Cmd {
@@ -207,6 +250,7 @@ func (m *Model) refresh() tea.Cmd {
 	m.gen++
 	gen := m.gen
 	cfg := m.cfg
+	store := m.cache
 	var clients []provider.Client
 	for _, in := range m.cfg.Instances {
 		if !in.Disabled {
@@ -216,12 +260,19 @@ func (m *Model) refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		res := refreshMsg{gen: gen, prs: map[string][]provider.Item{}, errs: map[string]error{}, clones: map[string]string{}}
+		res := refreshMsg{
+			gen: gen, prs: map[string][]provider.Item{}, errs: map[string]error{},
+			cacheErrs: map[string]error{}, clones: map[string]string{},
+		}
 		var mu sync.Mutex
 		var wg sync.WaitGroup
 		for _, c := range clients {
 			wg.Go(func() {
 				prs, err := c.List(ctx)
+				var cacheErr error
+				if err == nil && store != nil {
+					cacheErr = store.Replace(ctx, c.Instance(), prs, time.Now())
+				}
 				clones := map[string]string{}
 				for i := range prs {
 					if p, _, ok := gitops.ResolveClone(ctx, cfg, &prs[i]); ok {
@@ -236,6 +287,9 @@ func (m *Model) refresh() tea.Cmd {
 					return
 				}
 				res.prs[name] = prs
+				if cacheErr != nil {
+					res.cacheErrs[name] = cacheErr
+				}
 				for k, v := range clones {
 					res.clones[k] = v
 				}
@@ -283,9 +337,17 @@ func (m *Model) applyRefresh(msg refreshMsg) {
 	}
 	m.clones = msg.clones
 	m.scanWorktrees()
-	first := m.lastSync.IsZero()
-	m.lastSync = time.Now()
-	if first && !m.tabTouched && m.count(tabs[m.tab]) == 0 {
+	var cacheErrs []error
+	for _, in := range m.cfg.Instances {
+		if err := msg.cacheErrs[in.Name]; err != nil {
+			cacheErrs = append(cacheErrs, err)
+		}
+	}
+	m.cacheErr = errors.Join(cacheErrs...)
+	if len(msg.prs) > 0 {
+		m.lastSync = time.Now()
+	}
+	if !m.tabTouched && m.count(tabs[m.tab]) == 0 {
 		for i, t := range tabs {
 			if m.count(t) > 0 {
 				m.tab = i
@@ -405,6 +467,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.refresh()
+
+	case cacheMsg:
+		m.cacheErr = msg.err
+		m.prs = m.prs[:0]
+		for _, in := range m.cfg.Instances {
+			m.prs = append(m.prs, msg.prs[in.Name]...)
+		}
+		sort.SliceStable(m.prs, func(i, j int) bool { return m.prs[i].UpdatedAt.After(m.prs[j].UpdatedAt) })
+		m.lastSync = msg.syncedAt
+		m.scanWorktrees()
+		if !m.tabTouched && m.count(tabs[m.tab]) == 0 {
+			for i, tab := range tabs {
+				if m.count(tab) > 0 {
+					m.tab = i
+					break
+				}
+			}
+		}
+		m.restoreCursor()
+		return m, nil
 
 	case refreshMsg:
 		m.loading = false

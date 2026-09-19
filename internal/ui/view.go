@@ -145,6 +145,9 @@ func (m *Model) header(W int) string {
 // banners lists problems that block instances: missing CLIs and fetch errors.
 func (m *Model) banners() []string {
 	var out []string
+	if m.cacheErr != nil {
+		out = append(out, "cache local indisponível: "+m.cacheErr.Error())
+	}
 	missing := map[string]bool{}
 	for _, in := range m.cfg.Instances {
 		if in.Disabled || in.Provider == config.Bitbucket {

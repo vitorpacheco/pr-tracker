@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
@@ -34,11 +36,10 @@ func TestTabMatch(t *testing.T) {
 		t.Fatal("PR tab matching")
 	}
 }
-
 func TestCloseWithoutMerge(t *testing.T) {
 	cfg := config.Default()
 	cfg.Instances = []config.Instance{{Name: "gh", Provider: config.GitHub, Host: "github.com"}}
-	m := New(cfg)
+	m := New(cfg, nil)
 	pr := provider.Item{Kind: provider.KindPR, Instance: "gh", Provider: config.GitHub, Repo: "o/r", Number: 3, SourceBranch: "feat"}
 
 	m.openMenu(&pr)
@@ -63,5 +64,55 @@ func TestCloseWithoutMerge(t *testing.T) {
 	m.modal, m.confirm = modalNone, nil
 	if m.prAction(&issue, "X"); m.modal != modalNone {
 		t.Fatal("issues cannot be closed as PRs")
+	}
+}
+
+func TestCachedItemsSurviveFailedRefresh(t *testing.T) {
+	cfg := config.Default()
+	cfg.WorktreeDir = t.TempDir()
+	cfg.Instances = []config.Instance{{Name: "work", Provider: config.GitHub, Host: "github.example.com"}}
+	m := New(cfg, nil)
+	cachedAt := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+	item := provider.Item{Instance: "work", Provider: config.GitHub, Host: "github.example.com", Repo: "acme/app", Number: 7}
+	m.Update(cacheMsg{
+		prs:      map[string][]provider.Item{"work": {item}},
+		syncedAt: cachedAt,
+	})
+
+	m.Update(refreshMsg{
+		gen:       m.gen,
+		prs:       map[string][]provider.Item{},
+		errs:      map[string]error{"work": errors.New("test error")},
+		cacheErrs: map[string]error{},
+		clones:    map[string]string{},
+	})
+	if len(m.prs) != 1 || m.prs[0].Key() != item.Key() {
+		t.Fatalf("failed refresh discarded cached items: %+v", m.prs)
+	}
+	if !m.lastSync.Equal(cachedAt) {
+		t.Fatalf("lastSync = %v, want cached time %v", m.lastSync, cachedAt)
+	}
+}
+
+func TestRefreshSelectsNonEmptyTabAfterEmptyCache(t *testing.T) {
+	cfg := config.Default()
+	cfg.WorktreeDir = t.TempDir()
+	cfg.Instances = []config.Instance{{Name: "work", Provider: config.GitHub, Host: "github.example.com"}}
+	m := New(cfg, nil)
+	m.Update(cacheMsg{
+		prs:      map[string][]provider.Item{"work": nil},
+		syncedAt: time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC),
+	})
+	m.Update(refreshMsg{
+		gen: m.gen,
+		prs: map[string][]provider.Item{"work": {{
+			Instance: "work", Kind: provider.KindPR, Relations: provider.Authored,
+		}}},
+		errs:      map[string]error{},
+		cacheErrs: map[string]error{},
+		clones:    map[string]string{},
+	})
+	if m.tab != 1 {
+		t.Fatalf("tab = %d, want authored tab", m.tab)
 	}
 }
