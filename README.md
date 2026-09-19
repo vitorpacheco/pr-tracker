@@ -185,6 +185,24 @@ A cada atualização, cada instância faz poucas chamadas GraphQL:
   As MRs ficam sem labels para respeitar o limite de complexidade de query do
   GitLab.
 
+### Cache local
+
+A interface mantém em SQLite o último snapshot completo obtido com sucesso de
+cada instância. Ao abrir o `pr-tracker`, esse snapshot aparece imediatamente
+enquanto uma atualização remota roda em segundo plano. Se GitHub, GitLab ou a
+rede estiverem indisponíveis, os dados anteriores continuam visíveis junto do
+aviso de falha.
+
+O banco é um cache descartável, não a fonte de verdade. Cada atualização
+bem-sucedida substitui atomicamente o snapshot daquela instância; falhas nunca
+apagam o snapshot anterior. Por padrão, o arquivo fica no diretório de cache do
+sistema (`$XDG_CACHE_HOME/pr-tracker/cache.db` ou `~/.cache/pr-tracker/cache.db`
+no Linux). `PR_TRACKER_CACHE` sobrescreve o caminho. O arquivo pode ser apagado
+com o programa fechado e será reconstruído na atualização seguinte. Ele tem
+modo `0600` em sistemas Unix; no Windows, segue as ACLs herdadas do diretório
+de cache do usuário. Contém metadados dos itens, mas não credenciais nem as
+conversas carregadas sob demanda.
+
 A conversa só é carregada quando você abre (`v`):
 
 - GitHub: `issueOrPullRequest`, com comentários, reviews e comentários inline.
