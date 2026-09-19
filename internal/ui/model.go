@@ -914,6 +914,8 @@ func (m *Model) openMenu(pr *provider.Item) {
 		{key: "A", label: "Aprovar e remover worktree", disabled: firstNonEmpty(noTool, noWT)},
 		{key: "m", label: "Merge", disabled: noTool},
 		{key: "M", label: "Merge e remover worktree", disabled: firstNonEmpty(noTool, noWT)},
+		{key: "X", label: "Fechar sem merge", disabled: noTool},
+		{key: "C", label: "Fechar sem merge e remover worktree", disabled: firstNonEmpty(noTool, noWT)},
 		{key: "x", label: "Remover worktree (sem aprovar)", disabled: noWT},
 		{key: "o", label: "Abrir no navegador"},
 		{key: "p", label: "Definir pasta local do repositório"},
@@ -961,7 +963,7 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 		return nil
 	}
 	if pr.IsIssue() {
-		if strings.Contains("wcdtaAmMxp", k) {
+		if strings.Contains("wcdtaAmMXCxp", k) {
 			m.setStatus(stInfo, "ação disponível apenas para pull/merge requests")
 		}
 		return nil
@@ -1061,6 +1063,22 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 				return removeAfter(ctx, cfg, &p, k == "M", "merge de "+p.Ref()+" feito")
 			})
 		}, body...)
+	case "X", "C":
+		if k == "C" && !hasWT {
+			return nil
+		}
+		title := "Fechar " + p.Ref() + " sem merge?"
+		if k == "C" {
+			title = "Fechar " + p.Ref() + " sem merge e remover o worktree?"
+		}
+		m.ask(title, "Fechar", func() tea.Cmd {
+			return start("fechando", func(ctx context.Context) tea.Msg {
+				if err := client.Close(ctx, &p); err != nil {
+					return actionDoneMsg{key: key, err: err}
+				}
+				return removeAfter(ctx, cfg, &p, k == "C", p.Ref()+" fechado sem merge")
+			})
+		}, p.Repo, p.Title, "", "A branch "+p.SourceBranch+" é mantida no servidor.")
 	case "x":
 		if !hasWT {
 			return nil

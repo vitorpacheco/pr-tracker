@@ -192,7 +192,7 @@ func (m *Model) hints() []hint {
 	}
 	return []hint{
 		{"enter", "ações"}, {"v", "conversa"}, {"n", "comentar"}, {"w", "worktree"}, {"d", "diff"}, {"t", "terminal"}, {"c", "checkout"},
-		{"a", "aprovar"}, {"m", "merge"}, {"x", "rm worktree"}, {"o", "navegador"},
+		{"a", "aprovar"}, {"m", "merge"}, {"X", "fechar"}, {"x", "rm worktree"}, {"o", "navegador"},
 		{"/", "filtrar"}, {"r", "atualizar"}, {"i", "instâncias"}, {"s", "config"}, {"?", "ajuda"}, {"q", "sair"},
 	}
 }
@@ -669,6 +669,7 @@ func (m *Model) helpContent(z *zones) string {
 		row("t", "terminal no worktree"),
 		row("a / A", "aprovar / + remover wt"),
 		row("m / M", "merge / + remover wt"),
+		row("X / C", "fechar sem merge / + remover wt"),
 		row("x", "remover worktree"),
 		row("o", "abrir no navegador"),
 		row("p", "definir pasta local"),

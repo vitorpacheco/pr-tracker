@@ -405,6 +405,13 @@ func (g *github) Merge(ctx context.Context, pr *Item, opts MergeOptions) error {
 	return err
 }
 
+// Close leaves the branch alone: gh's --delete-branch would also delete the
+// local branch of whatever clone the command runs in.
+func (g *github) Close(ctx context.Context, pr *Item) error {
+	_, err := run(ctx, "", g.env(), "gh", "pr", "close", strconv.Itoa(pr.Number), "-R", g.repoArg(pr))
+	return err
+}
+
 func (g *github) Checkout(ctx context.Context, pr *Item, dir string) error {
 	_, err := run(ctx, dir, g.env(), "gh", "pr", "checkout", strconv.Itoa(pr.Number), "-R", g.repoArg(pr))
 	return err

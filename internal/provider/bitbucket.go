@@ -23,6 +23,7 @@ func (b *bitbucket) Thread(context.Context, *Item) (*Thread, error)   { return n
 func (b *bitbucket) AddComment(context.Context, *Item, string) error  { return b.err() }
 func (b *bitbucket) Approve(context.Context, *Item) error             { return b.err() }
 func (b *bitbucket) Merge(context.Context, *Item, MergeOptions) error { return b.err() }
+func (b *bitbucket) Close(context.Context, *Item) error               { return b.err() }
 func (b *bitbucket) Checkout(context.Context, *Item, string) error    { return b.err() }
 func (b *bitbucket) HeadRef(pr *Item) string                          { return "" }
 func (b *bitbucket) AuthStatus(context.Context) error                 { return b.err() }
