@@ -119,7 +119,8 @@ func matchRemote(ctx context.Context, dir string, pr *provider.Item) (string, bo
 		if len(f) < 2 {
 			continue
 		}
-		u := strings.ToLower(strings.TrimSuffix(strings.TrimSuffix(f[1], "/"), ".git"))
+		// ToSlash: local remotes on Windows are backslash paths.
+		u := strings.ToLower(strings.TrimSuffix(strings.TrimSuffix(filepath.ToSlash(f[1]), "/"), ".git"))
 		if strings.HasSuffix(u, want) || strings.HasSuffix(u, wantSSH) {
 			return f[0], true
 		}
