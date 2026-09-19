@@ -11,7 +11,9 @@
 - `make test` runs `go test ./...` across all packages.
 - `make cover` writes `coverage.out` and prints total coverage.
 - `make check` verifies formatting, runs `go vet`, and executes the test suite. Run it before submitting changes.
-- `make dist` cross-compiles release binaries into `dist/`.
+- `make vuln` runs `govulncheck` against the dependencies.
+- `make dist` cross-compiles release binaries into `dist/`; `make package` also builds the archives and `checksums.txt` published by the release workflows.
+- CI lives in `.github/workflows/`: `ci.yml` (lint, tests on Linux/macOS/Windows, build, govulncheck), `nightly.yml` (pre-release `nightly` on every push to `main`), `release.yml` (tags `v*`), `vulncheck.yml` (weekly scan).
 
 ## Coding Style & Naming Conventions
 

@@ -1,0 +1,50 @@
+# Pushing a version tag (v1.2.3, v1.3.0-rc.1) publishes a release. Tags with a
+# pre-release suffix (anything after "-") become GitHub pre-releases.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Publicar ${{ github.ref_name }}
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: make package VERSION="$GITHUB_REF_NAME"
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          files=(dist/*.tar.gz dist/*.zip dist/checksums.txt)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Re-run of the workflow: refresh the assets only.
+            gh release upload "$TAG" "${files[@]}" --clobber
+            exit 0
+          fi
+          flags=(--verify-tag --generate-notes --title "$TAG")
+          if [[ "$TAG" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$TAG" "${files[@]}" "${flags[@]}"

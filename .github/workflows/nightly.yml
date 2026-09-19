@@ -1,0 +1,59 @@
+# Every push to main publishes a "nightly" pre-release, replacing the previous
+# one. The nightly tag is moved to the new commit.
+name: Nightly
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Publicar nightly
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Versão
+        id: version
+        run: echo "version=nightly-$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - run: make package VERSION="$VERSION"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "Build automático do commit ${GITHUB_SHA::7} na \`main\`:"
+            echo
+            echo "> $(git log -1 --format=%s)"
+            echo
+            echo "Versão: \`$VERSION\`. Builds nightly são instáveis; para uso normal prefira uma versão \`v*\`."
+          } > notes.md
+          gh release delete nightly --cleanup-tag --yes || true
+          gh release create nightly \
+            dist/*.tar.gz dist/*.zip dist/checksums.txt \
+            --target "$GITHUB_SHA" \
+            --prerelease --latest=false \
+            --title "Nightly ($VERSION)" \
+            --notes-file notes.md

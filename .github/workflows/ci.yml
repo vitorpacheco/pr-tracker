@@ -1,0 +1,91 @@
+# Build, tests and dependency vulnerability scan.
+# Pushes to main and version tags run this through nightly.yml / release.yml
+# (workflow_call), so the published artifacts are always gated by it.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: go mod tidy está em dia
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - run: make lint
+
+  test:
+    name: Testes (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: go test
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            go test -race -coverprofile=coverage.out ./...
+            go tool cover -func=coverage.out | tail -1
+          else
+            go test ./...
+          fi
+
+  build:
+    name: Build (todas as plataformas)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: make package VERSION="ci-${GITHUB_SHA::7}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pr-tracker-${{ github.sha }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          retention-days: 7
+
+  vuln:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: make vuln

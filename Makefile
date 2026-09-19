@@ -5,7 +5,8 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 PREFIX  ?= $(HOME)/.local
 DIST    := dist
 
-PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
+GOVULNCHECK := golang.org/x/vuln/cmd/govulncheck@latest
 
 .DEFAULT_GOAL := help
 
@@ -15,7 +16,7 @@ help: ## Lista os comandos disponíveis
 
 .PHONY: build
 build: ## Compila o binário ./pr-tracker
-	go build -ldflags "$(LDFLAGS)" -o $(BINARY) .
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) .
 
 .PHONY: run
 run: ## Executa a interface (use ARGS="doctor" para subcomandos)
@@ -46,6 +47,10 @@ lint: ## Verifica formatação e roda go vet
 .PHONY: check
 check: lint test ## Lint + testes (use antes de commitar)
 
+.PHONY: vuln
+vuln: ## Procura vulnerabilidades conhecidas nas dependências (govulncheck)
+	go run $(GOVULNCHECK) ./...
+
 .PHONY: tidy
 tidy: ## Atualiza go.mod/go.sum
 	go mod tidy
@@ -59,14 +64,29 @@ uninstall: ## Remove de $(PREFIX)/bin
 	rm -f $(PREFIX)/bin/$(BINARY)
 
 .PHONY: dist
-dist: ## Compila para Linux, macOS e Windows em ./dist
+dist: ## Compila para Linux, macOS e Windows em ./dist (binários)
 	@mkdir -p $(DIST)
 	@for p in $(PLATFORMS); do \
 		os=$${p%/*}; arch=$${p#*/}; ext=; [ $$os = windows ] && ext=.exe; \
 		out=$(DIST)/$(BINARY)-$$os-$$arch$$ext; \
 		echo "→ $$out"; \
-		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $$out . || exit 1; \
+		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $$out . || exit 1; \
 	done
+
+.PHONY: package
+package: dist ## Empacota os binários (.tar.gz/.zip) e gera checksums.txt para release
+	@set -e; cd $(DIST); \
+	for p in $(PLATFORMS); do \
+		os=$${p%/*}; arch=$${p#*/}; ext=; [ $$os = windows ] && ext=.exe; \
+		name=$(BINARY)_$(VERSION)_$${os}_$${arch}; \
+		rm -rf $$name && mkdir $$name; \
+		cp $(BINARY)-$$os-$$arch$$ext $$name/$(BINARY)$$ext; \
+		cp ../README.md $$name/; \
+		if [ $$os = windows ]; then zip -qr $$name.zip $$name; else tar -czf $$name.tar.gz $$name; fi; \
+		rm -rf $$name; \
+		echo "→ $(DIST)/$$name"; \
+	done; \
+	if command -v sha256sum >/dev/null; then sha256sum *.tar.gz *.zip; else shasum -a 256 *.tar.gz *.zip; fi > checksums.txt
 
 .PHONY: doctor
 doctor: build ## Verifica CLIs, autenticação e configuração

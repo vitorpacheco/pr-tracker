@@ -39,6 +39,11 @@ para depois.
 
 ## Instalação
 
+Baixe um binário na página de
+[releases](https://github.com/vitorpacheco/pr-tracker/releases). Há uma versão
+estável para cada tag `v*` e uma `nightly`, que é atualizada a cada commit na
+`main`. Também dá para compilar:
+
 ```sh
 go install github.com/vitorpacheco/pr-tracker@latest
 # ou, a partir do clone (instala em ~/.local/bin; mude com PREFIX=...):
@@ -85,15 +90,15 @@ glab auth login --hostname gitlab.empresa.com
 | `x` | remover o worktree sem aprovar |
 | `o` | abrir no navegador |
 | `p` | definir a pasta local do repositório |
-
-Em issues só existem `v`, `n` e `o`. As ações de worktree, checkout, aprovação
-e merge valem apenas para PRs. Na tela de conversa, a navegação é com `↑↓`,
-`space`/`pgdn`, `g`/`G` e roda do mouse; `r` recarrega e `esc` volta.
 | `r` | atualizar agora |
 | `i` | instâncias (`n` nova, `e` editar, `space` ativar/desativar, `t` testar auth, `D` remover) |
 | `s` | configurações |
 | `?` | ajuda |
 | `q` | sair |
+
+Em issues só existem `v`, `n` e `o`. As ações de worktree, checkout, aprovação
+e merge valem apenas para PRs. Na tela de conversa, a navegação é com `↑↓`,
+`space`/`pgdn`, `g`/`G` e roda do mouse; `r` recarrega e `esc` volta.
 
 Aprovar, fazer merge, fazer checkout e remover sempre pedem confirmação. Se o
 worktree tiver alterações não commitadas, a remoção pede uma segunda
@@ -197,7 +202,25 @@ As ações usam `gh pr review/merge/checkout -R host/owner/repo` e
 make          # lista os comandos
 make check    # gofmt + go vet + testes
 make run ARGS=doctor
+make vuln     # govulncheck: vulnerabilidades conhecidas nas dependências
 make dist     # binários para Linux, macOS e Windows em ./dist
+make package  # dist + .tar.gz/.zip + checksums.txt (o que a release publica)
+```
+
+### CI e releases (GitHub Actions)
+
+| Workflow | Quando roda | O que faz |
+|---|---|---|
+| `ci.yml` | PRs e pushes em outras branches | `go mod tidy` limpo, `make lint`, testes em Linux (com `-race`), macOS e Windows, `make package` (artefato por 7 dias) e `govulncheck` |
+| `nightly.yml` | push na `main` | roda o CI e recria a pre-release `nightly`, que aponta para o novo commit (versão `nightly-AAAAMMDD-<sha>`) |
+| `release.yml` | push de tag `v*` | roda o CI e publica a release com notas geradas; tags com sufixo (`v1.0.0-rc.1`) viram pre-release |
+| `vulncheck.yml` | toda segunda e manual | `govulncheck` na `main`, para pegar alertas novos sem depender de commit |
+
+O Dependabot atualiza as dependências Go e as actions uma vez por semana.
+Para publicar uma versão:
+
+```sh
+git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0
 ```
 
 A estrutura é `internal/config` (arquivo e caminhos), `internal/provider`
