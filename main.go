@@ -13,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/vitorpacheco/pr-tracker/internal/cache"
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/gitops"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
@@ -80,7 +81,14 @@ func run(args []string) error {
 }
 
 func runUI(cfg *config.Config) error {
-	_, err := tea.NewProgram(ui.New(cfg)).Run()
+	store, cacheErr := cache.OpenDefault()
+	if cacheErr != nil {
+		fmt.Fprintln(os.Stderr, "aviso: cache local indisponível:", cacheErr)
+	}
+	if store != nil {
+		defer store.Close()
+	}
+	_, err := tea.NewProgram(ui.New(cfg, store)).Run()
 	return err
 }
 
@@ -108,6 +116,11 @@ func doctor(cfg *config.Config) {
 		return "✘"
 	}
 	fmt.Println("configuração:", cfg.FilePath())
+	cachePath, cachePathErr := cache.Path()
+	if cachePathErr != nil {
+		cachePath = "indisponível: " + cachePathErr.Error()
+	}
+	fmt.Println("cache:       ", cachePath)
 	wt, _ := cfg.Worktrees()
 	fmt.Println("worktrees:   ", wt)
 	fmt.Println()
