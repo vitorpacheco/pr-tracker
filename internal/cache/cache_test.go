@@ -3,6 +3,7 @@ package cache
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -52,7 +53,9 @@ func TestReplaceLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	// Windows synthesizes POSIX permission bits as 0666 and uses ACLs for
+	// access control, so an exact 0600 assertion is meaningful only on Unix.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("cache mode = %o, want 600", info.Mode().Perm())
 	}
 }

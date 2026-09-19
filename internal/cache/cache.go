@@ -79,6 +79,8 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	// Windows only uses the owner-write bit here; access control continues to
+	// come from the ACL inherited from the user's cache directory.
 	if err := os.Chmod(path, 0o600); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("protegendo arquivo do cache: %w", err)

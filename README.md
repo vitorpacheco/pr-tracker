@@ -199,8 +199,9 @@ apagam o snapshot anterior. Por padrão, o arquivo fica no diretório de cache d
 sistema (`$XDG_CACHE_HOME/pr-tracker/cache.db` ou `~/.cache/pr-tracker/cache.db`
 no Linux). `PR_TRACKER_CACHE` sobrescreve o caminho. O arquivo pode ser apagado
 com o programa fechado e será reconstruído na atualização seguinte. Ele tem
-permissão somente para o usuário e contém metadados dos itens, mas não
-credenciais nem as conversas carregadas sob demanda.
+modo `0600` em sistemas Unix; no Windows, segue as ACLs herdadas do diretório
+de cache do usuário. Contém metadados dos itens, mas não credenciais nem as
+conversas carregadas sob demanda.
 
 A conversa só é carregada quando você abre (`v`):
 
