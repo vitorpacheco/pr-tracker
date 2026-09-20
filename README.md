@@ -1,10 +1,10 @@
 # pr-tracker
 
-Interface de terminal para acompanhar **pull requests** (GitHub), **merge
-requests** (GitLab), **issues** e os **comentários** de ambos em várias instâncias
+Interface de terminal para acompanhar **pull requests** (GitHub, Gitea), **merge
+requests** (GitLab), **issues** e os **comentários** de todos em várias instâncias
 ao mesmo tempo, incluindo instâncias
-self-hosted. Toda a comunicação passa pelos CLIs oficiais `gh` e `glab`, então a
-autenticação é a mesma que você já usa neles.
+self-hosted. Toda a comunicação passa pelos CLIs oficiais `gh`, `glab` e `tea`,
+então a autenticação é a mesma que você já usa neles.
 
 - Tem abas de PRs: **Revisar** (revisão pedida a você), **Meus**, **Atribuídos** e
   **Todos**. As abas de issues abertas são **Atribuídas**, **Criadas** e **Menções**.
@@ -29,13 +29,15 @@ autenticação é a mesma que você já usa neles.
 | `git` | worktrees e checkout | sim |
 | [`gh`](https://cli.github.com) | instâncias GitHub (github.com e GHES) | para GitHub |
 | [`glab`](https://gitlab.com/gitlab-org/cli) | instâncias GitLab (gitlab.com e self-hosted) | para GitLab |
+| [`tea`](https://gitea.com/gitea/tea) (0.14+) | instâncias Gitea (gitea.com e self-hosted) | para Gitea |
 | [`hunk`](https://github.com/modem-dev/hunk) | visualizar diff (sem ele, usa `git diff`) | não |
 | `herdr` / `tmux` | abrir terminal/diff em nova aba | não |
 
 Se faltar um CLI, a interface mostra um aviso com o link de instalação, e
-`pr-tracker doctor` lista tudo o que falta. Sobre o **Bitbucket**, veja
-[docs/bitbucket.md](docs/bitbucket.md): não há CLI oficial e a integração ficou
-para depois.
+`pr-tracker doctor` lista tudo o que falta. Sobre o **Gitea**, veja
+[docs/gitea.md](docs/gitea.md) para o que o `tea` cobre e o que precisou ir
+direto na API. Sobre o **Bitbucket**, veja [docs/bitbucket.md](docs/bitbucket.md):
+não há CLI oficial e a integração ficou para depois.
 
 ## Instalação
 
@@ -57,19 +59,27 @@ pr-tracker                 # interface
 pr-tracker doctor          # verifica CLIs, autenticação e caminhos
 pr-tracker list            # lista os PRs no stdout
 pr-tracker instance add --provider gitlab --host gitlab.empresa.com --name trabalho --merge-method squash
+pr-tracker instance add --provider gitea --host git.empresa.com --name gitea
 pr-tracker instance list
 pr-tracker repo set --instance trabalho --repo grupo/sub/projeto --path ~/code/projeto
 ```
 
 Na primeira execução, o arquivo de configuração é criado e já recebe
-`github.com`/`gitlab.com` se `gh`/`glab` estiverem autenticados nesses hosts.
+`github.com`/`gitlab.com` se `gh`/`glab` estiverem autenticados nesses hosts,
+mais uma instância para cada servidor em que o `tea` já tem login — o Gitea quase
+sempre é self-hosted, então não há host padrão que valha a pena tentar.
 
 Instâncias self-hosted precisam estar autenticadas no CLI:
 
 ```sh
 gh auth login --hostname github.empresa.com
 glab auth login --hostname gitlab.empresa.com
+tea login add --url https://git.empresa.com --token <token>
 ```
+
+O `tea` endereça servidores por **nome de login**, não por host. O pr-tracker
+descobre o login pela URL; se o mesmo host tiver mais de uma conta, dê à
+instância o mesmo nome do login que você quer usar.
 
 ### Atalhos
 
@@ -82,7 +92,7 @@ glab auth login --hostname gitlab.empresa.com
 | `v` | ver a conversa (descrição, comentários e reviews) |
 | `n` | escrever um comentário (`ctrl+s` envia, `esc` cancela) |
 | `w` | checkout em worktree (ou atualizar um existente) |
-| `c` | checkout no clone local configurado (`gh pr checkout` / `glab mr checkout`) |
+| `c` | checkout no clone local configurado (`gh pr checkout` / `glab mr checkout` / `tea pulls checkout`) |
 | `d` | diff no hunk (ou `git diff`) dentro do worktree |
 | `t` | abrir terminal no worktree |
 | `a` / `A` | aprovar / aprovar e remover o worktree |
@@ -112,7 +122,8 @@ tem 8 caracteres, é estável e vem de host+repo+número, o que evita colisão e
 instâncias e repositórios com o mesmo nome.
 
 - O head do PR é buscado por um ref do servidor que também funciona para forks
-  (`refs/pull/N/head` no GitHub, `refs/merge-requests/N/head` no GitLab). O
+  (`refs/pull/N/head` no GitHub e no Gitea, `refs/merge-requests/N/head` no
+  GitLab). O
   worktree fica na branch local `pr-tracker/<N>-<hash>`.
 - Em PRs do mesmo repositório, a branch local acompanha `origin/<branch>`
   (`git pull` funciona).
@@ -155,6 +166,11 @@ clone_roots = ["~/code", "~/work"]
   merge_method = "squash"     # merge | squash | rebase
 
 [[instances]]
+  name = "gitea"           # igual ao nome do login no tea, se houver mais de um
+  provider = "gitea"
+  host = "git.empresa.com"
+
+[[instances]]
   name = "trabalho"
   provider = "gitlab"
   host = "gitlab.empresa.com"
@@ -185,12 +201,17 @@ A cada atualização, cada instância faz poucas chamadas GraphQL:
     (`mentioned`, `directly_addressed`).
   As MRs ficam sem labels para respeitar o limite de complexidade de query do
   GitLab.
+- Gitea **não tem GraphQL**, então é REST via `tea api`: seis buscas em
+  `/repos/issues/search` (as mesmas relações das abas) e, como essa busca
+  devolve só o issue cru, mais até três chamadas por PR — detalhe, status dos
+  checks do commit e reviews — no máximo seis de cada vez. Se alguma delas
+  falhar, a linha aparece sem CI em vez de derrubar a lista inteira.
 
 ### Cache local
 
 A interface mantém em SQLite o último snapshot completo obtido com sucesso de
 cada instância. Ao abrir o `pr-tracker`, esse snapshot aparece imediatamente
-enquanto uma atualização remota roda em segundo plano. Se GitHub, GitLab ou a
+enquanto uma atualização remota roda em segundo plano. Se o servidor ou a
 rede estiverem indisponíveis, os dados anteriores continuam visíveis junto do
 aviso de falha.
 

@@ -22,11 +22,12 @@ type Provider string
 const (
 	GitHub    Provider = "github"
 	GitLab    Provider = "gitlab"
+	Gitea     Provider = "gitea"
 	Bitbucket Provider = "bitbucket"
 )
 
 // Providers lists every provider pr-tracker knows about, in display order.
-var Providers = []Provider{GitHub, GitLab, Bitbucket}
+var Providers = []Provider{GitHub, GitLab, Gitea, Bitbucket}
 
 // DefaultHost returns the SaaS host of a provider.
 func (p Provider) DefaultHost() string {
@@ -35,6 +36,8 @@ func (p Provider) DefaultHost() string {
 		return "github.com"
 	case GitLab:
 		return "gitlab.com"
+	case Gitea:
+		return "gitea.com"
 	case Bitbucket:
 		return "bitbucket.org"
 	}
@@ -59,7 +62,7 @@ type Instance struct {
 // Repo maps a remote repository to a local clone.
 type Repo struct {
 	Instance string `toml:"instance"`
-	// Name is owner/repo (GitHub) or group/subgroup/project (GitLab).
+	// Name is owner/repo (GitHub, Gitea) or group/subgroup/project (GitLab).
 	Name   string `toml:"name"`
 	Path   string `toml:"path"`
 	Remote string `toml:"remote,omitempty"`
