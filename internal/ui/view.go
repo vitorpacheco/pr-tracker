@@ -229,7 +229,7 @@ func (m *Model) prsBody(W, H, top int) []string {
 		return centered(W, H, []string{
 			sBold.Render("Nenhuma instância configurada"),
 			"",
-			sMuted.Render("Pressione ") + sKey.Render("i") + sMuted.Render(" e depois ") + sKey.Render("n") + sMuted.Render(" para cadastrar GitHub/GitLab (inclusive self-hosted)."),
+			sMuted.Render("Pressione ") + sKey.Render("i") + sMuted.Render(" e depois ") + sKey.Render("n") + sMuted.Render(" para cadastrar GitHub/GitLab/Gitea (inclusive self-hosted)."),
 		})
 	}
 	listW, detailW := W, 0
@@ -491,7 +491,7 @@ func (m *Model) instancesBody(W, H, top int) []string {
 			sBold.Render("Nenhuma instância"),
 			"",
 			sMuted.Render("Pressione ") + sKey.Render("n") + sMuted.Render(" para adicionar github.com, gitlab.com ou uma instância self-hosted."),
-			sDim.Render("A autenticação usa os próprios gh / glab (gh auth login --hostname …)."),
+			sDim.Render("A autenticação usa os próprios gh / glab / tea (gh auth login --hostname …)."),
 		})
 	}
 	out = append(out, sDim.Render(fit("  "+fit("NOME", 22)+fit("PROVIDER", 11)+fit("HOST", 30)+fit("CLI", 7)+"STATUS", W)))
@@ -563,10 +563,13 @@ func (m *Model) instancesBody(W, H, top int) []string {
 				}
 			}
 		}
-		if in.Provider == config.GitHub {
+		switch in.Provider {
+		case config.GitHub:
 			kv("Login", sDim.Render("gh auth login --hostname "+in.Host))
-		} else if in.Provider == config.GitLab {
+		case config.GitLab:
 			kv("Login", sDim.Render("glab auth login --hostname "+in.Host))
+		case config.Gitea:
+			kv("Login", sDim.Render("tea login add --url https://"+in.Host))
 		}
 	}
 	return out

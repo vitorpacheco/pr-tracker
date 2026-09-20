@@ -1347,7 +1347,7 @@ func (m *Model) openInstanceForm(in *config.Instance) {
 	if in != nil {
 		old, cur = in.Name, *in
 	}
-	providers := []string{string(config.GitHub), string(config.GitLab), string(config.Bitbucket)}
+	providers := []string{string(config.GitHub), string(config.GitLab), string(config.Gitea), string(config.Bitbucket)}
 	title := "Nova instância"
 	if old != "" {
 		title = "Editar instância " + old
@@ -1355,7 +1355,7 @@ func (m *Model) openInstanceForm(in *config.Instance) {
 	f := &form{
 		title: title,
 		fields: []*field{
-			choiceField("Provider", providers, string(cur.Provider), "github (gh) · gitlab (glab) · bitbucket (ainda não suportado)"),
+			choiceField("Provider", providers, string(cur.Provider), "github (gh) · gitlab (glab) · gitea (tea) · bitbucket (ainda não suportado)"),
 			textField("Host", cur.Host, "github.com, gitlab.empresa.com…", "host da instância; vazio usa o SaaS do provider"),
 			textField("Nome", cur.Name, "igual ao host", "identificador único da instância"),
 			choiceField("Merge", []string{"merge", "squash", "rebase"}, firstNonEmpty(cur.MergeMethod, "merge"), "método de merge padrão"),

@@ -1,5 +1,6 @@
 // Command pr-tracker is a terminal UI to follow pull/merge requests across
-// GitHub and GitLab instances (SaaS and self-hosted) using gh and glab.
+// GitHub, GitLab and Gitea instances (SaaS and self-hosted) using gh, glab and
+// tea.
 package main
 
 import (
@@ -22,7 +23,7 @@ import (
 
 var version = "dev"
 
-const usage = `pr-tracker — acompanhe pull/merge requests e issues (GitHub, GitLab) no terminal
+const usage = `pr-tracker — acompanhe pull/merge requests e issues (GitHub, GitLab, Gitea) no terminal
 
 Uso:
   pr-tracker                          abre a interface
@@ -30,7 +31,7 @@ Uso:
   pr-tracker doctor                   verifica CLIs, autenticação e configuração
   pr-tracker config path              mostra o caminho do arquivo de configuração
   pr-tracker instance list
-  pr-tracker instance add --provider github|gitlab [--host H] [--name N] [--merge-method M]
+  pr-tracker instance add --provider github|gitlab|gitea [--host H] [--name N] [--merge-method M]
   pr-tracker instance rm NOME
   pr-tracker repo set --instance NOME --repo owner/repo --path ~/code/repo [--remote origin]
   pr-tracker repo list
@@ -92,7 +93,7 @@ func runUI(cfg *config.Config) error {
 	return err
 }
 
-// seed creates instances for the SaaS hosts the installed CLIs are logged in to.
+// seed creates instances for the hosts the installed CLIs are logged in to.
 func seed(cfg *config.Config) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -103,6 +104,13 @@ func seed(cfg *config.Config) {
 			continue
 		}
 		if c.AuthStatus(ctx) == nil {
+			_ = cfg.UpsertInstance("", in)
+		}
+	}
+	// Gitea has no SaaS host worth probing blindly, so the seed comes from the
+	// servers tea is already logged in to.
+	for _, in := range provider.GiteaInstances(ctx) {
+		if provider.New(in).AuthStatus(ctx) == nil {
 			_ = cfg.UpsertInstance("", in)
 		}
 	}
@@ -124,7 +132,7 @@ func doctor(cfg *config.Config) {
 	wt, _ := cfg.Worktrees()
 	fmt.Println("worktrees:   ", wt)
 	fmt.Println()
-	for _, t := range []string{"git", "gh", "glab", "hunk", "herdr", "tmux"} {
+	for _, t := range []string{"git", "gh", "glab", "tea", "hunk", "herdr", "tmux"} {
 		have := provider.ToolAvailable(t)
 		line := fmt.Sprintf("%s %-6s", ok(have), t)
 		if !have && t != "git" {
@@ -222,7 +230,7 @@ func instanceCmd(cfg *config.Config, args []string) error {
 	switch args[0] {
 	case "add":
 		fs := flag.NewFlagSet("instance add", flag.ContinueOnError)
-		prov := fs.String("provider", "", "github, gitlab ou bitbucket")
+		prov := fs.String("provider", "", "github, gitlab, gitea ou bitbucket")
 		host := fs.String("host", "", "host (padrão: SaaS do provider)")
 		name := fs.String("name", "", "nome único (padrão: host)")
 		merge := fs.String("merge-method", "", "merge, squash ou rebase")

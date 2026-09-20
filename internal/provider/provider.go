@@ -1,6 +1,6 @@
 // Package provider talks to code hosting platforms through their official CLIs
-// (gh for GitHub, glab for GitLab). No API tokens are handled by pr-tracker:
-// authentication is whatever the CLI is logged in with.
+// (gh for GitHub, glab for GitLab, tea for Gitea). No API tokens are handled by
+// pr-tracker: authentication is whatever the CLI is logged in with.
 package provider
 
 import (
@@ -181,6 +181,8 @@ func InstallHint(tool string) string {
 		return "https://cli.github.com (ex.: brew install gh, pacman -S github-cli, winget install GitHub.cli)"
 	case "glab":
 		return "https://gitlab.com/gitlab-org/cli (ex.: brew install glab, pacman -S glab, winget install glab.glab)"
+	case "tea":
+		return "https://gitea.com/gitea/tea (ex.: brew install tea, ou um binário das releases); precisa da 0.14 ou mais nova"
 	case "bkt":
 		return "https://github.com/avivsinai/bitbucket-cli (integração ainda não implementada)"
 	case "hunk":
@@ -202,6 +204,8 @@ func New(in config.Instance) Client {
 		return &github{in: in}
 	case config.GitLab:
 		return &gitlab{in: in}
+	case config.Gitea:
+		return &gitea{in: in}
 	default:
 		return &bitbucket{in: in}
 	}
