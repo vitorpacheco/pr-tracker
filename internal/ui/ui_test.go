@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -29,11 +30,15 @@ func TestCleanMarkdown(t *testing.T) {
 func TestTabMatch(t *testing.T) {
 	issue := &provider.Item{Kind: provider.KindIssue, Relations: provider.Mentioned}
 	pr := &provider.Item{Kind: provider.KindPR, Relations: provider.Assigned}
+	unrelated := &provider.Item{Kind: provider.KindPR}
 	if !tabs[6].match(issue) || tabs[4].match(issue) || tabs[3].match(issue) {
 		t.Fatal("issue tab matching")
 	}
 	if !tabs[2].match(pr) || !tabs[3].match(pr) || tabs[4].match(pr) {
 		t.Fatal("PR tab matching")
+	}
+	if tabs[0].match(unrelated) || tabs[1].match(unrelated) || tabs[2].match(unrelated) || !tabs[3].match(unrelated) {
+		t.Fatal("unrelated tracked PR must appear only in the all tab")
 	}
 }
 func TestCloseWithoutMerge(t *testing.T) {
@@ -64,6 +69,46 @@ func TestCloseWithoutMerge(t *testing.T) {
 	m.modal, m.confirm = modalNone, nil
 	if m.prAction(&issue, "X"); m.modal != modalNone {
 		t.Fatal("issues cannot be closed as PRs")
+	}
+}
+
+func TestTrackAllRepoActionPersistsAndToggles(t *testing.T) {
+	t.Setenv("PR_TRACKER_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	cfg := config.Default()
+	cfg.Instances = []config.Instance{{Name: "gl", Provider: config.GitLab, Host: "gitlab.example.com"}}
+	m := New(cfg, nil)
+	pr := provider.Item{Kind: provider.KindPR, Instance: "gl", Provider: config.GitLab, Repo: "group/project", Number: 7}
+
+	m.openMenu(&pr)
+	found := false
+	for _, item := range m.menu {
+		if item.key == "R" && strings.Contains(item.label, "todos os MRs") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("track-all action missing from menu: %+v", m.menu)
+	}
+	m.modal = modalNone
+	m.prAction(&pr, "R")
+	repo, ok := cfg.Repo("gl", "group/project")
+	if !ok || !repo.TrackAll || repo.Path != "" {
+		t.Fatalf("repo = %+v, found = %v", repo, ok)
+	}
+	loaded, _, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo, ok := loaded.Repo("gl", "group/project"); !ok || !repo.TrackAll {
+		t.Fatalf("persisted repo = %+v, found = %v", repo, ok)
+	}
+
+	m.prAction(&pr, "R")
+	if _, ok := cfg.Repo("gl", "group/project"); ok {
+		t.Fatal("track-only repo remained after toggling off")
+	}
+	if !m.refreshQueued {
+		t.Fatal("configuration change during refresh did not queue another refresh")
 	}
 }
 

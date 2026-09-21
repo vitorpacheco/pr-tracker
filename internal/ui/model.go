@@ -88,15 +88,18 @@ type Model struct {
 	clients map[string]provider.Client
 	cache   *cache.Store
 
-	prs      []provider.Item
-	instErr  map[string]error
-	clones   map[string]string // PR key -> local clone path
-	wts      map[string]string // PR key -> existing worktree path
-	loading  bool
-	gen      int
-	lastSync time.Time
-	nextSync time.Time
-	frame    int
+	prs     []provider.Item
+	instErr map[string]error
+	clones  map[string]string // PR key -> local clone path
+	wts     map[string]string // PR key -> existing worktree path
+	loading bool
+	// refreshQueued requests one more refresh when configuration changes while
+	// a previous refresh is still in flight.
+	refreshQueued bool
+	gen           int
+	lastSync      time.Time
+	nextSync      time.Time
+	frame         int
 
 	screen     screen
 	tab        int
@@ -159,7 +162,7 @@ func New(cfg *config.Config, store *cache.Store) *Model {
 func (m *Model) rebuildClients() {
 	m.clients = map[string]provider.Client{}
 	for _, in := range m.cfg.Instances {
-		m.clients[in.Name] = provider.New(in)
+		m.clients[in.Name] = provider.New(in, m.cfg.Repos...)
 	}
 }
 
@@ -305,6 +308,14 @@ func (m *Model) scheduleRefresh() tea.Cmd {
 	d := m.cfg.Interval()
 	m.nextSync = time.Now().Add(d)
 	return tea.Tick(d, func(time.Time) tea.Msg { return autoRefreshMsg{gen: gen} })
+}
+
+func (m *Model) requestRefresh() tea.Cmd {
+	if m.loading {
+		m.refreshQueued = true
+		return nil
+	}
+	return m.refresh()
 }
 
 func (m *Model) applyRefresh(msg refreshMsg) {
@@ -494,6 +505,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.applyRefresh(msg)
+		if m.refreshQueued {
+			m.refreshQueued = false
+			return m, m.refresh()
+		}
 		return m, m.scheduleRefresh()
 
 	case threadMsg:
@@ -666,7 +681,7 @@ func (m *Model) press(k string) tea.Cmd {
 			return nil
 		}
 		m.setStatus(stInfo, "atualizando…")
-		return m.refresh()
+		return m.requestRefresh()
 	case "i":
 		m.thread = nil
 		if m.screen == screenInstances {
@@ -905,6 +920,18 @@ func (m *Model) openMenu(pr *provider.Item) {
 	if hasWT {
 		wtLabel = "Atualizar worktree"
 	}
+	tracked := false
+	if repo, ok := m.cfg.Repo(pr.Instance, pr.Repo); ok {
+		tracked = repo.TrackAll
+	}
+	kind := "PRs"
+	if pr.Provider == config.GitLab {
+		kind = "MRs"
+	}
+	trackLabel := "Acompanhar todos os " + kind + " deste repositório"
+	if tracked {
+		trackLabel = "Parar de acompanhar todos os " + kind + " deste repositório"
+	}
 	m.menu = append(conversation, []menuItem{
 		{key: "w", label: wtLabel},
 		{key: "c", label: "Checkout no clone local", disabled: noTool},
@@ -918,6 +945,7 @@ func (m *Model) openMenu(pr *provider.Item) {
 		{key: "C", label: "Fechar sem merge e remover worktree", disabled: firstNonEmpty(noTool, noWT)},
 		{key: "x", label: "Remover worktree (sem aprovar)", disabled: noWT},
 		{key: "o", label: "Abrir no navegador"},
+		{key: "R", label: trackLabel},
 		{key: "p", label: "Definir pasta local do repositório"},
 	}...)
 }
@@ -982,6 +1010,24 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 	}
 	cfg := m.cfg
 	switch k {
+	case "R":
+		enabled := false
+		if repo, ok := m.cfg.Repo(p.Instance, p.Repo); ok {
+			enabled = repo.TrackAll
+		}
+		m.cfg.SetRepoTrackAll(p.Instance, p.Repo, !enabled)
+		if err := m.cfg.Save(); err != nil {
+			m.cfg.SetRepoTrackAll(p.Instance, p.Repo, enabled)
+			m.setStatus(stErr, err.Error())
+			return nil
+		}
+		m.rebuildClients()
+		if enabled {
+			m.setStatus(stOK, "acompanhamento de todos os PRs/MRs desativado para "+p.Repo)
+		} else {
+			m.setStatus(stOK, "acompanhando todos os PRs/MRs de "+p.Repo)
+		}
+		return m.requestRefresh()
 	case "p":
 		m.openRepoPathForm(p, "")
 		return m.form.setFocus(0)

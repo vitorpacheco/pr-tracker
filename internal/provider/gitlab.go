@@ -12,7 +12,10 @@ import (
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 )
 
-type gitlab struct{ in config.Instance }
+type gitlab struct {
+	in      config.Instance
+	tracked []string
+}
 
 func (g *gitlab) Instance() config.Instance { return g.in }
 func (g *gitlab) Tool() string              { return "glab" }
@@ -34,6 +37,30 @@ query {
     review: reviewRequestedMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { nodes { ...mr } }
     authored: authoredMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { nodes { ...mr } }
     assigned: assignedMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { nodes { ...mr } }
+  }
+}
+# Labels/assignees are left out: GitLab caps query complexity at 200-250.
+fragment mr on MergeRequest {
+  iid title webUrl draft createdAt updatedAt userNotesCount
+  sourceBranch targetBranch conflicts approved
+  diffStatsSummary { additions deletions fileCount }
+  author { username }
+  project { fullPath webUrl }
+  sourceProject { fullPath }
+  approvedBy { nodes { username } }
+  headPipeline {
+    status
+    jobs(first: 50) { nodes { name status webPath } }
+  }
+}`
+
+const glTrackedQuery = `
+query($repo: ID!, $cursor: String) {
+  project(fullPath: $repo) {
+    mergeRequests(state: opened, first: 50, after: $cursor, sort: UPDATED_DESC) {
+      nodes { ...mr }
+      pageInfo { hasNextPage endCursor }
+    }
   }
 }
 # Labels/assignees are left out: GitLab caps query complexity at 200-250.
@@ -126,7 +153,11 @@ func (u glUsers) names() []string {
 }
 
 type glConn struct {
-	Nodes []glMR `json:"nodes"`
+	Nodes    []glMR `json:"nodes"`
+	PageInfo struct {
+		HasNextPage bool   `json:"hasNextPage"`
+		EndCursor   string `json:"endCursor"`
+	} `json:"pageInfo"`
 }
 
 type glResponse struct {
@@ -137,6 +168,17 @@ type glResponse struct {
 			Authored glConn `json:"authored"`
 			Assigned glConn `json:"assigned"`
 		} `json:"currentUser"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+type glTrackedResponse struct {
+	Data struct {
+		Project *struct {
+			MergeRequests glConn `json:"mergeRequests"`
+		} `json:"project"`
 	} `json:"data"`
 	Errors []struct {
 		Message string `json:"message"`
@@ -170,6 +212,38 @@ func (g *gitlab) List(ctx context.Context) ([]Item, error) {
 	} {
 		for _, n := range s.nodes {
 			acc.add(g.convert(n, u.Username), s.rel)
+		}
+	}
+	for _, repo := range g.tracked {
+		cursor := ""
+		for {
+			args := []string{"api", "graphql", "--hostname", g.in.Host,
+				"-f", "query=" + glTrackedQuery, "-f", "repo=" + repo}
+			if cursor != "" {
+				args = append(args, "-f", "cursor="+cursor)
+			}
+			out, err := run(ctx, "", g.env(), "glab", args...)
+			if err != nil {
+				return nil, err
+			}
+			var tracked glTrackedResponse
+			if err := json.Unmarshal(out, &tracked); err != nil {
+				return nil, fmt.Errorf("resposta inválida do glab para %s: %w", repo, err)
+			}
+			if len(tracked.Errors) > 0 {
+				return nil, fmt.Errorf("glab graphql (%s): %s", repo, tracked.Errors[0].Message)
+			}
+			if tracked.Data.Project == nil {
+				return nil, fmt.Errorf("projeto %s não encontrado em %s", repo, g.in.Host)
+			}
+			mrs := tracked.Data.Project.MergeRequests
+			for _, n := range mrs.Nodes {
+				acc.add(g.convert(n, u.Username), 0)
+			}
+			if !mrs.PageInfo.HasNextPage || mrs.PageInfo.EndCursor == "" || mrs.PageInfo.EndCursor == cursor {
+				break
+			}
+			cursor = mrs.PageInfo.EndCursor
 		}
 	}
 	if err := g.listIssues(ctx, u.Username, acc); err != nil {

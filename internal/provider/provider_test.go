@@ -12,9 +12,23 @@ func TestAccumulatorMergesRelations(t *testing.T) {
 	a.add(pr, ReviewRequested)
 	a.add(pr, Assigned)
 	a.add(Item{Instance: "gh", Repo: "o/r", Number: 2}, Authored)
+	a.add(Item{Instance: "gh", Repo: "o/r", Number: 3}, 0)
 	got := a.list()
-	if len(got) != 2 || got[0].Relations != ReviewRequested|Assigned || got[1].Relations != Authored {
+	if len(got) != 3 || got[0].Relations != ReviewRequested|Assigned || got[1].Relations != Authored || got[2].Relations != 0 {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestNewPassesTrackedReposForInstance(t *testing.T) {
+	in := config.Instance{Name: "work", Provider: config.GitLab, Host: "gitlab.example.com"}
+	c := New(in,
+		config.Repo{Instance: "work", Name: "group/all", TrackAll: true},
+		config.Repo{Instance: "work", Name: "group/related-only"},
+		config.Repo{Instance: "other", Name: "group/other", TrackAll: true},
+	)
+	g, ok := c.(*gitlab)
+	if !ok || len(g.tracked) != 1 || g.tracked[0] != "group/all" {
+		t.Fatalf("client = %#v", c)
 	}
 }
 

@@ -192,7 +192,7 @@ func (m *Model) hints() []hint {
 	}
 	return []hint{
 		{"enter", "ações"}, {"v", "conversa"}, {"n", "comentar"}, {"w", "worktree"}, {"d", "diff"}, {"t", "terminal"}, {"c", "checkout"},
-		{"a", "aprovar"}, {"m", "merge"}, {"X", "fechar"}, {"x", "rm worktree"}, {"o", "navegador"},
+		{"a", "aprovar"}, {"m", "merge"}, {"X", "fechar"}, {"x", "rm worktree"}, {"o", "navegador"}, {"R", "todos do repo"},
 		{"/", "filtrar"}, {"r", "atualizar"}, {"i", "instâncias"}, {"s", "config"}, {"?", "ajuda"}, {"q", "sair"},
 	}
 }
@@ -675,8 +675,9 @@ func (m *Model) helpContent(z *zones) string {
 		row("X / C", "fechar sem merge / + remover wt"),
 		row("x", "remover worktree"),
 		row("o", "abrir no navegador"),
+		row("R", "todos os PRs/MRs do repo"),
 		row("p", "definir pasta local"),
-		sDim.Render("  (w…x/p só em PRs)"),
+		sDim.Render("  (w…x/R/p só em PRs)"),
 	}
 	legend := []string{
 		"",

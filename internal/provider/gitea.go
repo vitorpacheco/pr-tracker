@@ -21,7 +21,8 @@ import (
 // relates to an item, but it answers with bare issues, so branches, diff stats,
 // reviews and CI need one round of requests per pull request.
 type gitea struct {
-	in config.Instance
+	in      config.Instance
+	tracked []string
 
 	mu    sync.Mutex
 	login string // tea login name that serves this host
@@ -249,6 +250,23 @@ type gtPull struct {
 	Base         *gtBranch `json:"base"`
 }
 
+// gtRepoPull is the list representation returned by
+// /repos/{owner}/{repo}/pulls. The detail-only fields are filled later by the
+// same enrichment pass used for relation searches.
+type gtRepoPull struct {
+	Number    int       `json:"number"`
+	Title     string    `json:"title"`
+	Body      string    `json:"body"`
+	HTMLURL   string    `json:"html_url"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Comments  int       `json:"comments"`
+	User      *gtUser   `json:"user"`
+	Labels    []gtLabel `json:"labels"`
+	Assignees []*gtUser `json:"assignees"`
+	Draft     bool      `json:"draft"`
+}
+
 type gtReview struct {
 	ID          int64     `json:"id"`
 	State       string    `json:"state"`
@@ -338,6 +356,38 @@ func (g *gitea) List(ctx context.Context) ([]Item, error) {
 				continue
 			}
 			acc.add(g.convert(n, s.kind), s.rel)
+		}
+	}
+	for _, repo := range g.tracked {
+		seen := map[int]bool{}
+		for page := 1; ; page++ {
+			out, err := g.api(ctx, "", fmt.Sprintf("/repos/%s/pulls?state=open&limit=50&page=%d", repo, page))
+			if err != nil {
+				return nil, err
+			}
+			var pulls []gtRepoPull
+			if err := json.Unmarshal(out, &pulls); err != nil {
+				return nil, fmt.Errorf("resposta inválida do tea para %s: %w", repo, err)
+			}
+			newPageItem := false
+			for _, pull := range pulls {
+				if !seen[pull.Number] {
+					newPageItem = true
+					seen[pull.Number] = true
+				}
+				draft := pull.Draft
+				acc.add(g.convert(gtIssue{
+					Number: pull.Number, Title: pull.Title, Body: pull.Body, HTMLURL: pull.HTMLURL,
+					CreatedAt: pull.CreatedAt, UpdatedAt: pull.UpdatedAt, Comments: pull.Comments,
+					User: pull.User, Labels: pull.Labels, Assignees: pull.Assignees,
+					Repository: &gtRepo{FullName: repo}, PullRequest: &struct {
+						Draft bool `json:"draft"`
+					}{Draft: draft},
+				}, KindPR), 0)
+			}
+			if len(pulls) < 50 || !newPageItem {
+				break
+			}
 		}
 	}
 	items := acc.list()
