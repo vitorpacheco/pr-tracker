@@ -197,15 +197,22 @@ func ToolAvailable(tool string) bool {
 	return err == nil
 }
 
-// New returns the client for an instance.
-func New(in config.Instance) Client {
+// New returns a provider client. Repository settings are optional so callers
+// that only need authentication or tool metadata do not need a full Config.
+func New(in config.Instance, repos ...config.Repo) Client {
+	var tracked []string
+	for _, repo := range repos {
+		if repo.Instance == in.Name && repo.TrackAll {
+			tracked = append(tracked, repo.Name)
+		}
+	}
 	switch in.Provider {
 	case config.GitHub:
-		return &github{in: in}
+		return &github{in: in, tracked: tracked}
 	case config.GitLab:
-		return &gitlab{in: in}
+		return &gitlab{in: in, tracked: tracked}
 	case config.Gitea:
-		return &gitea{in: in}
+		return &gitea{in: in, tracked: tracked}
 	default:
 		return &bitbucket{in: in}
 	}

@@ -100,6 +100,7 @@ instância o mesmo nome do login que você quer usar.
 | `X` / `C` | fechar sem merge / fechar sem merge e remover o worktree (a branch é mantida) |
 | `x` | remover o worktree sem aprovar |
 | `o` | abrir no navegador |
+| `R` | acompanhar/parar de acompanhar todos os PRs/MRs do repositório |
 | `p` | definir a pasta local do repositório |
 | `r` | atualizar agora |
 | `i` | instâncias (`n` nova, `e` editar, `space` ativar/desativar, `t` testar auth, `D` remover) |
@@ -183,8 +184,15 @@ clone_roots = ["~/code", "~/work"]
   name = "grupo/sub/projeto"
   path = "~/work/projeto"
   remote = "origin"           # opcional; detectado pela URL
+  track_all = true             # inclui todos os MRs abertos, sem filtro de relação
   merge_method = "squash"     # opcional; sobrescreve a instância
 ```
+
+No menu de um PR/MR, `R` ativa ou desativa `track_all` para aquele repositório.
+O repositório fica persistido mesmo sem uma pasta local configurada. Quando a
+opção está ativa, a aba **Todos** inclui todos os PRs/MRs abertos do repositório;
+as abas **Revisar**, **Meus** e **Atribuídos** continuam mostrando apenas as
+relações correspondentes.
 
 ## Como os dados são obtidos
 
@@ -194,18 +202,23 @@ A cada atualização, cada instância faz poucas chamadas GraphQL:
   PRs (`review-requested:@me`, `author:@me`, `assignee:@me`, com o
   `statusCheckRollup` do último commit) e três de issues (`assignee:@me`,
   `author:@me`, `mentions:@me`).
+  Cada repositório com `track_all` acrescenta chamadas paginadas à conexão de
+  pull requests do repositório.
 - GitLab, em **duas** chamadas `glab api graphql --hostname <host>`:
   - `currentUser.{reviewRequested,authored,assigned}MergeRequests`, com o
     `headPipeline` e seus jobs;
   - `issues(assigneeUsernames|authorUsername)` e os to-dos pendentes de menção
     (`mentioned`, `directly_addressed`).
   As MRs ficam sem labels para respeitar o limite de complexidade de query do
-  GitLab.
+  GitLab. Cada repositório com `track_all` acrescenta chamadas paginadas à
+  conexão de merge requests do projeto.
 - Gitea **não tem GraphQL**, então é REST via `tea api`: seis buscas em
   `/repos/issues/search` (as mesmas relações das abas) e, como essa busca
   devolve só o issue cru, mais até três chamadas por PR — detalhe, status dos
   checks do commit e reviews — no máximo seis de cada vez. Se alguma delas
   falhar, a linha aparece sem CI em vez de derrubar a lista inteira.
+  Repositórios com `track_all` também consultam, com paginação,
+  `/repos/{owner}/{repo}/pulls`.
 
 ### Cache local
 

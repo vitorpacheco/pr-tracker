@@ -170,7 +170,7 @@ func list(cfg *config.Config) error {
 		if in.Disabled {
 			continue
 		}
-		prs, err := provider.New(in).List(ctx)
+		prs, err := provider.New(in, cfg.Repos...).List(ctx)
 		if err != nil {
 			errs = append(errs, in.Name+": "+err.Error())
 			continue
@@ -278,9 +278,13 @@ func instanceCmd(cfg *config.Config, args []string) error {
 func repoCmd(cfg *config.Config, args []string) error {
 	if len(args) == 0 || args[0] == "list" || args[0] == "ls" {
 		w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-		fmt.Fprintln(w, "INSTÂNCIA\tREPO\tPASTA\tREMOTE")
+		fmt.Fprintln(w, "INSTÂNCIA\tREPO\tPASTA\tREMOTE\tTODOS PRS/MRS")
 		for _, r := range cfg.Repos {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Instance, r.Name, r.Path, orDash(r.Remote))
+			track := "não"
+			if r.TrackAll {
+				track = "sim"
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.Instance, r.Name, r.Path, orDash(r.Remote), track)
 		}
 		return w.Flush()
 	}

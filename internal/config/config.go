@@ -59,13 +59,16 @@ type Instance struct {
 	DeleteBranch bool `toml:"delete_branch,omitempty"`
 }
 
-// Repo maps a remote repository to a local clone.
+// Repo holds per-repository settings, including its optional local clone.
 type Repo struct {
 	Instance string `toml:"instance"`
 	// Name is owner/repo (GitHub, Gitea) or group/subgroup/project (GitLab).
 	Name   string `toml:"name"`
 	Path   string `toml:"path"`
 	Remote string `toml:"remote,omitempty"`
+	// TrackAll includes every open pull/merge request from this repository,
+	// regardless of its relation to the current user.
+	TrackAll bool `toml:"track_all,omitempty"`
 	// MergeMethod overrides the instance merge method for this repo.
 	MergeMethod string `toml:"merge_method,omitempty"`
 }
@@ -291,12 +294,37 @@ func (c *Config) Repo(instance, name string) (*Repo, bool) {
 	return nil, false
 }
 
+// SetRepoTrackAll enables or disables tracking every open pull/merge request
+// from a repository. Enabling it creates a repository entry even when there is
+// no local clone mapping; disabling it removes an otherwise empty entry.
+func (c *Config) SetRepoTrackAll(instance, name string, enabled bool) {
+	r, ok := c.Repo(instance, name)
+	if !ok {
+		if !enabled {
+			return
+		}
+		c.Repos = append(c.Repos, Repo{Instance: instance, Name: name, TrackAll: true})
+		return
+	}
+	r.TrackAll = enabled
+	if !enabled && r.Path == "" && r.Remote == "" && r.MergeMethod == "" {
+		c.Repos = slices.DeleteFunc(c.Repos, func(candidate Repo) bool {
+			return candidate.Instance == instance && strings.EqualFold(candidate.Name, name)
+		})
+	}
+}
+
 // SetRepoPath stores (or clears, with an empty path) the local clone path.
 func (c *Config) SetRepoPath(instance, name, path string) {
 	if path == "" {
-		c.Repos = slices.DeleteFunc(c.Repos, func(r Repo) bool {
-			return r.Instance == instance && strings.EqualFold(r.Name, name)
-		})
+		if r, ok := c.Repo(instance, name); ok {
+			r.Path = ""
+			if !r.TrackAll {
+				c.Repos = slices.DeleteFunc(c.Repos, func(candidate Repo) bool {
+					return candidate.Instance == instance && strings.EqualFold(candidate.Name, name)
+				})
+			}
+		}
 		return
 	}
 	if r, ok := c.Repo(instance, name); ok {

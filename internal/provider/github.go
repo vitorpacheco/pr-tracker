@@ -11,7 +11,10 @@ import (
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 )
 
-type github struct{ in config.Instance }
+type github struct {
+	in      config.Instance
+	tracked []string
+}
 
 func (g *github) Instance() config.Instance { return g.in }
 func (g *github) Tool() string              { return "gh" }
@@ -39,6 +42,35 @@ fragment issue on Issue {
   comments { totalCount }
   labels(first: 10) { nodes { name } }
   assignees(first: 10) { nodes { login } }
+}
+fragment pr on PullRequest {
+  number title url isDraft createdAt updatedAt
+  comments { totalCount }
+  labels(first: 10) { nodes { name } }
+  assignees(first: 10) { nodes { login } }
+  headRefName baseRefName isCrossRepository
+  reviewDecision mergeable additions deletions changedFiles
+  author { login }
+  repository { nameWithOwner url }
+  latestReviews(first: 30) { nodes { state author { login } } }
+  commits(last: 1) { nodes { commit { statusCheckRollup {
+    state
+    contexts(first: 50) { nodes {
+      __typename
+      ... on CheckRun { name status conclusion detailsUrl }
+      ... on StatusContext { context state targetUrl }
+    } }
+  } } } }
+}`
+
+const ghTrackedQuery = `
+query($owner: String!, $name: String!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(states: OPEN, first: 50, after: $cursor) {
+      nodes { ...pr }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
 }
 fragment pr on PullRequest {
   number title url isDraft createdAt updatedAt
@@ -127,7 +159,11 @@ type ghLogin struct {
 }
 
 type ghSearch struct {
-	Nodes []ghPR `json:"nodes"`
+	Nodes    []ghPR `json:"nodes"`
+	PageInfo struct {
+		HasNextPage bool   `json:"hasNextPage"`
+		EndCursor   string `json:"endCursor"`
+	} `json:"pageInfo"`
 }
 
 type ghResponse struct {
@@ -141,6 +177,17 @@ type ghResponse struct {
 		IssAssigned  ghSearch `json:"issAssigned"`
 		IssAuthored  ghSearch `json:"issAuthored"`
 		IssMentioned ghSearch `json:"issMentioned"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+type ghTrackedResponse struct {
+	Data struct {
+		Repository *struct {
+			PullRequests ghSearch `json:"pullRequests"`
+		} `json:"repository"`
 	} `json:"data"`
 	Errors []struct {
 		Message string `json:"message"`
@@ -190,6 +237,44 @@ func (g *github) List(ctx context.Context) ([]Item, error) {
 			it := g.convert(n, me)
 			it.Kind = s.kind
 			acc.add(it, s.rel)
+		}
+	}
+	for _, repo := range g.tracked {
+		owner, name, ok := strings.Cut(repo, "/")
+		if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
+			return nil, fmt.Errorf("repositório GitHub inválido %q (esperado owner/repo)", repo)
+		}
+		cursor := ""
+		for {
+			args := []string{"api", "graphql", "--hostname", g.in.Host,
+				"-f", "query=" + ghTrackedQuery, "-f", "owner=" + owner, "-f", "name=" + name}
+			if cursor != "" {
+				args = append(args, "-f", "cursor="+cursor)
+			}
+			out, err := run(ctx, "", g.env(), "gh", args...)
+			if err != nil {
+				return nil, err
+			}
+			var tracked ghTrackedResponse
+			if err := json.Unmarshal(out, &tracked); err != nil {
+				return nil, fmt.Errorf("resposta inválida do gh para %s: %w", repo, err)
+			}
+			if len(tracked.Errors) > 0 {
+				return nil, fmt.Errorf("gh graphql (%s): %s", repo, tracked.Errors[0].Message)
+			}
+			if tracked.Data.Repository == nil {
+				return nil, fmt.Errorf("repositório %s não encontrado em %s", repo, g.in.Host)
+			}
+			prs := tracked.Data.Repository.PullRequests
+			for _, n := range prs.Nodes {
+				if n.Number != 0 {
+					acc.add(g.convert(n, me), 0)
+				}
+			}
+			if !prs.PageInfo.HasNextPage || prs.PageInfo.EndCursor == "" || prs.PageInfo.EndCursor == cursor {
+				break
+			}
+			cursor = prs.PageInfo.EndCursor
 		}
 	}
 	return acc.list(), nil
