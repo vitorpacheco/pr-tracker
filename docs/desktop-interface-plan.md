@@ -1,5 +1,8 @@
 # Plano da interface desktop
 
+Issue de acompanhamento: [#5 — Adicionar interface desktop multiplataforma com
+Wails](https://github.com/vitorpacheco/pr-tracker/issues/5)
+
 ## Decisão aprovada
 
 Usar **Wails v2** com **Svelte e TypeScript**, mantendo o núcleo da aplicação em
