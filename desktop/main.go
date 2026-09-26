@@ -33,7 +33,9 @@ func main() {
 	err := wails.Run(&options.App{
 		Title: "pr-tracker", Width: 1280, Height: 820, MinWidth: 400, MinHeight: 480,
 		AssetServer: &assetserver.Options{Assets: assets},
-		Linux:       &linux.Options{ProgramName: "io.github.vitorpacheco.pr_tracker", WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand},
+		// Avoid WebKitGTK's accelerated surface path, which can disconnect from
+		// Wayland with "Missing acquire timeline" on Hyprland/NVIDIA.
+		Linux: &linux.Options{ProgramName: "io.github.vitorpacheco.pr_tracker", WebviewGpuPolicy: linux.WebviewGpuPolicyNever},
 		OnStartup: func(ctx context.Context) {
 			defer close(ready)
 			cfg, _, err := config.Load()

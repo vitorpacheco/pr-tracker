@@ -150,17 +150,25 @@ O pacote desktop vincula `UniformTypeIdentifiers` via cgo no macOS. Isso permite
 usar `go build` diretamente, sem depender das flags extras do comando de build
 do Wails para os seletores nativos de arquivos.
 
-O primeiro smoke nativo foi executado apenas no Linux/Wayland disponível nesta
-máquina, com configuração vazia e diretórios isolados. As capturas automatizadas
-usam Chromium; elas não substituem testes de WebKitGTK. A execução em
-macOS/Windows e as rodadas em GNOME/KDE ainda precisam de seus respectivos
-ambientes. Terminal, diff e ações remotas não foram executados contra contas ou
-clones reais durante o desenvolvimento.
+O smoke nativo em Arch Linux/Hyprland foi repetido em 26/09/2026 com configuração
+isolada, cache sintético, navegação por teclado e os três breakpoints. Ele revelou
+uma falha no caminho acelerado do WebKitGTK/NVIDIA; a GUI agora desativa a
+aceleração do WebView no Linux. O [registro do smoke](desktop-smoke-tests.md)
+descreve a reprodução, a correção, os resultados e o roteiro para o MacBook.
+As capturas automatizadas usam Chromium; elas não substituem testes de WebKitGTK.
+A execução em macOS/Windows e as rodadas em GNOME/KDE ainda precisam de seus
+respectivos ambientes. Terminal, diff e ações remotas não foram executados contra
+contas ou clones reais durante estes testes.
 
 O arquivo `.desktop` e o ícone SVG ficam em `desktop/build/linux/`; a aplicação
 usa o mesmo App ID. Nenhum deles é instalado automaticamente. Instaladores,
-assinatura/notarização, persistência do tamanho da janela e notificações
-permanecem para os próximos incrementos. A GUI não
+persistência do tamanho da janela e notificações permanecem para os próximos
+incrementos.
+
+No macOS, os pacotes serão distribuídos sem assinatura Developer ID e sem
+notarização. O projeto não exige conta paga Apple Developer nem credenciais
+Apple no CI. O empacotamento em `.app` universal e `.dmg` e os testes nativos
+continuam pendentes; assinatura e notarização não são critérios de conclusão. A GUI não
 persiste nem impõe posição da janela no Wayland.
 
 ## Capturas verificadas

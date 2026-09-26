@@ -231,7 +231,8 @@ claramente as ausentes.
 - Manter o release atual da CLI/TUI.
 - Criar builds desktop nativos em runners separados; Wails/CGO não deve usar o
   loop atual de cross-compilation com `CGO_ENABLED=0`.
-- macOS: `.app` universal e `.dmg`, assinatura e notarização.
+- macOS: `.app` universal e `.dmg`, sem assinatura Developer ID e sem
+  notarização. Não exigir conta paga Apple Developer nem credenciais Apple no CI.
 - Windows: instalador x64/arm64, assinatura quando houver certificado.
 - Linux: começar por tarball e pacotes `.deb`; adicionar RPM/AUR e AppImage após
   validação em Wayland.
@@ -274,9 +275,9 @@ Para uma pessoa trabalhando com foco:
 - empacotamento, acessibilidade e validação multiplataforma: **1–2 semanas**.
 
 Uma primeira versão utilizável pode surgir no fim da terceira semana. A paridade
-funcional e os instaladores assinados tendem a levar **5–8 semanas**, dependendo
-principalmente da infraestrutura de assinatura e da profundidade do diff
-integrado.
+funcional e os pacotes de distribuição tendem a levar **5–8 semanas**, dependendo
+principalmente da validação nos ambientes nativos. Assinatura Developer ID e
+notarização no macOS ficam fora do escopo por decisão do projeto.
 
 ## Riscos que precisam de prova antecipada
 
