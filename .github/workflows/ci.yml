@@ -8,6 +8,11 @@ on:
   push:
     branches-ignore: [main]
   workflow_call:
+    inputs:
+      version:
+        description: Versão usada nos pacotes
+        required: false
+        type: string
   workflow_dispatch:
 
 permissions:
@@ -68,7 +73,13 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - run: make package VERSION="ci-${GITHUB_SHA::7}"
+      - name: Empacotar CLI
+        shell: bash
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          version="${VERSION_INPUT:-ci-${GITHUB_SHA::7}}"
+          make package VERSION="$version"
       - uses: actions/upload-artifact@v7
         with:
           name: pr-tracker-${{ github.sha }}
@@ -77,6 +88,12 @@ jobs:
             dist/*.zip
             dist/checksums.txt
           retention-days: 7
+
+  desktop:
+    name: Desktop (todas as plataformas)
+    uses: ./.github/workflows/desktop.yml
+    with:
+      version: ${{ inputs.version }}
 
   vuln:
     name: govulncheck

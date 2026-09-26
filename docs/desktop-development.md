@@ -139,10 +139,12 @@ frontend. Para Chromium, um `TMPDIR` muito longo excede o limite de sockets Unix
 
 ## Builds e limites de validação
 
-O workflow `desktop.yml` define validação frontend e builds nativos separados em
-Linux, macOS e Windows. Ele não publica releases. Em macOS/Windows, o build Go
-usa `-tags gui,desktop,production`; no Linux, acrescenta `webkit2_41`. Os jobs de
-CLI e seu loop com `CGO_ENABLED=0` permanecem separados.
+O workflow reutilizável `desktop.yml` define validação frontend e builds nativos
+separados em Linux, macOS e Windows, tanto em `amd64` quanto em `arm64`. O CI o
+chama para validar cada mudança; nightly e releases publicam seus seis pacotes e
+incluem todos eles em `checksums.txt`. Em macOS/Windows, o build Go usa
+`-tags gui,desktop,production`; no Linux, acrescenta `webkit2_41`. Os jobs de CLI
+e seu loop com `CGO_ENABLED=0` permanecem separados.
 
 O pacote desktop vincula `UniformTypeIdentifiers` via cgo no macOS. Isso permite
 usar `go build` diretamente, sem depender das flags extras do comando de build
@@ -157,8 +159,8 @@ clones reais durante o desenvolvimento.
 
 O arquivo `.desktop` e o ícone SVG ficam em `desktop/build/linux/`; a aplicação
 usa o mesmo App ID. Nenhum deles é instalado automaticamente. Instaladores,
-assinatura/notarização, persistência do tamanho da janela, notificações e
-empacotamento de releases permanecem para os próximos incrementos. A GUI não
+assinatura/notarização, persistência do tamanho da janela e notificações
+permanecem para os próximos incrementos. A GUI não
 persiste nem impõe posição da janela no Wayland.
 
 ## Capturas verificadas
