@@ -101,7 +101,7 @@ clean: ## Remove artefatos de build
 WAILS_VERSION := v2.16.0
 DESKTOP_TAGS ?= gui,desktop,production,webkit2_41
 
-.PHONY: desktop-install desktop-check desktop-build desktop-dev desktop-bindings desktop-e2e
+.PHONY: desktop-install desktop-check desktop-build desktop-run desktop-dev desktop-bindings desktop-e2e
 desktop-install: ## Instala dependências do frontend desktop
 	cd desktop/frontend && npm ci
 
@@ -111,6 +111,9 @@ desktop-check: ## Verifica TypeScript/Svelte e testes do frontend
 desktop-build: ## Compila a GUI nativa em dist/pr-tracker-desktop (Linux com WebKitGTK 4.1)
 	cd desktop/frontend && npm run build
 	go build -trimpath -tags $(DESKTOP_TAGS) -o $(DIST)/pr-tracker-desktop ./desktop
+
+desktop-run: desktop-build ## Compila e executa a GUI nativa
+	./$(DIST)/pr-tracker-desktop
 
 desktop-dev: ## Abre preview da GUI no navegador (use ?demo=1 para dados fictícios)
 	cd desktop/frontend && npm run dev

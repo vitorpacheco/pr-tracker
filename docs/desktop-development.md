@@ -13,8 +13,7 @@ utilizado para o primeiro build possui GTK 3.24.52 e WebKitGTK 2.52.6.
 ```sh
 make desktop-install
 make desktop-check
-make desktop-build
-./dist/pr-tracker-desktop
+make desktop-run
 ```
 
 Abrir o executável utiliza as configurações reais do usuário. A GUI não descobre

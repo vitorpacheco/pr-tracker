@@ -306,8 +306,8 @@ Packages: `internal/config` (configuration and paths), `internal/provider`
 ## Desktop interface (in development)
 
 The Wails/Svelte GUI lives in `desktop/` and shares the TUI backend. On Linux
-with GTK 3 and WebKitGTK 4.1, run `make desktop-install desktop-build` and open
-`./dist/pr-tracker-desktop`. To explore sample data in the browser, run
+with GTK 3 and WebKitGTK 4.1, run `make desktop-install desktop-run` to build and
+open the native GUI. To explore sample data in the browser, run
 `make desktop-dev` and open `http://127.0.0.1:5173/?demo=1`.
 
 See [desktop development](docs/desktop-development.md) for requirements,
