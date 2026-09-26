@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 )
 
 // Mode is where a command opens.
@@ -93,7 +95,7 @@ func openHerdr(dir, label string, argv []string) error {
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(bytes.TrimSpace(out), &resp); err != nil || resp.Result.RootPane.PaneID == "" {
-		return fmt.Errorf("herdr: resposta inesperada de tab create: %s", strings.TrimSpace(string(out)))
+		return i18n.Errorf("herdr: resposta inesperada de tab create: %s", strings.TrimSpace(string(out)))
 	}
 	if out, err := exec.Command("herdr", "pane", "run", resp.Result.RootPane.PaneID, Quote(argv)).CombinedOutput(); err != nil {
 		return fmt.Errorf("herdr: %s", strings.TrimSpace(string(out)))

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -105,5 +106,34 @@ func TestTrackAllRepoPersistsWithoutLocalPath(t *testing.T) {
 	got.SetRepoTrackAll("work", "group/project", false)
 	if _, ok := got.Repo("work", "group/project"); ok {
 		t.Fatal("otherwise empty repo was not removed after disabling track_all")
+	}
+}
+
+func TestLanguagePreferenceRoundTrip(t *testing.T) {
+	t.Setenv("PR_TRACKER_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	cfg, _, err := Load()
+	if err != nil || cfg.Language != "system" {
+		t.Fatalf("defaults = %+v, %v", cfg, err)
+	}
+	for _, language := range []string{"pt", "en", "system"} {
+		cfg.Language = language
+		if err := cfg.Save(); err != nil {
+			t.Fatal(err)
+		}
+		loaded, _, err := Load()
+		if err != nil || loaded.Language != language {
+			t.Fatalf("language = %+v, %v", loaded, err)
+		}
+	}
+	cfg.Language = "fr"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("unsupported language accepted")
+	}
+	if err := os.WriteFile(cfg.FilePath(), []byte("refresh_interval = \"5m\"\nterminal = \"auto\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err = Load()
+	if err != nil || cfg.Language != "system" {
+		t.Fatalf("legacy config = %+v, %v", cfg, err)
 	}
 }

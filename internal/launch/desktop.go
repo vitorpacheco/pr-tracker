@@ -2,13 +2,13 @@ package launch
 
 import (
 	"context"
-	"fmt"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
 
@@ -24,7 +24,7 @@ func Desktop(ctx context.Context, terminal, dir string, argv []string) error {
 	cmd.Env = toolchain.Environment(ctx)
 	configureDesktopProcess(cmd)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("abrindo terminal: %w", err)
+		return i18n.Errorf("abrindo terminal: %w", err)
 	}
 	go func() { _ = cmd.Wait() }()
 	return nil
@@ -51,7 +51,7 @@ func desktopCommand(platform, terminal, dir string, argv []string, lookup func(s
 		}
 	}
 	if terminal == "" {
-		return "", nil, fmt.Errorf("nenhum terminal desktop encontrado; configure desktop_terminal")
+		return "", nil, i18n.Errorf("nenhum terminal desktop encontrado; configure desktop_terminal")
 	}
 	path, err := lookup(terminal)
 	if err != nil {

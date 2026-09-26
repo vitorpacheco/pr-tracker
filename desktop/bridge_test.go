@@ -96,3 +96,41 @@ func TestBridgeWaitsForStartupBeforeAccessingSession(t *testing.T) {
 		}
 	})
 }
+
+func TestBridgeLanguageUsesSharedConfiguration(t *testing.T) {
+	t.Setenv("PR_TRACKER_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	t.Setenv("LC_ALL", "pt_BR.UTF-8")
+	t.Setenv("LANGUAGE", "")
+	cfg := config.Default()
+	session := app.NewSession(cfg, nil)
+	defer session.Close()
+	bridge := &Bridge{session: session}
+	initial, err := bridge.Load()
+	if err != nil || initial.Language != "pt" {
+		t.Fatalf("initial = %+v, %v", initial, err)
+	}
+	for _, language := range []string{"en", "pt", "system"} {
+		settings := bridge.Settings()
+		settings.Language = language
+		view, err := bridge.SaveSettings(settings)
+		want := language
+		if want == "system" {
+			want = "pt"
+		}
+		if err != nil || view.Language != want {
+			t.Fatalf("view = %+v, %v", view, err)
+		}
+		saved, _, err := config.Load()
+		if err != nil || saved.Language != language {
+			t.Fatalf("saved = %+v, %v", saved, err)
+		}
+	}
+	invalid := bridge.Settings()
+	invalid.Language = "fr"
+	if _, err := bridge.SaveSettings(invalid); err == nil {
+		t.Fatal("unsupported language accepted")
+	}
+	if bridge.Settings().Language != "system" {
+		t.Fatal("failed save changed language")
+	}
+}

@@ -1,161 +1,165 @@
 # pr-tracker
 
-Interface de terminal para acompanhar **pull requests** (GitHub, Gitea), **merge
-requests** (GitLab), **issues** e os **comentários** de todos em várias instâncias
-ao mesmo tempo, incluindo instâncias
-self-hosted. Toda a comunicação passa pelos CLIs oficiais `gh`, `glab` e `tea`,
-então a autenticação é a mesma que você já usa neles.
+Terminal and desktop interfaces for tracking **pull requests** (GitHub, Gitea),
+**merge requests** (GitLab), **issues**, and their **comments** across multiple
+instances, including self-hosted servers. Communication goes through the
+`gh`, `glab`, and `tea` CLIs, using the authentication you already have configured.
 
-- Tem abas de PRs: **Revisar** (revisão pedida a você), **Meus**, **Atribuídos** e
-  **Todos**. As abas de issues abertas são **Atribuídas**, **Criadas** e **Menções**.
-- Mostra a **conversa** (`v`) com a descrição e os comentários em markdown
-  renderizado. Nos PRs, também aparecem reviews (aprovou / pediu alterações) e
-  comentários inline com `arquivo:linha`. Para **comentar**, use `n`.
-- Mostra o status de **pipeline/checks** (sucesso, falha, em andamento,
-  cancelado) com a lista de jobs, além da revisão, aprovações, conflitos e
-  tamanho do diff.
-- Atualiza sozinho num intervalo configurável (padrão **5 min**), ou na hora com `r`.
-- Aceita teclado e mouse: dá para clicar em abas, linhas, itens de menu, botões e
-  nos atalhos do rodapé. Todo atalho aparece na própria interface (`?` abre a ajuda).
-- Faz checkout em **worktree** isolado ou no **clone configurado**, e depois
-  permite aprovar, fazer merge ou fechar sem merge, removendo o worktree ou não.
-- Integrações opcionais: **hunk** para o diff; **herdr** ou **tmux** para abrir
-  terminal/diff em nova aba.
+- PR tabs: **Review** (review requested from you), **Mine**, **Assigned**, and
+  **All**. Open issue tabs: **Assigned**, **Created**, and **Mentions**.
+- Open the **conversation** (`v`) to see descriptions and comments as rendered
+  Markdown. PR conversations also include reviews (approved / changes requested)
+  and inline comments with `file:line`. Press `n` to **comment**.
+- See **pipeline/check status** (success, failure, running, canceled) and jobs,
+  alongside reviews, approvals, conflicts, and diff size.
+- Refresh automatically at a configurable interval (**5 minutes** by default),
+  or immediately with `r`.
+- Use the keyboard or mouse: tabs, rows, menu items, buttons, and footer shortcuts
+  are clickable. Shortcuts appear in the interface; `?` opens help in the TUI.
+- Check out a PR in an isolated **worktree** or the **configured clone**, then
+  approve, merge, or close without merging, optionally removing the worktree.
+- Optional integrations: **hunk** for diffs; **herdr** or **tmux** to open a
+  terminal or diff in a new tab.
+- Both interfaces support **English** and **Portuguese**, following the computer's
+  language by default. Choose a language in settings to override it.
 
-## Requisitos
+## Requirements
 
-| Ferramenta | Uso | Obrigatória |
+| Tool | Purpose | Required |
 |---|---|---|
-| `git` | worktrees e checkout | sim |
-| [`gh`](https://cli.github.com) | instâncias GitHub (github.com e GHES) | para GitHub |
-| [`glab`](https://gitlab.com/gitlab-org/cli) | instâncias GitLab (gitlab.com e self-hosted) | para GitLab |
-| [`tea`](https://gitea.com/gitea/tea) (0.14+) | instâncias Gitea (gitea.com e self-hosted) | para Gitea |
-| [`hunk`](https://github.com/modem-dev/hunk) | visualizar diff (sem ele, usa `git diff`) | não |
-| `herdr` / `tmux` | abrir terminal/diff em nova aba | não |
+| `git` | Worktrees and checkout | Yes |
+| [`gh`](https://cli.github.com) | GitHub instances (github.com and GHES) | For GitHub |
+| [`glab`](https://gitlab.com/gitlab-org/cli) | GitLab instances (gitlab.com and self-hosted) | For GitLab |
+| [`tea`](https://gitea.com/gitea/tea) (0.14+) | Gitea instances (gitea.com and self-hosted) | For Gitea |
+| [`hunk`](https://github.com/modem-dev/hunk) | View diffs (falls back to `git diff`) | No |
+| `herdr` / `tmux` | Open a terminal or diff in a new tab | No |
 
-Se faltar um CLI, a interface mostra um aviso com o link de instalação, e
-`pr-tracker doctor` lista tudo o que falta. Sobre o **Gitea**, veja
-[docs/gitea.md](docs/gitea.md) para o que o `tea` cobre e o que precisou ir
-direto na API. Sobre o **Bitbucket**, veja [docs/bitbucket.md](docs/bitbucket.md):
-não há CLI oficial e a integração ficou para depois.
+If a CLI is missing, the interface shows a warning with an installation link.
+`pr-tracker doctor` lists missing tools. See [Gitea support](docs/gitea.md) for
+what `tea` covers and what requires direct API calls. See
+[Bitbucket support](docs/bitbucket.md) for the deferred integration: Bitbucket
+has no official CLI.
 
-## Instalação
+## Installation
 
-Baixe o binário da TUI ou o pacote `pr-tracker-desktop` da GUI na página de
-[releases](https://github.com/vitorpacheco/pr-tracker/releases). Há uma versão
-estável para cada tag `v*` e uma `nightly`, que é atualizada a cada commit na
-`main`. Os dois executáveis são publicados para Linux, macOS e Windows em
-`amd64` e `arm64`. Também dá para compilar:
+Download the TUI binary or the `pr-tracker-desktop` GUI package from
+[releases](https://github.com/vitorpacheco/pr-tracker/releases). Stable releases
+are published for `v*` tags; `nightly` is updated on every commit to `main`.
+Both executables are published for Linux, macOS, and Windows on `amd64` and
+`arm64`. You can also build from source:
 
 ```sh
 go install github.com/vitorpacheco/pr-tracker@latest
-# ou, a partir do clone (instala em ~/.local/bin; mude com PREFIX=...):
+# Or from a clone (installs in ~/.local/bin; override with PREFIX=...):
 make install
 ```
 
-## Uso
+## Usage
 
 ```sh
-pr-tracker                 # interface
-pr-tracker doctor          # verifica CLIs, autenticação e caminhos
-pr-tracker list            # lista os PRs no stdout
-pr-tracker instance add --provider gitlab --host gitlab.empresa.com --name trabalho --merge-method squash
-pr-tracker instance add --provider gitea --host git.empresa.com --name gitea
+pr-tracker                 # terminal interface
+pr-tracker doctor          # check CLIs, authentication, and paths
+pr-tracker list            # print PRs to stdout
+pr-tracker instance add --provider gitlab --host gitlab.company.com --name work --merge-method squash
+pr-tracker instance add --provider gitea --host git.company.com --name gitea
 pr-tracker instance list
-pr-tracker repo set --instance trabalho --repo grupo/sub/projeto --path ~/code/projeto
+pr-tracker repo set --instance work --repo group/sub/project --path ~/code/project
 ```
 
-Na primeira execução, o arquivo de configuração é criado e já recebe
-`github.com`/`gitlab.com` se `gh`/`glab` estiverem autenticados nesses hosts,
-mais uma instância para cada servidor em que o `tea` já tem login — o Gitea quase
-sempre é self-hosted, então não há host padrão que valha a pena tentar.
+On first launch, the configuration file is created and seeded with `github.com`
+and `gitlab.com` if `gh` and `glab` are authenticated on those hosts. An instance
+is also added for each server where `tea` is already logged in. Gitea is commonly
+self-hosted, so no default host is probed.
 
-Instâncias self-hosted precisam estar autenticadas no CLI:
+Authenticate self-hosted instances through their CLI:
 
 ```sh
-gh auth login --hostname github.empresa.com
-glab auth login --hostname gitlab.empresa.com
-tea login add --url https://git.empresa.com --token <token>
+gh auth login --hostname github.company.com
+glab auth login --hostname gitlab.company.com
+tea login add --url https://git.company.com --token <token>
 ```
 
-O `tea` endereça servidores por **nome de login**, não por host. O pr-tracker
-descobre o login pela URL; se o mesmo host tiver mais de uma conta, dê à
-instância o mesmo nome do login que você quer usar.
+`tea` identifies servers by **login name**, not host. pr-tracker discovers the
+login from its URL. If a host has multiple accounts, give the instance the same
+name as the login you want to use.
 
-### Atalhos
+### Keyboard shortcuts
 
-| Tecla | Ação |
+| Key | Action |
 |---|---|
-| `↑↓` `j k`, `g G`, `pgup pgdn` | navegar |
-| `1`–`4` / `5`–`7`, `tab` | abas de PRs / issues |
-| `/` | filtrar (título, repo, autor, branch) |
-| `enter` / clique | menu de ações do item |
-| `v` | ver a conversa (descrição, comentários e reviews) |
-| `n` | escrever um comentário (`ctrl+s` envia, `esc` cancela) |
-| `w` | checkout em worktree (ou atualizar um existente) |
-| `c` | checkout no clone local configurado (`gh pr checkout` / `glab mr checkout` / `tea pulls checkout`) |
-| `d` | diff no hunk (ou `git diff`) dentro do worktree |
-| `t` | abrir terminal no worktree |
-| `a` / `A` | aprovar / aprovar e remover o worktree |
-| `m` / `M` | merge / merge e remover o worktree |
-| `X` / `C` | fechar sem merge / fechar sem merge e remover o worktree (a branch é mantida) |
-| `x` | remover o worktree sem aprovar |
-| `o` | abrir no navegador |
-| `R` | acompanhar/parar de acompanhar todos os PRs/MRs do repositório |
-| `p` | definir a pasta local do repositório |
-| `r` | atualizar agora |
-| `i` | instâncias (`n` nova, `e` editar, `space` ativar/desativar, `t` testar auth, `D` remover) |
-| `s` | configurações |
-| `?` | ajuda |
-| `q` | sair |
+| `↑↓` `j k`, `g G`, `pgup pgdn` | Navigate |
+| `1`–`4` / `5`–`7`, `tab` | PR / issue tabs |
+| `/` | Filter by title, repository, author, or branch |
+| `enter` / click | Open the item's action menu |
+| `v` | View the conversation (description, comments, and reviews) |
+| `n` | Write a comment (`ctrl+s` sends, `esc` cancels) |
+| `w` | Check out in a worktree, or update an existing one |
+| `c` | Check out in the configured local clone (`gh pr checkout` / `glab mr checkout` / `tea pulls checkout`) |
+| `d` | Open the diff in hunk (or `git diff`) inside the worktree |
+| `t` | Open a terminal in the worktree |
+| `a` / `A` | Approve / approve and remove the worktree |
+| `m` / `M` | Merge / merge and remove the worktree |
+| `X` / `C` | Close without merging / close without merging and remove the worktree (keeps the branch) |
+| `x` | Remove the worktree without approving |
+| `o` | Open in the browser |
+| `R` | Toggle tracking all PRs/MRs in the repository |
+| `p` | Set the repository's local folder |
+| `r` | Refresh now |
+| `i` | Instances (`n` new, `e` edit, `space` enable/disable, `t` test authentication, `D` remove) |
+| `s` | Settings |
+| `?` | Help |
+| `q` | Quit |
 
-Em issues só existem `v`, `n` e `o`. As ações de worktree, checkout, aprovação,
-merge e fechamento valem apenas para PRs. Na tela de conversa, a navegação é com `↑↓`,
-`space`/`pgdn`, `g`/`G` e roda do mouse; `r` recarrega e `esc` volta.
+These shortcuts describe the TUI. See [desktop development](docs/desktop-development.md)
+for GUI shortcuts.
 
-Aprovar, fazer merge, fechar, fazer checkout e remover sempre pedem
-confirmação. Se o worktree tiver alterações não commitadas, a remoção pede uma segunda
-confirmação antes de forçar.
+Issues support `v`, `n`, and `o`. Worktree, checkout, approval, merge, and close
+actions apply only to PRs. In the conversation screen, navigate with `↑↓`,
+`space`/`pgdn`, `g`/`G`, or the mouse wheel; `r` reloads and `esc` goes back.
+
+Approval, merge, close, checkout in the local clone, and removal ask for
+confirmation. If a worktree has uncommitted changes, removal asks for a second
+confirmation before forcing it.
 
 ## Worktrees
 
-Os worktrees ficam em `~/.pr-tracker/worktrees/<repo>-<número>-<hash>`. O hash
-tem 8 caracteres, é estável e vem de host+repo+número, o que evita colisão entre
-instâncias e repositórios com o mesmo nome.
+Worktrees live in `~/.pr-tracker/worktrees/<repo>-<number>-<hash>`. The stable,
+eight-character hash is derived from host, repository, and number, preventing
+collisions across instances and repositories with the same name.
 
-- O head do PR é buscado por um ref do servidor que também funciona para forks
-  (`refs/pull/N/head` no GitHub e no Gitea, `refs/merge-requests/N/head` no
-  GitLab). O
-  worktree fica na branch local `pr-tracker/<N>-<hash>`.
-- Em PRs do mesmo repositório, a branch local acompanha `origin/<branch>`
-  (`git pull` funciona).
-- Remover o worktree também apaga a branch e o ref locais criados pelo pr-tracker.
+- The PR head is fetched using a server ref that also works for forks:
+  `refs/pull/N/head` on GitHub and Gitea, or `refs/merge-requests/N/head` on GitLab.
+  The worktree uses the local branch `pr-tracker/<N>-<hash>`.
+- For PRs from the same repository, the local branch tracks `origin/<branch>`,
+  so `git pull` works.
+- Removing a worktree also deletes the local branch and ref created by pr-tracker.
 
-O clone local de cada repositório vem do mapeamento em `[[repos]]` (tecla `p` ou
-`pr-tracker repo set`). Sem mapeamento, o pr-tracker procura em `clone_roots`
-(`<root>/<repo>`, `<root>/<owner>/<repo>`, `<root>/<host>/<owner>/<repo>`) e só
-aceita a pasta se algum remote apontar para o repositório. Se nada for
-encontrado, ele pergunta a pasta na hora.
+The local clone comes from the `[[repos]]` mapping (press `p` or use
+`pr-tracker repo set`). Without a mapping, pr-tracker searches `clone_roots`
+using `<root>/<repo>`, `<root>/<owner>/<repo>`, and
+`<root>/<host>/<owner>/<repo>`. It accepts a folder only if one of its remotes
+points to the repository. If no clone is found, it asks for a folder.
 
-## Terminal: herdr, tmux ou inline
+## Terminal: herdr, tmux, or inline
 
-`terminal = "auto"` escolhe **herdr** quando roda dentro dele (`HERDR_ENV=1`,
-nova aba via `herdr tab create` + `herdr pane run`). Senão, escolhe **tmux**
-quando `$TMUX` está definido (`tmux new-window`). Fora dos dois, a interface é
-suspensa e o terminal ou diff abre no lugar dela, voltando quando você sai.
+`terminal = "auto"` selects **herdr** when running inside it (`HERDR_ENV=1`,
+opening a tab through `herdr tab create` and `herdr pane run`). Otherwise, it
+selects **tmux** when `$TMUX` is set (`tmux new-window`). Outside both, the TUI
+is suspended and the terminal or diff runs in its place until you exit.
 
-## Configuração
+## Configuration
 
-| SO | Arquivo |
+| OS | File |
 |---|---|
-| Linux | `$XDG_CONFIG_HOME/pr-tracker/config.toml` (padrão `~/.config/pr-tracker/config.toml`) |
+| Linux | `$XDG_CONFIG_HOME/pr-tracker/config.toml` (defaults to `~/.config/pr-tracker/config.toml`) |
 | macOS | `~/.config/pr-tracker/config.toml` |
 | Windows | `%USERPROFILE%\.config\pr-tracker\config.toml` |
 
-`PR_TRACKER_CONFIG` sobrescreve o caminho. Exemplo:
+`PR_TRACKER_CONFIG` overrides this path. Example:
 
 ```toml
-refresh_interval = "5m"       # 90s, 5m, 1h… (mínimo 15s)
+language = "system"          # system | en | pt (shared by TUI and GUI)
+refresh_interval = "5m"       # 90s, 5m, 1h… (minimum 15s)
 terminal = "auto"             # auto | herdr | tmux | inline
 diff_tool = "hunk"            # hunk | git
 # worktree_dir = "~/.pr-tracker/worktrees"
@@ -168,126 +172,143 @@ clone_roots = ["~/code", "~/work"]
   merge_method = "squash"     # merge | squash | rebase
 
 [[instances]]
-  name = "gitea"           # igual ao nome do login no tea, se houver mais de um
+  name = "gitea"              # match the tea login name when multiple logins exist
   provider = "gitea"
-  host = "git.empresa.com"
+  host = "git.company.com"
 
 [[instances]]
-  name = "trabalho"
+  name = "work"
   provider = "gitlab"
-  host = "gitlab.empresa.com"
+  host = "gitlab.company.com"
   merge_method = "merge"
-  auto_merge = true           # merge quando o pipeline passar
-  delete_branch = true        # apaga a branch de origem após o merge
+  auto_merge = true           # merge once the pipeline passes
+  delete_branch = true        # delete the source branch after merging
 
 [[repos]]
-  instance = "trabalho"
-  name = "grupo/sub/projeto"
-  path = "~/work/projeto"
-  remote = "origin"           # opcional; detectado pela URL
-  track_all = true             # inclui todos os MRs abertos, sem filtro de relação
-  merge_method = "squash"     # opcional; sobrescreve a instância
+  instance = "work"
+  name = "group/sub/project"
+  path = "~/work/project"
+  remote = "origin"           # optional; detected from the URL
+  track_all = true            # include all open MRs, regardless of relation
+  merge_method = "squash"     # optional; overrides the instance setting
 ```
 
-No menu de um PR/MR, `R` ativa ou desativa `track_all` para aquele repositório.
-O repositório fica persistido mesmo sem uma pasta local configurada. Quando a
-opção está ativa, a aba **Todos** inclui todos os PRs/MRs abertos do repositório;
-as abas **Revisar**, **Meus** e **Atribuídos** continuam mostrando apenas as
-relações correspondentes.
+### Interface language
 
-## Como os dados são obtidos
+In the TUI, press `s` and change **Language**. In the GUI, open **Settings** and
+choose **Language**. Options are **System**, **English**, and **Português**.
+Saving applies the choice immediately to that interface and persists it in the
+shared configuration file. The other interface reads the preference on its next
+launch. Existing configuration files without `language` continue to follow the
+system.
 
-A cada atualização, cada instância faz poucas chamadas GraphQL:
+Automatic detection respects `LC_ALL`, then `LC_MESSAGES`, then `LANG`. For a
+non-`C`/`POSIX` locale, the `LANGUAGE` preference list can select the message
+language. When
+these are absent, macOS uses its preferred language and Windows uses the user's
+display language. The browser demo uses the browser's language. Portuguese regional
+variants such as `pt_BR.UTF-8` and `pt-PT` select Portuguese; English variants,
+`C`/`POSIX`, unknown languages, and unavailable locale settings fall back to
+English. Repository titles, descriptions, comments, and external tool output
+retain their original language.
 
-- GitHub, em **uma** chamada `gh api graphql --hostname <host>`: três buscas de
-  PRs (`review-requested:@me`, `author:@me`, `assignee:@me`, com o
-  `statusCheckRollup` do último commit) e três de issues (`assignee:@me`,
-  `author:@me`, `mentions:@me`).
-  Cada repositório com `track_all` acrescenta chamadas paginadas à conexão de
-  pull requests do repositório.
-- GitLab, em **duas** chamadas `glab api graphql --hostname <host>`:
-  - `currentUser.{reviewRequested,authored,assigned}MergeRequests`, com o
-    `headPipeline` e seus jobs;
-  - `issues(assigneeUsernames|authorUsername)` e os to-dos pendentes de menção
-    (`mentioned`, `directly_addressed`).
-  As MRs ficam sem labels para respeitar o limite de complexidade de query do
-  GitLab. Cada repositório com `track_all` acrescenta chamadas paginadas à
-  conexão de merge requests do projeto.
-- Gitea **não tem GraphQL**, então é REST via `tea api`: seis buscas em
-  `/repos/issues/search` (as mesmas relações das abas) e, como essa busca
-  devolve só o issue cru, mais até três chamadas por PR — detalhe, status dos
-  checks do commit e reviews — no máximo seis de cada vez. Se alguma delas
-  falhar, a linha aparece sem CI em vez de derrubar a lista inteira.
-  Repositórios com `track_all` também consultam, com paginação,
-  `/repos/{owner}/{repo}/pulls`.
+In a PR/MR menu, `R` toggles `track_all` for that repository. The repository
+entry persists even without a local folder mapping. When enabled, **All**
+includes every open PR/MR from the repository; **Review**, **Mine**, and
+**Assigned** still show only their respective relations.
 
-### Cache local
+## How data is fetched
 
-A interface mantém em SQLite o último snapshot completo obtido com sucesso de
-cada instância. Ao abrir o `pr-tracker`, esse snapshot aparece imediatamente
-enquanto uma atualização remota roda em segundo plano. Se o servidor ou a
-rede estiverem indisponíveis, os dados anteriores continuam visíveis junto do
-aviso de falha.
+Each refresh makes a small number of GraphQL calls per instance:
 
-O banco é um cache descartável, não a fonte de verdade. Cada atualização
-bem-sucedida substitui atomicamente o snapshot daquela instância; falhas nunca
-apagam o snapshot anterior. Por padrão, o arquivo fica no diretório de cache do
-sistema (`$XDG_CACHE_HOME/pr-tracker/cache.db` ou `~/.cache/pr-tracker/cache.db`
-no Linux). `PR_TRACKER_CACHE` sobrescreve o caminho. O arquivo pode ser apagado
-com o programa fechado e será reconstruído na atualização seguinte. Ele tem
-modo `0600` em sistemas Unix; no Windows, segue as ACLs herdadas do diretório
-de cache do usuário. Contém metadados dos itens, mas não credenciais nem as
-conversas carregadas sob demanda.
+- **GitHub:** one `gh api graphql --hostname <host>` call contains three PR
+  searches (`review-requested:@me`, `author:@me`, `assignee:@me`, including the
+  latest commit's `statusCheckRollup`) and three issue searches (`assignee:@me`,
+  `author:@me`, `mentions:@me`). Each repository with `track_all` adds paginated
+  calls to its pull request connection.
+- **GitLab:** two `glab api graphql --hostname <host>` calls fetch
+  `currentUser.{reviewRequested,authored,assigned}MergeRequests`, including
+  `headPipeline` and jobs, and `issues(assigneeUsernames|authorUsername)` plus
+  pending mention to-dos (`mentioned`, `directly_addressed`). MRs omit labels to
+  stay within GitLab's query complexity limit. Each repository with `track_all`
+  adds paginated calls to its merge request connection.
+- **Gitea:** no GraphQL; REST through `tea api` performs six searches against
+  `/repos/issues/search` for the same tab relations. Since search returns raw
+  issues, each PR requires up to three additional calls for details, commit
+  checks, and reviews, with at most six concurrent calls. A failed call leaves
+  that row without CI data instead of failing the whole list. Repositories with
+  `track_all` also query `/repos/{owner}/{repo}/pulls` with pagination.
 
-A conversa só é carregada quando você abre (`v`):
+### Local cache
 
-- GitHub: `issueOrPullRequest`, com comentários, reviews e comentários inline.
-- GitLab: `notes(filter: ONLY_COMMENTS)`, que ignora as notas de sistema.
+The interfaces keep the latest successfully fetched complete snapshot of each
+instance in SQLite. When pr-tracker starts, cached data appears immediately while
+a remote refresh runs in the background. If the server or network is unavailable,
+previous data remains visible alongside an error warning.
 
-Para comentar, o pr-tracker usa `gh pr|issue comment` e
+The database is a disposable cache, not the source of truth. Each successful
+refresh atomically replaces that instance's snapshot; failures never erase the
+previous snapshot. By default, it lives in the system cache directory
+(`$XDG_CACHE_HOME/pr-tracker/cache.db` or `~/.cache/pr-tracker/cache.db` on Linux).
+`PR_TRACKER_CACHE` overrides the path. You can delete the file while the app is
+closed; the next refresh rebuilds it. Permissions are `0600` on Unix; on Windows,
+it inherits the user's cache directory ACLs. It contains item metadata, but no
+credentials or conversations loaded on demand.
+
+Conversations are loaded only when opened (`v`):
+
+- GitHub: `issueOrPullRequest`, including comments, reviews, and inline comments.
+- GitLab: `notes(filter: ONLY_COMMENTS)`, excluding system notes.
+
+Comments use `gh pr|issue comment` and
 `glab api POST projects/:id/(merge_requests|issues)/:iid/notes`.
+Actions use `gh pr review/merge/close/checkout -R host/owner/repo` and
+`glab mr approve/merge/close/checkout -R <project URL>`.
 
-As ações usam `gh pr review/merge/close/checkout -R host/owner/repo` e
-`glab mr approve/merge/close/checkout -R <url do projeto>`.
-
-## Desenvolvimento
+## Development
 
 ```sh
-make          # lista os comandos
-make check    # gofmt + go vet + testes
+make          # list available commands
+make check    # gofmt verification + go vet + tests
 make run ARGS=doctor
-make vuln     # govulncheck: vulnerabilidades conhecidas nas dependências
-make dist     # binários para Linux, macOS e Windows em ./dist
-make package  # dist + .tar.gz/.zip + checksums.txt (o que a release publica)
+make vuln     # govulncheck: known dependency vulnerabilities
+make dist     # Linux, macOS, and Windows binaries in ./dist
+make package  # dist + .tar.gz/.zip + checksums.txt (release artifacts)
 ```
 
-### CI e releases (GitHub Actions)
+Interface messages are translated through `internal/i18n/en.json`, shared by
+Go and Svelte. Portuguese source messages serve as catalog keys. Keep dynamic
+repository content outside translation calls and add coverage for language
+selection when changing the configuration or interface adapters.
 
-| Workflow | Quando roda | O que faz |
+### CI and releases (GitHub Actions)
+
+| Workflow | Trigger | Purpose |
 |---|---|---|
-| `ci.yml` | PRs e pushes em outras branches | `go mod tidy` limpo, lint, testes, pacotes da CLI e da GUI para as seis combinações de SO/arquitetura e `govulncheck` |
-| `desktop.yml` | chamado pelo CI ou manualmente | valida o frontend e produz os pacotes nativos da GUI para Linux, macOS e Windows em `amd64` e `arm64` |
-| `nightly.yml` | push na `main` | roda o CI e recria a pre-release `nightly` com CLI e GUI, apontando para o novo commit (versão `nightly-AAAAMMDD-<sha>`) |
-| `release.yml` | push de tag `v*` | roda o CI e publica CLI e GUI com notas geradas; tags com sufixo (`v1.0.0-rc.1`) viram pre-release |
-| `vulncheck.yml` | toda segunda e manual | `govulncheck` na `main`, para pegar alertas novos sem depender de commit |
+| `ci.yml` | PRs and pushes to other branches | Clean `go mod tidy`, lint, tests, CLI and GUI packages for all six OS/architecture combinations, and `govulncheck` |
+| `desktop.yml` | Called by CI or manually | Validate the frontend and build native GUI packages for Linux, macOS, and Windows on `amd64` and `arm64` |
+| `nightly.yml` | Push to `main` | Run CI and recreate the `nightly` pre-release with CLI and GUI, pointing to the new commit (`nightly-YYYYMMDD-<sha>`) |
+| `release.yml` | Push of a `v*` tag | Run CI and publish CLI and GUI with generated notes; suffixed tags such as `v1.0.0-rc.1` become pre-releases |
+| `vulncheck.yml` | Every Monday and manually | Run `govulncheck` on `main` to catch new advisories without requiring a commit |
 
-O Dependabot atualiza as dependências Go e as actions uma vez por semana.
-Para publicar uma versão:
+Dependabot updates Go dependencies and actions weekly. To publish a release:
 
 ```sh
 git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0
 ```
 
-A estrutura é `internal/config` (arquivo e caminhos), `internal/provider`
-(gh/glab/bitbucket), `internal/gitops` (clones e worktrees), `internal/launch`
-(herdr/tmux/inline/navegador) e `internal/ui` (Bubble Tea v2).
+Packages: `internal/config` (configuration and paths), `internal/provider`
+(hosting integrations), `internal/gitops` (clones and worktrees), `internal/launch`
+(herdr/tmux/inline/browser), `internal/app` (shared application logic),
+`internal/i18n` (language detection and translations), and `internal/ui`
+(Bubble Tea v2).
 
-## Interface desktop (em desenvolvimento)
+## Desktop interface (in development)
 
-A GUI Wails/Svelte está em `desktop/` e compartilha o backend da TUI. No Linux com
-GTK 3 e WebKitGTK 4.1, execute `make desktop-install desktop-build` e abra
-`./dist/pr-tracker-desktop`. Para explorar dados fictícios no navegador, use
-`make desktop-dev` e abra `http://127.0.0.1:5173/?demo=1`.
+The Wails/Svelte GUI lives in `desktop/` and shares the TUI backend. On Linux
+with GTK 3 and WebKitGTK 4.1, run `make desktop-install desktop-build` and open
+`./dist/pr-tracker-desktop`. To explore sample data in the browser, run
+`make desktop-dev` and open `http://127.0.0.1:5173/?demo=1`.
 
-Veja [desenvolvimento da GUI](docs/desktop-development.md) para requisitos,
-configuração, atalhos, testes e limitações atuais de validação multiplataforma.
+See [desktop development](docs/desktop-development.md) for requirements,
+configuration, shortcuts, tests, and current cross-platform validation limits.

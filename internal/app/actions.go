@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/vitorpacheco/pr-tracker/internal/gitops"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
 	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
@@ -47,17 +48,17 @@ type Outcome struct {
 }
 
 var (
-	ErrCloneRequired = errors.New("pasta local do repositório não configurada")
+	ErrCloneRequired = i18n.Errorf("pasta local do repositório não configurada")
 	ErrDirtyWorktree = gitops.ErrDirty
 )
 
 func (a *Application) itemClient(item *provider.Item) (provider.Client, error) {
 	in, ok := a.cfg.Instance(item.Instance)
 	if !ok || in.Disabled {
-		return nil, fmt.Errorf("instância indisponível: %s", item.Instance)
+		return nil, fmt.Errorf(a.t("instância indisponível: %s"), item.Instance)
 	}
 	if item.Provider != in.Provider || item.Host != in.Host {
-		return nil, errors.New("a instância mudou; atualize o item antes de continuar")
+		return nil, errors.New(a.t("a instância mudou; atualize o item antes de continuar"))
 	}
 	return a.client(*in, a.cfg.Repos...), nil
 }
@@ -99,23 +100,23 @@ func (a *Application) Execute(ctx context.Context, command Command) (Outcome, er
 	switch command.Action {
 	case Comment, Approve, Merge, Close, Checkout, UpdateWorktree, PrepareTerminal, PrepareDiff, RemoveWorktree:
 	default:
-		return out, fmt.Errorf("ação desconhecida: %q", command.Action)
+		return out, fmt.Errorf(a.t("ação desconhecida: %q"), command.Action)
 	}
 	if command.Force && command.Action != RemoveWorktree {
-		return out, errors.New("remoção forçada exige um comando separado")
+		return out, errors.New(a.t("remoção forçada exige um comando separado"))
 	}
 	if command.RemoveAfter && command.Action != Approve && command.Action != Merge && command.Action != Close {
-		return out, errors.New("limpeza combinada exige aprovação, merge ou fechamento")
+		return out, errors.New(a.t("limpeza combinada exige aprovação, merge ou fechamento"))
 	}
 	item := command.Item
 	if item.IsIssue() && command.Action != Comment {
-		return out, errors.New("ação disponível apenas para pull/merge requests")
+		return out, errors.New(a.t("ação disponível apenas para pull/merge requests"))
 	}
 	if item.Kind != provider.KindPR && item.Kind != provider.KindIssue {
-		return out, errors.New("tipo de item inválido")
+		return out, errors.New(a.t("tipo de item inválido"))
 	}
 	if item.Repo == "" || item.Number <= 0 {
-		return out, errors.New("item inválido")
+		return out, errors.New(a.t("item inválido"))
 	}
 	client, err := a.itemClient(&item)
 	if err != nil {
@@ -125,29 +126,29 @@ func (a *Application) Execute(ctx context.Context, command Command) (Outcome, er
 	case Comment:
 		body := strings.TrimSpace(command.Body)
 		if body == "" {
-			return out, errors.New("comentário vazio")
+			return out, errors.New(a.t("comentário vazio"))
 		}
 		if err = client.AddComment(ctx, &item, body); err == nil {
-			out.Message = "comentário enviado em " + item.Repo + item.Ref()
+			out.Message = a.t("comentário enviado em ") + item.Repo + item.Ref()
 			out.Refresh, out.ReloadThread = true, true
 		}
 		return out, err
 	case Approve:
 		err = client.Approve(ctx, &item)
-		out.Message = "aprovado " + item.Ref()
+		out.Message = a.t("aprovado ") + item.Ref()
 	case Merge:
 		err = client.Merge(ctx, &item, a.MergeOptions(item))
-		out.Message = "merge de " + item.Ref() + " feito"
+		out.Message = a.t("merge de ") + item.Ref() + a.t(" feito")
 	case Close:
 		err = client.Close(ctx, &item)
-		out.Message = item.Ref() + " fechado sem merge"
+		out.Message = item.Ref() + a.t(" fechado sem merge")
 	case Checkout:
 		clone, _, ok := a.resolveClone(ctx, &a.cfg, &item)
 		if !ok {
 			return out, ErrCloneRequired
 		}
 		if err = client.Checkout(ctx, &item, clone); err == nil {
-			out.Message = "branch " + item.SourceBranch + " em " + clone
+			out.Message = "branch " + item.SourceBranch + a.t(" em ") + clone
 		}
 		return out, err
 	case UpdateWorktree, PrepareTerminal, PrepareDiff:
@@ -157,7 +158,7 @@ func (a *Application) Execute(ctx context.Context, command Command) (Outcome, er
 		}
 		out.Directory = dir
 		if command.Action == UpdateWorktree {
-			out.Message = "worktree pronto: " + dir
+			out.Message = a.t("worktree pronto: ") + dir
 		}
 		if command.Action == PrepareDiff {
 			out.Args, out.Note = a.diffCommand(ctx, dir, &item)
@@ -166,9 +167,9 @@ func (a *Application) Execute(ctx context.Context, command Command) (Outcome, er
 	case RemoveWorktree:
 		err = a.removeWorktree(ctx, &a.cfg, &item, command.Force)
 		if err == nil {
-			out.Message = "worktree removido"
+			out.Message = a.t("worktree removido")
 			if command.Force {
-				out.Message += " (alterações descartadas)"
+				out.Message += a.t(" (alterações descartadas)")
 			}
 		}
 		return out, err
@@ -181,7 +182,7 @@ func (a *Application) Execute(ctx context.Context, command Command) (Outcome, er
 		if err := a.removeWorktree(ctx, &a.cfg, &item, false); err != nil {
 			return out, err
 		}
-		out.Message += " · worktree removido"
+		out.Message += a.t(" · worktree removido")
 	}
 	return out, nil
 }
@@ -212,7 +213,11 @@ func (a *Application) diffCommand(ctx context.Context, wt string, pr *provider.I
 		if path, err := toolchain.Lookup(ctx, "hunk"); err == nil {
 			return []string{path, "diff", base}, ""
 		}
-		return []string{"git", "diff", base}, "hunk não instalado (" + provider.InstallHint("hunk") + "); usando git diff"
+		return []string{"git", "diff", base}, a.t("hunk não instalado (") + provider.InstallHint("hunk") + a.t("); usando git diff")
 	}
 	return []string{"git", "diff", base}, ""
+}
+
+func (a *Application) t(message string) string {
+	return i18n.Text(i18n.Resolve(a.cfg.Language), message)
 }

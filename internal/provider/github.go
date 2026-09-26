@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 )
 
 type github struct {
@@ -211,7 +212,7 @@ func (g *github) List(ctx context.Context) ([]Item, error) {
 	}
 	var resp ghResponse
 	if err := json.Unmarshal(out, &resp); err != nil {
-		return nil, fmt.Errorf("resposta inválida do gh: %w", err)
+		return nil, i18n.Errorf("resposta inválida do gh: %w", err)
 	}
 	if len(resp.Errors) > 0 && resp.Data.Viewer.Login == "" {
 		return nil, fmt.Errorf("gh graphql: %s", resp.Errors[0].Message)
@@ -242,7 +243,7 @@ func (g *github) List(ctx context.Context) ([]Item, error) {
 	for _, repo := range g.tracked {
 		owner, name, ok := strings.Cut(repo, "/")
 		if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
-			return nil, fmt.Errorf("repositório GitHub inválido %q (esperado owner/repo)", repo)
+			return nil, i18n.Errorf("repositório GitHub inválido %q (esperado owner/repo)", repo)
 		}
 		cursor := ""
 		for {
@@ -257,13 +258,13 @@ func (g *github) List(ctx context.Context) ([]Item, error) {
 			}
 			var tracked ghTrackedResponse
 			if err := json.Unmarshal(out, &tracked); err != nil {
-				return nil, fmt.Errorf("resposta inválida do gh para %s: %w", repo, err)
+				return nil, i18n.Errorf("resposta inválida do gh para %s: %w", repo, err)
 			}
 			if len(tracked.Errors) > 0 {
 				return nil, fmt.Errorf("gh graphql (%s): %s", repo, tracked.Errors[0].Message)
 			}
 			if tracked.Data.Repository == nil {
-				return nil, fmt.Errorf("repositório %s não encontrado em %s", repo, g.in.Host)
+				return nil, i18n.Errorf("repositório %s não encontrado em %s", repo, g.in.Host)
 			}
 			prs := tracked.Data.Repository.PullRequests
 			for _, n := range prs.Nodes {
@@ -435,14 +436,14 @@ func (g *github) Thread(ctx context.Context, it *Item) (*Thread, error) {
 		} `json:"errors"`
 	}
 	if err := json.Unmarshal(out, &resp); err != nil {
-		return nil, fmt.Errorf("resposta inválida do gh: %w", err)
+		return nil, i18n.Errorf("resposta inválida do gh: %w", err)
 	}
 	src := resp.Data.Repository.Item
 	if src == nil {
 		if len(resp.Errors) > 0 {
 			return nil, fmt.Errorf("gh graphql: %s", resp.Errors[0].Message)
 		}
-		return nil, fmt.Errorf("%s%s não encontrado", it.Repo, it.Ref())
+		return nil, i18n.Errorf("%s%s não encontrado", it.Repo, it.Ref())
 	}
 	t := &Thread{Body: src.Body}
 	for _, c := range src.Comments.Nodes {
@@ -507,7 +508,7 @@ func (g *github) HeadRef(pr *Item) string { return fmt.Sprintf("refs/pull/%d/hea
 func (g *github) AuthStatus(ctx context.Context) error {
 	_, err := run(ctx, "", nil, "gh", "auth", "status", "--hostname", g.in.Host)
 	if err != nil && !isMissing(err) {
-		return fmt.Errorf("gh não autenticado em %s. Rode: gh auth login --hostname %s", g.in.Host, g.in.Host)
+		return i18n.Errorf("gh não autenticado em %s. Rode: gh auth login --hostname %s", g.in.Host, g.in.Host)
 	}
 	return err
 }

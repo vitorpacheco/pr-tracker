@@ -18,13 +18,14 @@ const (
 )
 
 type field struct {
-	label   string
-	kind    fieldKind
-	help    string
-	input   textinput.Model
-	options []string
-	choice  int
-	on      bool
+	label        string
+	kind         fieldKind
+	help         string
+	input        textinput.Model
+	options      []string
+	optionLabels map[string]string
+	choice       int
+	on           bool
 }
 
 func textField(label, value, placeholder, help string) *field {
@@ -164,15 +165,15 @@ func (f *form) click(id string, idx int) (formResult, tea.Cmd) {
 
 // render returns the modal body; zones are relative to the box's top-left
 // content origin and are offset by the caller.
-func (f *form) render(z *zones) string {
+func (f *form) render(z *zones, tr func(string) string) string {
 	const labelW = 18
 	var b []string
 	b = append(b, sBold.Foreground(cAccent2).Render(f.title), "")
 	for i, fl := range f.fields {
 		focused := i == f.focus
-		label := sLabel.Width(labelW).Render(fl.label)
+		label := sLabel.Width(labelW).Render(tr(fl.label))
 		if focused {
-			label = sKey.Width(labelW).Render("› " + fl.label)
+			label = sKey.Width(labelW).Render("› " + tr(fl.label))
 		}
 		var val string
 		switch fl.kind {
@@ -181,6 +182,9 @@ func (f *form) render(z *zones) string {
 		case fieldChoice:
 			var parts []string
 			for j, o := range fl.options {
+				if label, ok := fl.optionLabels[o]; ok {
+					o = tr(label)
+				}
 				if j == fl.choice {
 					parts = append(parts, sTabActive.Render(o))
 				} else {
@@ -193,9 +197,9 @@ func (f *form) render(z *zones) string {
 			}
 		case fieldBool:
 			if fl.on {
-				val = sGreen.Render("[x] sim")
+				val = sGreen.Render(tr("[x] sim"))
 			} else {
-				val = sMuted.Render("[ ] não")
+				val = sMuted.Render(tr("[ ] não"))
 			}
 		}
 		line := label + val
@@ -209,11 +213,11 @@ func (f *form) render(z *zones) string {
 	if f.err != "" {
 		b = append(b, sRed.Render("✘ "+f.err), "")
 	}
-	save := sTabActive.Render("Salvar ctrl+s")
-	cancel := sTab.Render("Cancelar esc")
+	save := sTabActive.Render(tr("Salvar ctrl+s"))
+	cancel := sTab.Render(tr("Cancelar esc"))
 	z.add("form:save", 0, len(b), lipgloss.Width(save), 1)
 	z.add("form:cancel", lipgloss.Width(save)+2, len(b), lipgloss.Width(cancel), 1)
 	b = append(b, save+"  "+cancel)
-	b = append(b, sDim.Render("tab/↑↓ navega · ←/→/espaço altera opções"))
+	b = append(b, sDim.Render(tr("tab/↑↓ navega · ←/→/espaço altera opções")))
 	return strings.Join(b, "\n")
 }

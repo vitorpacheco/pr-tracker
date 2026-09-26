@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { translator, browserLanguage, statusLabel } from './lib/i18n';
+  let language: string = browserLanguage();
+  $: t = translator(language);
+  $: document.documentElement.lang = language;
   import { onMount, tick } from 'svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
@@ -8,6 +12,7 @@
   import Splitter from './lib/Splitter.svelte';
   import type { main, provider, config, app } from '../wailsjs/go/models';
   let view: View = {
+    Language: language,
     RefreshSeconds: 300,
     Instances: [],
     Items: [],
@@ -88,17 +93,17 @@
   const isMac =
     typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
   const modifier = isMac ? '⌘' : 'Ctrl';
-  const prTabs = [
-    ['Todos', 0],
-    ['Revisar', 1],
-    ['Meus', 2],
-    ['Atribuídos', 4],
+  $: prTabs = [
+    [t('Todos'), 0],
+    [t('Revisar'), 1],
+    [t('Meus'), 2],
+    [t('Atribuídos'), 4],
   ] as const;
-  const issueTabs = [
-    ['Todas', 0],
-    ['Atribuídas', 4],
-    ['Criadas', 2],
-    ['Menções', 8],
+  $: issueTabs = [
+    [t('Todas'), 0],
+    [t('Atribuídas'), 4],
+    [t('Criadas'), 2],
+    [t('Menções'), 8],
   ] as const;
   $: tabs = kind === 0 ? prTabs : issueTabs;
   $: visible = filterItems(view.Items, kind, relation, query, instance);
@@ -113,10 +118,10 @@
     detailGeneration++;
   }
   $: commands = [
-    { label: 'Atualizar agora', key: 'r', run: () => refresh() },
-    { label: 'Buscar itens', key: '/', run: () => search?.focus() },
+    { label: t('Atualizar agora'), key: 'r', run: () => refresh() },
+    { label: t('Buscar itens'), key: '/', run: () => search?.focus() },
     {
-      label: 'Ver conversa',
+      label: t('Ver conversa'),
       key: 'v',
       run: () => {
         detailTab = 'conversation';
@@ -124,7 +129,7 @@
       },
     },
     {
-      label: 'Comentar',
+      label: t('Comentar'),
       key: 'n',
       run: () => {
         detailTab = 'conversation';
@@ -132,29 +137,29 @@
         void tick().then(() => document.getElementById('comment')?.focus());
       },
     },
-    { label: 'Abrir no navegador', key: 'o', run: () => openBrowser() },
+    { label: t('Abrir no navegador'), key: 'o', run: () => openBrowser() },
     {
-      label: 'Criar / atualizar worktree',
+      label: t('Criar / atualizar worktree'),
       key: 'w',
-      run: () => ask('update_worktree', 'Criar ou atualizar worktree'),
+      run: () => ask('update_worktree', t('Criar ou atualizar worktree')),
     },
     {
-      label: 'Abrir terminal',
+      label: t('Abrir terminal'),
       key: 't',
-      run: () => ask('prepare_terminal', 'Abrir terminal no worktree'),
+      run: () => ask('prepare_terminal', t('Abrir terminal no worktree')),
     },
     {
-      label: 'Abrir diff',
+      label: t('Abrir diff'),
       key: 'd',
-      run: () => ask('prepare_diff', 'Abrir diff no terminal'),
+      run: () => ask('prepare_diff', t('Abrir diff no terminal')),
     },
     {
-      label: 'Aprovar',
+      label: t('Aprovar'),
       key: 'a',
-      run: () => ask('approve', 'Aprovar pull request'),
+      run: () => ask('approve', t('Aprovar pull request')),
     },
-    { label: 'Merge', key: 'm', run: () => ask('merge', 'Fazer merge') },
-    { label: 'Configurações', key: ',', run: () => openSettings() },
+    { label: 'Merge', key: 'm', run: () => ask('merge', t('Fazer merge')) },
+    { label: t('Configurações'), key: ',', run: () => openSettings() },
   ].filter((c) =>
     c.label.toLocaleLowerCase().includes(paletteQuery.toLocaleLowerCase()),
   );
@@ -164,6 +169,7 @@
     DOMPurify.sanitize(marked.parse(value, { async: false }) as string);
   function setView(next: View) {
     if (next.Revision < view.Revision) return;
+    language = next.Language || browserLanguage();
     view = { ...next, Items: next.Items ?? [], Errors: next.Errors ?? {} };
     scheduleRefresh();
   }
@@ -228,7 +234,7 @@
   ) {
     if (!item || busy[item.Key]) return;
     if (item.Kind === 1 && action !== 'comment') {
-      notice = 'Ação disponível apenas para pull/merge requests.';
+      notice = t('Ação disponível apenas para pull/merge requests.');
       return;
     }
     confirmTarget = `${item.Repo} ${item.Ref}`;
@@ -280,13 +286,14 @@
           Force: true,
           RemoveAfter: false,
         } as main.Request;
-        confirmLabel = 'Descartar alterações locais e remover worktree';
+        confirmLabel = t('Descartar alterações locais e remover worktree');
         confirmation.showModal();
       }
       if (result.NeedsClone) {
         await openSettings();
-        notice =
-          'Defina a pasta local do repositório nas configurações e repita a ação.';
+        notice = t(
+          'Defina a pasta local do repositório nas configurações e repita a ação.',
+        );
       }
     } catch (e) {
       error = textError(e);
@@ -302,6 +309,7 @@
       settings.Repos ??= [];
       settings.ToolPaths ??= {};
       settings.DesktopTerminal ??= '';
+      settings.Language ||= 'system';
       diagnostics = null;
       settingsDialog.showModal();
     } catch (e) {
@@ -314,7 +322,7 @@
     try {
       setView(await api.saveSettings(settings));
       settingsDialog.close();
-      notice = 'Configurações salvas.';
+      notice = translator(language)('Configurações salvas.');
     } catch (e) {
       error = textError(e);
     } finally {
@@ -408,15 +416,15 @@
     } else if (e.key === 'o') {
       void openBrowser();
     } else if (e.key === 'a') {
-      ask('approve', 'Aprovar pull request');
+      ask('approve', t('Aprovar pull request'));
     } else if (e.key === 'm') {
-      ask('merge', 'Fazer merge');
+      ask('merge', t('Fazer merge'));
     } else if (e.key === 't') {
-      void ask('prepare_terminal', 'Abrir terminal no worktree');
+      void ask('prepare_terminal', t('Abrir terminal no worktree'));
     } else if (e.key === 'd') {
-      void ask('prepare_diff', 'Abrir diff no terminal');
+      void ask('prepare_diff', t('Abrir diff no terminal'));
     } else if (e.key === 'w') {
-      ask('update_worktree', 'Criar ou atualizar worktree');
+      ask('update_worktree', t('Criar ou atualizar worktree'));
     }
   }
   onMount(() => {
@@ -489,10 +497,12 @@
     <button
       bind:this={sidebarToggle}
       class="icon-button sidebar-toggle"
-      title={sidebarVisible ? 'Recolher menu lateral' : 'Abrir menu lateral'}
+      title={sidebarVisible
+        ? t('Recolher menu lateral')
+        : t('Abrir menu lateral')}
       aria-label={sidebarVisible
-        ? 'Recolher menu lateral'
-        : 'Abrir menu lateral'}
+        ? t('Recolher menu lateral')
+        : t('Abrir menu lateral')}
       aria-expanded={sidebarVisible}
       aria-controls="workspace-sidebar"
       onclick={toggleSidebar}>☰</button
@@ -501,7 +511,7 @@
       <span class="brand-icon">⑂</span> pr-tracker
       <span class="desktop-label">DESKTOP</span>
     </div>
-    <nav class="kind-tabs" aria-label="Tipo de item">
+    <nav class="kind-tabs" aria-label={t('Tipo de item')}>
       <button class:active={kind === 0} onclick={() => switchKind(0)}
         >PRs</button
       ><button class:active={kind === 1} onclick={() => switchKind(1)}
@@ -512,14 +522,14 @@
       ><span aria-hidden="true">⌕</span><input
         bind:this={search}
         bind:value={query}
-        placeholder="Buscar título, repo, autor…"
-        aria-label="Buscar itens"
+        placeholder={t('Buscar título, repo, autor…')}
+        aria-label={t('Buscar itens')}
       /><kbd>/</kbd></label
     >
     <button
       class="icon-button"
-      title={`Comandos (${modifier}+K)`}
-      aria-label="Abrir comandos"
+      title={`${t('Comandos')} (${modifier}+K)`}
+      aria-label={t('Abrir comandos')}
       onclick={() => {
         paletteQuery = '';
         palette.showModal();
@@ -529,33 +539,35 @@
       class="icon-button"
       class:spinning={refreshing}
       disabled={refreshing}
-      title="Atualizar (r)"
-      aria-label="Atualizar"
+      title={t('Atualizar (r)')}
+      aria-label={t('Atualizar')}
       onclick={refresh}>↻</button
     >
     <button
       class="icon-button"
-      title="Configurações"
-      aria-label="Configurações"
+      title={t('Configurações')}
+      aria-label={t('Configurações')}
       onclick={openSettings}>⚙</button
     >
   </header>
   <div class="notifications">
     {#if error}<div class="banner error" role="alert">
-        {error}<button aria-label="Fechar erro" onclick={() => (error = '')}
-          >×</button
+        {error}<button
+          aria-label={t('Fechar erro')}
+          onclick={() => (error = '')}>×</button
         >
       </div>{/if}
     {#if notice}<div class="banner" role="status">
-        {notice}<button aria-label="Fechar aviso" onclick={() => (notice = '')}
-          >×</button
+        {notice}<button
+          aria-label={t('Fechar aviso')}
+          onclick={() => (notice = '')}>×</button
         >
       </div>{/if}
   </div>
   {#if sidebarVisible && !wideLayout}
     <button
       class="sidebar-backdrop"
-      aria-label="Fechar menu lateral"
+      aria-label={t('Fechar menu lateral')}
       onclick={closeDrawer}
     ></button>
   {/if}
@@ -563,19 +575,19 @@
     id="workspace-sidebar"
     class="sidebar"
     hidden={!sidebarVisible}
-    aria-label="Menu lateral"
+    aria-label={t('Menu lateral')}
   >
     {#if !wideLayout}<button class="drawer-close" onclick={closeDrawer}
-        >← Recolher menu</button
+        >{t('← Recolher menu')}</button
       >{/if}
     <div class="eyebrow">WORKSPACE</div>
-    <h2>Seu trabalho,<br />em um lugar.</h2>
+    <h2>{t('Seu trabalho,')}<br />{t('em um lugar.')}</h2>
     <button class:chosen={!instance} onclick={() => (instance = '')}
-      ><span>◈ &nbsp; Todas as instâncias</span><span class="count"
+      ><span>{t('◈ Todas as instâncias')}</span><span class="count"
         >{view.Items.length}</span
       ></button
     >
-    <div class="eyebrow section-label">INSTÂNCIAS</div>
+    <div class="eyebrow section-label">{t('INSTÂNCIAS')}</div>
     {#each (view.Instances ?? [])
       .filter((entry) => !entry.Disabled)
       .map((entry) => entry.Name) as name}
@@ -588,9 +600,10 @@
         ></button
       >
     {/each}
-    <button class="subtle" onclick={openSettings}>＋ Adicionar instância</button
+    <button class="subtle" onclick={openSettings}
+      >{t('＋ Adicionar instância')}</button
     >
-    <div class="eyebrow section-label">VISÕES</div>
+    <div class="eyebrow section-label">{t('VISÕES')}</div>
     {#each tabs as [label, value]}<button
         class:chosen={relation === value}
         onclick={() => (relation = value)}
@@ -601,17 +614,18 @@
     <div class="sidebar-bottom">
       <span class="dot"></span>
       {demoMode
-        ? 'Demonstração · dados fictícios'
-        : 'Cache local · SQLite'}<small
+        ? t('Demonstração · dados fictícios')
+        : t('Cache local · SQLite')}<small
         >{view.SyncedAt && !String(view.SyncedAt).startsWith('0001')
-          ? `Sincronizado ${relativeAge(String(view.SyncedAt))}`
-          : 'Aguardando sincronização'}</small
+          ? `${t('Sincronizado ')}${relativeAge(String(view.SyncedAt), language)}`
+          : t('Aguardando sincronização')}</small
       >
     </div>
   </aside>
   {#if wideLayout && sidebarVisible}
     <Splitter
-      label="Largura do menu lateral"
+      {language}
+      label={t('Largura do menu lateral')}
       controls="workspace-sidebar"
       value={sidebarSize}
       min={180}
@@ -622,28 +636,31 @@
   {/if}
   <main id="item-list" class="list-pane" bind:this={list}>
     <div class="list-heading">
-      <div class="eyebrow">SUA FILA DE TRABALHO</div>
+      <div class="eyebrow">{t('SUA FILA DE TRABALHO')}</div>
       <h1>
         {kind === 0 ? 'Pull requests' : 'Issues'}<span class="total"
           >{visible.length}</span
         >
       </h1>
       <p>
-        {instance || 'Todas as instâncias'} <span>·</span> mais recentes primeiro
+        {instance || t('Todas as instâncias')} <span>·</span>
+        {t('mais recentes primeiro')}
       </p>
     </div>
     {#if demoMode}<div class="banner demo">
-        Demonstração visual — nenhuma ação altera dados.
+        {t('Demonstração visual — nenhuma ação altera dados.')}
       </div>{/if}
     {#if view.CacheError}<div class="banner error">
-        Cache indisponível: {view.CacheError}
+        {t('Cache indisponível:')}
+        {view.CacheError}
       </div>{/if}
     {#each Object.entries(view.Errors) as [name, message]}<div
         class="banner error"
       >
-        <strong>{name}</strong>: {message} · exibindo dados anteriores.
+        <strong>{name}</strong>: {message}
+        {t('· exibindo dados anteriores.')}
       </div>{/each}
-    <nav class="filters" aria-label="Filtrar por relação">
+    <nav class="filters" aria-label={t('Filtrar por relação')}>
       {#each tabs as [label, value]}<button
           class:active={relation === value}
           onclick={() => {
@@ -656,23 +673,25 @@
         >{/each}
     </nav>
     <div class="table-head">
-      <span>REPOSITÓRIO / TÍTULO</span><span>AUTOR</span><span>CI</span><span
-        >ATUALIZADO ↓</span
-      >
+      <span>{t('REPOSITÓRIO / TÍTULO')}</span><span>{t('AUTOR')}</span><span
+        >CI</span
+      ><span>{t('ATUALIZADO ↓')}</span>
     </div>
-    <div class="rows" aria-label="Lista de itens">
+    <div class="rows" aria-label={t('Lista de itens')}>
       {#if loading}<div class="empty">
           <div class="empty-symbol">↻</div>
-          <h2>Carregando sua fila</h2>
-          <p>Buscando primeiro os dados do cache local.</p>
+          <h2>{t('Carregando sua fila')}</h2>
+          <p>{t('Buscando primeiro os dados do cache local.')}</p>
         </div>
       {:else if !visible.length}<div class="empty">
           <div class="empty-symbol">✓</div>
-          <h2>{query ? 'Nenhum resultado' : 'Tudo em dia por aqui'}</h2>
+          <h2>{query ? t('Nenhum resultado') : t('Tudo em dia por aqui')}</h2>
           <p>
             {view.Items.length
-              ? 'Experimente outra visão ou busca.'
-              : 'Configure uma instância ou atualize para buscar seus PRs e issues.'}
+              ? t('Experimente outra visão ou busca.')
+              : t(
+                  'Configure uma instância ou atualize para buscar seus PRs e issues.',
+                )}
           </p>
           <button
             onclick={view.Items.length
@@ -683,8 +702,8 @@
                 }
               : openSettings}
             >{view.Items.length
-              ? 'Limpar filtros'
-              : 'Configurar instâncias'}</button
+              ? t('Limpar filtros')
+              : t('Configurar instâncias')}</button
           >
         </div>
       {:else}{#each visible as row (row.Key)}
@@ -700,11 +719,13 @@
                 ><span class="branch-icon" class:draft={row.Draft}
                   >{row.Kind === 1 ? '◉' : row.Draft ? '▧' : '⑂'}</span
                 >{row.Repo}<span class="ref">{row.Ref}</span
-                >{#if row.Draft}<span class="pill">Rascunho</span>{/if}</span
+                >{#if row.Draft}<span class="pill">{t('Rascunho')}</span
+                  >{/if}</span
               ><strong>{row.Title}</strong><span class="mobile-meta"
                 >{row.Author} <span>·</span>
-                {relativeAge(String(row.UpdatedAt))} <span>·</span>
-                {row.Comments} comentários</span
+                {relativeAge(String(row.UpdatedAt), language)} <span>·</span>
+                {row.Comments}
+                {t('comentários')}</span
               ></span
             >
             <span class="author"
@@ -715,7 +736,7 @@
               class="ci"
               class:success={row.CI === 'success'}
               class:failure={row.CI === 'failure'}
-              title={row.CI || 'Sem checks'}
+              title={row.CI ? statusLabel(language, row.CI) : t('Sem checks')}
               >{row.CI === 'success'
                 ? '✓'
                 : row.CI === 'failure'
@@ -725,7 +746,7 @@
                     : '—'}</span
             >
             <span class="updated"
-              >{relativeAge(String(row.UpdatedAt))}<small
+              >{relativeAge(String(row.UpdatedAt), language)}<small
                 >◯ {row.Comments}</small
               ></span
             >
@@ -733,15 +754,19 @@
         {/each}{/if}
     </div>
     <footer class="list-footer">
-      <span><kbd>j</kbd><kbd>k</kbd> navegar <kbd>Enter</kbd> abrir</span
+      <span
+        ><kbd>j</kbd><kbd>k</kbd>
+        {t('navegar')} <kbd>Enter</kbd>
+        {t('abrir')}</span
       ><button onclick={() => palette.showModal()}
-        >{modifier}+K <span>comandos</span></button
+        >{modifier}+K <span>{t('comandos')}</span></button
       >
     </footer>
   </main>
   {#if windowWidth >= 700}
     <Splitter
-      label="Largura dos detalhes"
+      {language}
+      label={t('Largura dos detalhes')}
       controls="item-inspector"
       value={inspectorSize}
       min={300}
@@ -751,11 +776,15 @@
       oncommit={saveLayout}
     />
   {/if}
-  <section id="item-inspector" class="inspector" aria-label="Detalhes do item">
+  <section
+    id="item-inspector"
+    class="inspector"
+    aria-label={t('Detalhes do item')}
+  >
     <div class="inspector-heading">
       <span>INSPECTOR</span><button
         class="back"
-        onclick={() => (detailOpen = false)}>← Voltar</button
+        onclick={() => (detailOpen = false)}>{t('← Voltar')}</button
       >
     </div>
     {#if item}
@@ -763,7 +792,7 @@
         <div class="detail-reference">
           <span class="branch-icon">⑂</span>
           {item.Ref}<span class="pill green"
-            >{item.Draft ? 'Rascunho' : 'Aberto'}</span
+            >{item.Draft ? t('Rascunho') : t('Aberto')}</span
           >
         </div>
         <h2 class="detail-title">{item.Title}</h2>
@@ -776,10 +805,10 @@
         <div class="labels">
           {#each item.Labels ?? [] as label}<span>{label}</span>{/each}
         </div>
-        <nav class="detail-tabs" aria-label="Conteúdo do detalhe">
+        <nav class="detail-tabs" aria-label={t('Conteúdo do detalhe')}>
           <button
             class:active={detailTab === 'details'}
-            onclick={() => (detailTab = 'details')}>Detalhes</button
+            onclick={() => (detailTab = 'details')}>{t('Detalhes')}</button
           ><button
             class:active={detailTab === 'checks'}
             onclick={() => (detailTab = 'checks')}
@@ -787,44 +816,45 @@
           ><button
             class:active={detailTab === 'conversation'}
             onclick={() => (detailTab = 'conversation')}
-            >Conversa <span>{item.Comments}</span></button
+            >{t('Conversa')} <span>{item.Comments}</span></button
           >
         </nav>
         {#if detailLoading}<p class="muted" role="status">
-            Carregando conversa…
+            {t('Carregando conversa…')}
           </p>{/if}
         {#if detailError}<div class="banner error">
             {detailError}<button onclick={() => select(selected)}
-              >Tentar novamente</button
+              >{t('Tentar novamente')}</button
             >
           </div>{/if}
         {#if detailTab === 'details'}
           {#if thread}<article class="markdown">
-              {@html markdown(thread.Body || '_Sem descrição._')}
+              {@html markdown(thread.Body || t('_Sem descrição._'))}
             </article>{/if}
           {#if item.Kind === 0}<div class="detail-section">
-              <h3>Revisões e aprovações</h3>
+              <h3>{t('Revisões e aprovações')}</h3>
               <p
                 class="review-status"
                 class:success={item.Review === 'approved'}
               >
                 {item.Review === 'approved'
-                  ? '✓ Aprovado'
+                  ? t('✓ Aprovado')
                   : item.Review === 'changes_requested'
-                    ? 'Alterações solicitadas'
-                    : 'Aguardando revisão'}
+                    ? t('Alterações solicitadas')
+                    : t('Aguardando revisão')}
               </p>
               <p class="muted">
                 {(item.ApprovedBy ?? []).join(', ') ||
-                  'Nenhuma aprovação informada'}
+                  t('Nenhuma aprovação informada')}
               </p>
               {#if item.Conflicts}<div class="banner error">
-                  Conflitos precisam ser resolvidos antes do merge.
+                  {t('Conflitos precisam ser resolvidos antes do merge.')}
                 </div>{/if}
             </div>
             <div class="detail-section">
               <h3>
-                Arquivos alterados <span class="count">{item.Files}</span>
+                {t('Arquivos alterados')}
+                <span class="count">{item.Files}</span>
               </h3>
               <div class="diff-stats">
                 <span class="success">+{item.Additions}</span><span
@@ -839,7 +869,7 @@
             <div class="detail-section">
               <h3>Worktree</h3>
               <p class="path muted">
-                {item.Worktree || 'Nenhum worktree local'}
+                {item.Worktree || t('Nenhum worktree local')}
               </p>
               <button
                 class="secondary"
@@ -847,9 +877,11 @@
                 onclick={() =>
                   ask(
                     'update_worktree',
-                    item?.Worktree ? 'Atualizar worktree' : 'Criar worktree',
+                    item?.Worktree
+                      ? t('Atualizar worktree')
+                      : t('Criar worktree'),
                   )}
-                >{item.Worktree ? 'Atualizar worktree' : 'Criar worktree'}
+                >{item.Worktree ? t('Atualizar worktree') : t('Criar worktree')}
                 <kbd>w</kbd></button
               >
             </div>{/if}
@@ -866,42 +898,44 @@
                       ? '×'
                       : '◷'}</span
                 ><strong>{check.Name}</strong><span class="muted"
-                  >{check.State}</span
+                  >{statusLabel(language, check.State)}</span
                 >
               </div>{:else}<p class="muted">
-                Nenhum check informado pelo provider.
+                {t('Nenhum check informado pelo provider.')}
               </p>{/each}
           </div>
         {:else}
           {#if thread}<article class="markdown">
-              {@html markdown(thread.Body || '_Sem descrição._')}
+              {@html markdown(thread.Body || t('_Sem descrição._'))}
             </article>
             {#each thread.Comments ?? [] as comment}<article class="comment">
                 <header>
                   <strong>{comment.Author}</strong><small
-                    >{relativeAge(String(comment.CreatedAt))}</small
+                    >{relativeAge(String(comment.CreatedAt), language)}</small
                   >
                 </header>
-                {#if comment.Review}<span class="pill">{comment.Review}</span
+                {#if comment.Review}<span class="pill"
+                    >{statusLabel(language, comment.Review)}</span
                   >{/if}{#if comment.Path}<p class="path muted">
                     {comment.Path}:{comment.Line}
                   </p>{/if}
                 <div class="markdown">{@html markdown(comment.Body)}</div>
               </article>{/each}{/if}
           <label class="composer"
-            >Adicionar comentário<textarea
+            >{t('Adicionar comentário')}<textarea
               id="comment"
               bind:value={draft}
-              placeholder="Escreva em Markdown…"
+              placeholder={t('Escreva em Markdown…')}
               maxlength="65536"
               rows="5"></textarea></label
           >
           <div class="composer-footer">
-            <small class="muted">Rascunho salvo neste dispositivo</small><button
+            <small class="muted">{t('Rascunho salvo neste dispositivo')}</small
+            ><button
               class="primary"
               disabled={!draft.trim() || !!busy[selected]}
-              onclick={() => ask('comment', 'Enviar comentário')}
-              >Revisar envio →</button
+              onclick={() => ask('comment', t('Enviar comentário'))}
+              >{t('Revisar envio →')}</button
             >
           </div>
         {/if}
@@ -910,86 +944,92 @@
         {#if item.Kind === 0}<button
             class="approve"
             disabled={!!busy[selected]}
-            onclick={() => ask('approve', 'Aprovar pull request')}
-            >✓ Aprovar</button
+            onclick={() => ask('approve', t('Aprovar pull request'))}
+            >{t('✓ Aprovar')}</button
           ><button
             class="primary"
             disabled={!!busy[selected]}
-            onclick={() => ask('merge', 'Fazer merge')}>Merge</button
+            onclick={() => ask('merge', t('Fazer merge'))}>Merge</button
           >{/if}
         <details class="more">
-          <summary>Mais ações</summary>
+          <summary>{t('Mais ações')}</summary>
           <div>
-            <button onclick={openBrowser}>Abrir no navegador</button><button
+            <button onclick={openBrowser}>{t('Abrir no navegador')}</button
+            ><button
               disabled={!item.Clone && !item.Worktree}
               onclick={() => {
                 if (item)
                   void api
                     .openFolder(item.Key)
                     .catch((e) => (error = textError(e)));
-              }}>Abrir pasta local</button
+              }}>{t('Abrir pasta local')}</button
             >{#if item.Kind === 0}<button
                 disabled={!!busy[selected]}
                 onclick={() =>
-                  ask('prepare_terminal', 'Abrir terminal no worktree')}
-                >Abrir terminal</button
+                  ask('prepare_terminal', t('Abrir terminal no worktree'))}
+                >{t('Abrir terminal')}</button
               ><button
                 disabled={!!busy[selected]}
-                onclick={() => ask('prepare_diff', 'Abrir diff no terminal')}
-                >Ver diff</button
+                onclick={() => ask('prepare_diff', t('Abrir diff no terminal'))}
+                >{t('Ver diff')}</button
               ><button
                 disabled={!!busy[selected]}
-                onclick={() => ask('checkout', 'Trocar branch do clone local')}
-                >Checkout no clone</button
+                onclick={() =>
+                  ask('checkout', t('Trocar branch do clone local'))}
+                >{t('Checkout no clone')}</button
               ><button
                 disabled={!!busy[selected]}
-                onclick={() => ask('close', 'Fechar sem merge')}
-                >Fechar sem merge</button
+                onclick={() => ask('close', t('Fechar sem merge'))}
+                >{t('Fechar sem merge')}</button
               >{#if item.Worktree}<button
                   disabled={!!busy[selected]}
                   onclick={() =>
-                    ask('approve', 'Aprovar e remover worktree', false, true)}
-                  >Aprovar e remover worktree</button
+                    ask(
+                      'approve',
+                      t('Aprovar e remover worktree'),
+                      false,
+                      true,
+                    )}>{t('Aprovar e remover worktree')}</button
                 ><button
                   disabled={!!busy[selected]}
                   onclick={() =>
-                    ask('merge', 'Merge e remover worktree', false, true)}
-                  >Merge e remover worktree</button
+                    ask('merge', t('Merge e remover worktree'), false, true)}
+                  >{t('Merge e remover worktree')}</button
                 ><button
                   disabled={!!busy[selected]}
                   onclick={() =>
                     ask(
                       'close',
-                      'Fechar sem merge e remover worktree',
+                      t('Fechar sem merge e remover worktree'),
                       false,
                       true,
-                    )}>Fechar e remover worktree</button
+                    )}>{t('Fechar e remover worktree')}</button
                 >
                 <button
                   disabled={!!busy[selected]}
-                  onclick={() => ask('remove_worktree', 'Remover worktree')}
-                  >Remover worktree</button
+                  onclick={() => ask('remove_worktree', t('Remover worktree'))}
+                  >{t('Remover worktree')}</button
                 >{/if}{/if}
           </div>
         </details>
       </div>
     {:else}<div class="empty">
         <div class="empty-symbol">⑂</div>
-        <h2>Um pouco de contexto</h2>
-        <p>Selecione um item para ver detalhes, checks e conversa.</p>
+        <h2>{t('Um pouco de contexto')}</h2>
+        <p>{t('Selecione um item para ver detalhes, checks e conversa.')}</p>
       </div>{/if}
   </section>
 </div>
 
-<dialog bind:this={palette} class="palette" aria-label="Comandos">
+<dialog bind:this={palette} class="palette" aria-label={t('Comandos')}>
   <form method="dialog">
-    <button class="dialog-close" aria-label="Fechar comandos">×</button>
+    <button class="dialog-close" aria-label={t('Fechar comandos')}>×</button>
   </form>
   <label class="palette-search"
     >⌕ <input
       bind:value={paletteQuery}
-      placeholder="Digite uma ação…"
-      aria-label="Buscar comando"
+      placeholder={t('Digite uma ação…')}
+      aria-label={t('Buscar comando')}
     /></label
   >
   <div class="command-list">
@@ -998,9 +1038,9 @@
           palette.close();
           cmd.run();
         }}><span>{cmd.label}</span><kbd>{cmd.key}</kbd></button
-      >{:else}<p>Nenhum comando encontrado.</p>{/each}
+      >{:else}<p>{t('Nenhum comando encontrado.')}</p>{/each}
   </div>
-  <small class="muted">{modifier}+K abre comandos · Esc fecha</small>
+  <small class="muted">{modifier}{t('+K abre comandos · Esc fecha')}</small>
 </dialog>
 <dialog
   bind:this={confirmation}
@@ -1013,24 +1053,24 @@
   </p>
   {#if command?.Force}<p class="path">{confirmWorktree}</p>
     <div class="banner error">
-      As alterações não commitadas serão perdidas. Esta operação não pode ser
-      desfeita.
+      {t(
+        'As alterações não commitadas serão perdidas. Esta operação não pode ser desfeita.',
+      )}
     </div>{/if}{#if command?.Action === 'comment'}<pre
       class="comment-preview">{command.Body}</pre>{/if}{#if command?.Action === 'merge'}<p
     >
-      Método: <strong>{mergeOptions?.Method}</strong><br />Auto-merge: {mergeOptions?.Auto
-        ? 'sim'
-        : 'não'}<br />Apagar branch de origem: {mergeOptions?.DeleteBranch
-        ? 'sim'
-        : 'não'}
+      {t('Método:')} <strong>{mergeOptions?.Method}</strong><br />Auto-merge: {mergeOptions?.Auto
+        ? t('sim')
+        : t('não')}<br />{t('Apagar branch de origem:')}
+      {mergeOptions?.DeleteBranch ? t('sim') : t('não')}
     </p>{/if}
   <div class="dialog-actions">
-    <button onclick={() => confirmation.close()}>Cancelar</button><button
+    <button onclick={() => confirmation.close()}>{t('Cancelar')}</button><button
       class:danger={command?.Force ||
         command?.Action === 'close' ||
         command?.Action === 'remove_worktree'}
       class="primary"
-      onclick={execute}>Confirmar</button
+      onclick={execute}>{t('Confirmar')}</button
     >
   </div>
 </dialog>
@@ -1040,52 +1080,62 @@
   aria-labelledby="settings-title"
 >
   <form method="dialog">
-    <button class="dialog-close" aria-label="Fechar configurações">×</button>
+    <button class="dialog-close" aria-label={t('Fechar configurações')}
+      >×</button
+    >
   </form>
-  <div class="eyebrow">PREFERÊNCIAS</div>
-  <h2 id="settings-title">Configurações</h2>
+  <div class="eyebrow">{t('PREFERÊNCIAS')}</div>
+  <h2 id="settings-title">{t('Configurações')}</h2>
   {#if error}<div class="banner error" role="alert">{error}</div>{/if}<label
-    >Tema<select
+    >{t('Tema')}<select
       value={theme}
       onchange={(e) => changeTheme(e.currentTarget.value)}
-      ><option value="system">Sistema</option><option value="dark"
-        >Escuro</option
-      ><option value="light">Claro</option></select
+      ><option value="system">{t('Sistema')}</option><option value="dark"
+        >{t('Escuro')}</option
+      ><option value="light">{t('Claro')}</option></select
     ></label
   >
-  {#if settings}<div class="settings-grid">
+  {#if settings}
+    <label
+      >{t('Idioma')}<select bind:value={settings.Language}
+        ><option value="system">{t('Sistema')}</option><option value="en"
+          >English</option
+        ><option value="pt">Português</option></select
+      ></label
+    >
+    <div class="settings-grid">
       <label
-        >Intervalo de atualização<input
+        >{t('Intervalo de atualização')}<input
           bind:value={settings.RefreshInterval}
           placeholder="5m"
         /></label
       ><label
-        >Pasta de worktrees<input
+        >{t('Pasta de worktrees')}<input
           bind:value={settings.WorktreeDir}
-          placeholder="Padrão da aplicação"
+          placeholder={t('Padrão da aplicação')}
         /></label
       >
     </div>
     <label
-      >Terminal desktop<input
+      >{t('Terminal desktop')}<input
         bind:value={settings.DesktopTerminal}
-        placeholder="Detectar automaticamente (kitty, foot, wezterm…)"
+        placeholder={t('Detectar automaticamente (kitty, foot, wezterm…)')}
       /></label
     >
     <details>
-      <summary>Caminhos das ferramentas</summary
+      <summary>{t('Caminhos das ferramentas')}</summary
       >{#each ['git', 'gh', 'glab', 'tea', 'hunk'] as tool}<label
           >{tool}<input
             bind:value={settings.ToolPaths[tool]}
-            placeholder="Detectar no PATH"
+            placeholder={t('Detectar no PATH')}
           /></label
         >{/each}
     </details>
-    <h3>Instâncias</h3>
+    <h3>{t('Instâncias')}</h3>
     {#each settings.Instances as inst, i}<fieldset>
-        <legend>Instância {i + 1}</legend>
+        <legend>{t('Instância')} {i + 1}</legend>
         <div class="settings-grid">
-          <label>Nome<input bind:value={inst.Name} /></label><label
+          <label>{t('Nome')}<input bind:value={inst.Name} /></label><label
             >Provider<select bind:value={inst.Provider}
               ><option value="github">GitHub</option><option value="gitlab"
                 >GitLab</option
@@ -1097,9 +1147,9 @@
               placeholder="github.com"
             /></label
           ><label
-            >Método de merge<select bind:value={inst.MergeMethod}
-              ><option value="">Padrão (merge)</option><option value="merge"
-                >Merge</option
+            >{t('Método de merge')}<select bind:value={inst.MergeMethod}
+              ><option value="">{t('Padrão (merge)')}</option><option
+                value="merge">Merge</option
               ><option value="squash">Squash</option><option value="rebase"
                 >Rebase</option
               ></select
@@ -1107,16 +1157,17 @@
           >
         </div>
         <label class="checkbox"
-          ><input
-            type="checkbox"
-            bind:checked={inst.Disabled}
-          />Desativada</label
+          ><input type="checkbox" bind:checked={inst.Disabled} />{t(
+            'Desativada',
+          )}</label
         ><label class="checkbox"
-          ><input type="checkbox" bind:checked={inst.AutoMerge} />Auto-merge
-          quando o pipeline passar</label
+          ><input type="checkbox" bind:checked={inst.AutoMerge} />{t(
+            'Auto-merge quando o pipeline passar',
+          )}</label
         ><label class="checkbox"
-          ><input type="checkbox" bind:checked={inst.DeleteBranch} />Apagar
-          branch de origem após merge</label
+          ><input type="checkbox" bind:checked={inst.DeleteBranch} />{t(
+            'Apagar branch de origem após merge',
+          )}</label
         ><button
           class="text-danger"
           onclick={() => {
@@ -1126,7 +1177,7 @@
               );
               settings.Instances = settings.Instances.filter((_, n) => n !== i);
             }
-          }}>Remover da configuração</button
+          }}>{t('Remover da configuração')}</button
         >
       </fieldset>{/each}
     <button
@@ -1144,24 +1195,24 @@
               Disabled: false,
             } as config.Instance,
           ];
-      }}>＋ Adicionar instância</button
+      }}>{t('＋ Adicionar instância')}</button
     >
-    <h3>Repositórios locais</h3>
+    <h3>{t('Repositórios locais')}</h3>
     {#each settings.Repos as repo, i}<fieldset>
         <div class="settings-grid">
           <label
-            >Instância<select bind:value={repo.Instance}
+            >{t('Instância')}<select bind:value={repo.Instance}
               >{#each settings.Instances as inst}<option value={inst.Name}
                   >{inst.Name}</option
                 >{/each}</select
             ></label
           ><label
-            >Repositório<input
+            >{t('Repositório')}<input
               bind:value={repo.Name}
-              placeholder="organização/repo"
+              placeholder={t('organização/repo')}
             /></label
           ><label
-            >Pasta do clone<input
+            >{t('Pasta do clone')}<input
               bind:value={repo.Path}
               placeholder="/home/…"
             /><button
@@ -1172,7 +1223,7 @@
                 } catch (e) {
                   error = textError(e);
                 }
-              }}>Selecionar pasta…</button
+              }}>{t('Selecionar pasta…')}</button
             ></label
           ><label
             >Remote<input
@@ -1182,14 +1233,15 @@
           >
         </div>
         <label class="checkbox"
-          ><input type="checkbox" bind:checked={repo.TrackAll} />Acompanhar
-          todos os PRs</label
+          ><input type="checkbox" bind:checked={repo.TrackAll} />{t(
+            'Acompanhar todos os PRs',
+          )}</label
         ><button
           class="text-danger"
           onclick={() => {
             if (settings)
               settings.Repos = settings.Repos.filter((_, n) => n !== i);
-          }}>Remover mapeamento</button
+          }}>{t('Remover mapeamento')}</button
         >
       </fieldset>{/each}<button
       onclick={() => {
@@ -1205,28 +1257,26 @@
               MergeMethod: '',
             } as config.Repo,
           ];
-      }}>＋ Mapear repositório</button
+      }}>{t('＋ Mapear repositório')}</button
     >
-    <h3>Ferramentas e autenticação</h3>
+    <h3>{t('Ferramentas e autenticação')}</h3>
     <button disabled={settingsBusy} onclick={diagnose}
-      >{settingsBusy ? 'Verificando…' : 'Executar diagnóstico'}</button
+      >{settingsBusy ? t('Verificando…') : t('Executar diagnóstico')}</button
     >{#if diagnostics}{#each diagnostics.Tools as tool}<p class="diagnostic">
           <span class:success={!!tool.Path} class:failure={!tool.Path}
             >{tool.Path ? '✓' : '×'}</span
           ><strong>{tool.Name}</strong><span
-            >{tool.Path || 'Não encontrada no PATH'}</span
+            >{tool.Path || t('Não encontrada no PATH')}</span
           >
         </p>{/each}{#each diagnostics.Instances as inst}<p class="diagnostic">
           {inst.Name}: {inst.Disabled
-            ? 'desativada'
-            : inst.Error || 'autenticada'}
+            ? t('desativada')
+            : inst.Error || t('autenticada')}
         </p>{/each}{/if}
     <div class="dialog-actions">
-      <button onclick={() => settingsDialog.close()}>Cancelar</button><button
-        class="primary"
-        disabled={settingsBusy}
-        onclick={saveSettings}
-        >{settingsBusy ? 'Salvando…' : 'Salvar configurações'}</button
+      <button onclick={() => settingsDialog.close()}>{t('Cancelar')}</button
+      ><button class="primary" disabled={settingsBusy} onclick={saveSettings}
+        >{settingsBusy ? t('Salvando…') : t('Salvar configurações')}</button
       >
     </div>{/if}
 </dialog>

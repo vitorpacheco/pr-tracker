@@ -38,6 +38,7 @@ export namespace config {
 	    DeleteBranch: boolean;
 	}
 	export interface Config {
+	    Language: string;
 	    ToolPaths: Record<string, string>;
 	    DesktopTerminal: string;
 	    RefreshInterval: string;
@@ -69,6 +70,7 @@ export namespace main {
 	    Force: boolean;
 	}
 	export interface View {
+	    Language: string;
 	    RefreshSeconds: number;
 	    Instances: config.Instance[];
 	    Items: Item[];

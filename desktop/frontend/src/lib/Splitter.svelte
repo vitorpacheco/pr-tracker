@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { translator } from './i18n';
+  export let language = 'en';
+  $: t = translator(language);
   export let label: string;
   export let controls: string;
   export let value: number;
@@ -62,7 +65,7 @@
   aria-valuemax={max}
   aria-valuenow={value}
   aria-valuetext={`${value} pixels`}
-  title={`${label} · arraste ou use ← / →`}
+  title={`${label} · ${t('arraste ou use ← / →')}`}
   onpointerdown={start}
   onpointermove={move}
   onpointerup={finish}

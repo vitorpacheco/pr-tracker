@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 )
 
 // gitea talks to a Gitea server through tea (https://gitea.com/gitea/tea).
@@ -100,10 +101,10 @@ func (g *gitea) checkVersion(ctx context.Context) error {
 	}
 	major, minor, ok := teaVersion(out)
 	if !ok {
-		return fmt.Errorf("o tea encontrado no PATH não parece ser o CLI do Gitea: %s", strings.TrimSpace(string(out)))
+		return i18n.Errorf("o tea encontrado no PATH não parece ser o CLI do Gitea: %s", strings.TrimSpace(string(out)))
 	}
 	if major < teaMinMajor || (major == teaMinMajor && minor < teaMinMinor) {
-		return fmt.Errorf("tea %d.%d é antigo demais; a integração com Gitea precisa da %d.%d ou mais nova. Veja: %s",
+		return i18n.Errorf("tea %d.%d é antigo demais; a integração com Gitea precisa da %d.%d ou mais nova. Veja: %s",
 			major, minor, teaMinMajor, teaMinMinor, InstallHint("tea"))
 	}
 	return nil
@@ -125,11 +126,11 @@ func (g *gitea) resolve(ctx context.Context) (string, error) {
 	}
 	var logins []teaLogin
 	if err := json.Unmarshal(out, &logins); err != nil {
-		return "", fmt.Errorf("resposta inválida do tea: %w", err)
+		return "", i18n.Errorf("resposta inválida do tea: %w", err)
 	}
 	l, ok := pickLogin(logins, g.in.Host, g.in.Name)
 	if !ok {
-		return "", fmt.Errorf("tea não tem login para %s. Rode: tea login add --url https://%s", g.in.Host, g.in.Host)
+		return "", i18n.Errorf("tea não tem login para %s. Rode: tea login add --url https://%s", g.in.Host, g.in.Host)
 	}
 	g.login, g.base = l.Name, strings.TrimRight(l.URL, "/")
 	return g.login, nil
@@ -185,7 +186,7 @@ func (g *gitea) api(ctx context.Context, method, endpoint string, fields ...stri
 		return nil, err
 	}
 	if err := apiError(out); err != nil {
-		return nil, fmt.Errorf("tea api %s: %w", endpoint, err)
+		return nil, i18n.Errorf("tea api %s: %w", endpoint, err)
 	}
 	return out, nil
 }
@@ -339,7 +340,7 @@ func (g *gitea) List(ctx context.Context) ([]Item, error) {
 				return
 			}
 			if err := json.Unmarshal(out, &found[i]); err != nil {
-				errs[i] = fmt.Errorf("resposta inválida do tea: %w", err)
+				errs[i] = i18n.Errorf("resposta inválida do tea: %w", err)
 			}
 		}()
 	}
@@ -367,7 +368,7 @@ func (g *gitea) List(ctx context.Context) ([]Item, error) {
 			}
 			var pulls []gtRepoPull
 			if err := json.Unmarshal(out, &pulls); err != nil {
-				return nil, fmt.Errorf("resposta inválida do tea para %s: %w", repo, err)
+				return nil, i18n.Errorf("resposta inválida do tea para %s: %w", repo, err)
 			}
 			newPageItem := false
 			for _, pull := range pulls {
@@ -403,14 +404,14 @@ func (g *gitea) currentUser(ctx context.Context) (string, error) {
 	if err != nil {
 		var apiErr *giteaAPIError
 		if errors.As(err, &apiErr) {
-			return "", fmt.Errorf("tea não autenticado em %s (%s). Rode: tea login add --url %s",
+			return "", i18n.Errorf("tea não autenticado em %s (%s). Rode: tea login add --url %s",
 				g.in.Host, apiErr.Message, g.serverURL())
 		}
 		return "", err
 	}
 	var u gtUser
 	if err := json.Unmarshal(out, &u); err != nil {
-		return "", fmt.Errorf("resposta inválida do tea: %w", err)
+		return "", i18n.Errorf("resposta inválida do tea: %w", err)
 	}
 	return u.name(), nil
 }
@@ -606,7 +607,7 @@ func (g *gitea) Thread(ctx context.Context, it *Item) (*Thread, error) {
 	}
 	var head gtIssue
 	if err := json.Unmarshal(out, &head); err != nil {
-		return nil, fmt.Errorf("resposta inválida do tea: %w", err)
+		return nil, i18n.Errorf("resposta inválida do tea: %w", err)
 	}
 	t := &Thread{Body: head.Body}
 	out, err = g.api(ctx, "", fmt.Sprintf("/repos/%s/issues/%d/comments", it.Repo, it.Number))
@@ -615,7 +616,7 @@ func (g *gitea) Thread(ctx context.Context, it *Item) (*Thread, error) {
 	}
 	var cs []gtComment
 	if err := json.Unmarshal(out, &cs); err != nil {
-		return nil, fmt.Errorf("resposta inválida do tea: %w", err)
+		return nil, i18n.Errorf("resposta inválida do tea: %w", err)
 	}
 	for _, c := range cs {
 		t.Comments = append(t.Comments, Comment{Author: c.User.name(), Body: c.Body, CreatedAt: c.CreatedAt})
@@ -638,7 +639,7 @@ func (g *gitea) appendReviews(ctx context.Context, it *Item, t *Thread) error {
 	}
 	var rs []gtReview
 	if err := json.Unmarshal(out, &rs); err != nil {
-		return fmt.Errorf("resposta inválida do tea: %w", err)
+		return i18n.Errorf("resposta inválida do tea: %w", err)
 	}
 	for _, r := range rs {
 		if strings.EqualFold(r.State, "PENDING") {
@@ -662,7 +663,7 @@ func (g *gitea) appendReviews(ctx context.Context, it *Item, t *Thread) error {
 		}
 		var rcs []gtReviewComment
 		if err := json.Unmarshal(out, &rcs); err != nil {
-			return fmt.Errorf("resposta inválida do tea: %w", err)
+			return i18n.Errorf("resposta inválida do tea: %w", err)
 		}
 		for _, rc := range rcs {
 			line := rc.Position

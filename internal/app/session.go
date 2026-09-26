@@ -12,12 +12,13 @@ import (
 	"github.com/vitorpacheco/pr-tracker/internal/cache"
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/gitops"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
 	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
 
-var ErrClosed = errors.New("aplicação encerrada")
-var ErrBusy = errors.New("já existe uma ação em andamento para este item")
+var ErrClosed = i18n.Errorf("aplicação encerrada")
+var ErrBusy = i18n.Errorf("já existe uma ação em andamento para este item")
 
 // State is a detached snapshot. Adapters own selection and rendering only.
 type State struct {
@@ -115,6 +116,8 @@ func (s *Session) SaveSettings(cfg config.Config) error {
 		return ErrClosed
 	}
 	next := cloneConfig(s.application.cfg)
+	next.Language = cfg.Language
+	tr := func(message string) string { return i18n.Text(i18n.Resolve(cfg.Language), message) }
 	next.ToolPaths = maps.Clone(cfg.ToolPaths)
 	next.DesktopTerminal = cfg.DesktopTerminal
 	next.RefreshInterval, next.Terminal, next.DiffTool = cfg.RefreshInterval, cfg.Terminal, cfg.DiffTool
@@ -137,15 +140,15 @@ func (s *Session) SaveSettings(cfg config.Config) error {
 	}
 	for _, repo := range next.Repos {
 		if _, ok := next.Instance(repo.Instance); !ok {
-			return errors.New("repositório referencia uma instância inexistente: " + repo.Instance)
+			return errors.New(tr("repositório referencia uma instância inexistente: ") + repo.Instance)
 		}
 		if repo.Name == "" {
-			return errors.New("nome do repositório é obrigatório")
+			return errors.New(tr("nome do repositório é obrigatório"))
 		}
 		switch repo.MergeMethod {
 		case "", "merge", "squash", "rebase":
 		default:
-			return errors.New("método de merge inválido no repositório")
+			return errors.New(tr("método de merge inválido no repositório"))
 		}
 		previous, ok := s.application.cfg.Repo(repo.Instance, repo.Name)
 		if repo.Path != "" && (!ok || previous.Path != repo.Path) {
@@ -277,7 +280,7 @@ func (s *Session) itemLocked(key string) (provider.Item, error) {
 			return item, nil
 		}
 	}
-	return provider.Item{}, errors.New("item não encontrado; atualize a lista")
+	return provider.Item{}, errors.New(s.application.t("item não encontrado; atualize a lista"))
 }
 
 func (s *Session) Detail(ctx context.Context, key string) (*provider.Thread, error) {

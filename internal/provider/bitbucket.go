@@ -2,9 +2,9 @@ package provider
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 )
 
 // bitbucket is a placeholder. Atlassian ships no official Bitbucket CLI
@@ -15,7 +15,7 @@ func (b *bitbucket) Instance() config.Instance { return b.in }
 func (b *bitbucket) Tool() string              { return "bkt" }
 
 func (b *bitbucket) err() error {
-	return fmt.Errorf("%w: Bitbucket (%s) — veja docs/bitbucket.md", ErrNotSupported, b.in.Host)
+	return i18n.Errorf("%w: Bitbucket (%s) — veja docs/bitbucket.md", ErrNotSupported, b.in.Host)
 }
 
 func (b *bitbucket) List(context.Context) ([]Item, error)             { return nil, b.err() }

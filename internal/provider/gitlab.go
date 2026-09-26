@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 )
 
 type gitlab struct {
@@ -192,13 +193,13 @@ func (g *gitlab) List(ctx context.Context) ([]Item, error) {
 	}
 	var resp glResponse
 	if err := json.Unmarshal(out, &resp); err != nil {
-		return nil, fmt.Errorf("resposta inválida do glab: %w", err)
+		return nil, i18n.Errorf("resposta inválida do glab: %w", err)
 	}
 	if resp.Data.CurrentUser == nil {
 		if len(resp.Errors) > 0 {
 			return nil, fmt.Errorf("glab graphql: %s", resp.Errors[0].Message)
 		}
-		return nil, fmt.Errorf("glab não autenticado em %s. Rode: glab auth login --hostname %s", g.in.Host, g.in.Host)
+		return nil, i18n.Errorf("glab não autenticado em %s. Rode: glab auth login --hostname %s", g.in.Host, g.in.Host)
 	}
 	u := resp.Data.CurrentUser
 	acc := newAccumulator()
@@ -228,13 +229,13 @@ func (g *gitlab) List(ctx context.Context) ([]Item, error) {
 			}
 			var tracked glTrackedResponse
 			if err := json.Unmarshal(out, &tracked); err != nil {
-				return nil, fmt.Errorf("resposta inválida do glab para %s: %w", repo, err)
+				return nil, i18n.Errorf("resposta inválida do glab para %s: %w", repo, err)
 			}
 			if len(tracked.Errors) > 0 {
 				return nil, fmt.Errorf("glab graphql (%s): %s", repo, tracked.Errors[0].Message)
 			}
 			if tracked.Data.Project == nil {
-				return nil, fmt.Errorf("projeto %s não encontrado em %s", repo, g.in.Host)
+				return nil, i18n.Errorf("projeto %s não encontrado em %s", repo, g.in.Host)
 			}
 			mrs := tracked.Data.Project.MergeRequests
 			for _, n := range mrs.Nodes {
@@ -316,7 +317,7 @@ func (g *gitlab) listIssues(ctx context.Context, me string, acc *accumulator) er
 		} `json:"errors"`
 	}
 	if err := json.Unmarshal(out, &resp); err != nil {
-		return fmt.Errorf("resposta inválida do glab: %w", err)
+		return i18n.Errorf("resposta inválida do glab: %w", err)
 	}
 	if len(resp.Errors) > 0 && resp.Data.CurrentUser == nil {
 		return fmt.Errorf("glab graphql (issues): %s", resp.Errors[0].Message)
@@ -424,7 +425,7 @@ func (g *gitlab) Thread(ctx context.Context, it *Item) (*Thread, error) {
 		} `json:"errors"`
 	}
 	if err := json.Unmarshal(out, &resp); err != nil {
-		return nil, fmt.Errorf("resposta inválida do glab: %w", err)
+		return nil, i18n.Errorf("resposta inválida do glab: %w", err)
 	}
 	var desc string
 	var notes []note
@@ -436,7 +437,7 @@ func (g *gitlab) Thread(ctx context.Context, it *Item) (*Thread, error) {
 	case len(resp.Errors) > 0:
 		return nil, fmt.Errorf("glab graphql: %s", resp.Errors[0].Message)
 	default:
-		return nil, fmt.Errorf("%s%s não encontrado", it.Repo, it.Ref())
+		return nil, i18n.Errorf("%s%s não encontrado", it.Repo, it.Ref())
 	}
 	t := &Thread{Body: desc}
 	for _, n := range notes {
@@ -573,7 +574,7 @@ func (g *gitlab) HeadRef(pr *Item) string {
 func (g *gitlab) AuthStatus(ctx context.Context) error {
 	_, err := run(ctx, "", nil, "glab", "auth", "status", "--hostname", g.in.Host)
 	if err != nil && !isMissing(err) {
-		return fmt.Errorf("glab não autenticado em %s. Rode: glab auth login --hostname %s", g.in.Host, g.in.Host)
+		return i18n.Errorf("glab não autenticado em %s. Rode: glab auth login --hostname %s", g.in.Host, g.in.Host)
 	}
 	return err
 }

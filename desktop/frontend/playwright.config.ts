@@ -5,6 +5,7 @@ export default defineConfig({
   workers: 2,
   use: {
     baseURL: 'http://127.0.0.1:5173',
+    locale: 'pt-BR',
     launchOptions: process.env.CHROMIUM_PATH
       ? { executablePath: process.env.CHROMIUM_PATH }
       : {},

@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/vitorpacheco/pr-tracker/internal/app"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
 )
 
@@ -131,7 +132,8 @@ func renderMarkdown(r *glamour.TermRenderer, s string, width int) []string {
 	return lines
 }
 
-func (t *threadView) render(width int) []string {
+func (t *threadView) render(width int, language string) []string {
+	tr := func(message string) string { return i18n.Text(language, message) }
 	if t.lines != nil && t.width == width {
 		return t.lines
 	}
@@ -152,7 +154,7 @@ func (t *threadView) render(width int) []string {
 	}
 	switch {
 	case t.thread == nil && t.err != nil:
-		return append(out, "", sRed.Render(" ✘ "+oneLine(t.err.Error())))
+		return append(out, "", sRed.Render(" ✘ "+oneLine(i18n.ErrorText(language, t.err))))
 	case t.thread == nil:
 		return out // still loading; not cached
 	}
@@ -163,23 +165,23 @@ func (t *threadView) render(width int) []string {
 	sep := func(head string) string {
 		return " " + head + " " + sDim.Render(strings.Repeat("─", max(width-lipgloss.Width(head)-3, 0)))
 	}
-	out = append(out, "", sep(sBold.Render(it.Author)+sDim.Render(" · descrição · "+age(it.CreatedAt))))
+	out = append(out, "", sep(sBold.Render(it.Author)+sDim.Render(tr(" · descrição · ")+age(it.CreatedAt, tr))))
 	out = append(out, renderMarkdown(r, t.thread.Body, width)...)
 	for _, c := range t.thread.Comments {
 		body := renderMarkdown(r, c.Body, width)
 		if body == nil && (c.Review == "" || c.Review == "commented") {
 			continue // bot markers and empty review wrappers
 		}
-		head := sBold.Render(firstNonEmpty(c.Author, "ghost")) + sDim.Render(" · "+age(c.CreatedAt))
+		head := sBold.Render(firstNonEmpty(c.Author, "ghost")) + sDim.Render(" · "+age(c.CreatedAt, tr))
 		switch c.Review {
 		case "approved":
-			head += " " + sGreen.Render("✔ aprovou")
+			head += " " + sGreen.Render(tr("✔ aprovou"))
 		case "changes_requested":
-			head += " " + sRed.Render("± pediu alterações")
+			head += " " + sRed.Render(tr("± pediu alterações"))
 		case "commented":
 			head += " " + sMuted.Render("◇ review")
 		case "dismissed":
-			head += " " + sDim.Render("review descartado")
+			head += " " + sDim.Render(tr("review descartado"))
 		}
 		if c.Path != "" {
 			loc := c.Path
@@ -192,7 +194,7 @@ func (t *threadView) render(width int) []string {
 		out = append(out, body...)
 	}
 	if len(t.thread.Comments) == 0 {
-		out = append(out, "", sDim.Render(" nenhum comentário ainda — ")+sKey.Render("n")+sDim.Render(" para comentar"))
+		out = append(out, "", sDim.Render(tr(" nenhum comentário ainda — "))+sKey.Render("n")+sDim.Render(tr(" para comentar")))
 	}
 	out = append(out, "")
 	t.lines = out
@@ -202,9 +204,9 @@ func (t *threadView) render(width int) []string {
 func (m *Model) threadBody(W, H int) []string {
 	t := m.thread
 	m.listRows = H
-	lines := t.render(W)
+	lines := t.render(W, m.language)
 	if t.loading && t.thread == nil {
-		lines = append(lines, "", " "+sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)]+" carregando conversa…"))
+		lines = append(lines, "", " "+sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)]+m.t(" carregando conversa…")))
 	}
 	t.offset = max(0, min(t.offset, len(lines)-H))
 	end := min(t.offset+H, len(lines))
@@ -238,7 +240,7 @@ func labels(ls []string) string {
 
 func (m *Model) openCompose(it *provider.Item) tea.Cmd {
 	ta := textarea.New()
-	ta.Placeholder = "Escreva o comentário (markdown)…"
+	ta.Placeholder = m.t("Escreva o comentário (markdown)…")
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 65536
 	ta.SetWidth(min(max(m.width-12, 30), 90))
@@ -265,13 +267,13 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) tea.Cmd {
 func (m *Model) sendComment() tea.Cmd {
 	body := strings.TrimSpace(m.compose.Value())
 	if body == "" {
-		m.setStatus(stErr, "comentário vazio")
+		m.setStatus(stErr, m.t("comentário vazio"))
 		return nil
 	}
 	it := m.composeFor
 	m.modal, m.compose = modalNone, nil
 	key := it.Key()
-	m.pending[key] = "enviando comentário"
+	m.pending[key] = m.t("enviando comentário")
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -283,10 +285,10 @@ func (m *Model) sendComment() tea.Cmd {
 func (m *Model) composeContent(z *zones) string {
 	it := &m.composeFor
 	var b []string
-	b = append(b, sBold.Foreground(cAccent2).Render("Comentar em "+it.Repo+" "+it.Ref()), sDim.Render(fit(it.Title, m.compose.Width())), "")
+	b = append(b, sBold.Foreground(cAccent2).Render(m.t("Comentar em ")+it.Repo+" "+it.Ref()), sDim.Render(fit(it.Title, m.compose.Width())), "")
 	b = append(b, m.compose.View(), "")
-	send := sTabActive.Render("Enviar ctrl+s")
-	cancel := sTab.Render("Cancelar esc")
+	send := sTabActive.Render(m.t("Enviar ctrl+s"))
+	cancel := sTab.Render(m.t("Cancelar esc"))
 	y := lipglossHeight(b)
 	z.add("compose:send", 0, y, lipgloss.Width(send), 1)
 	z.add("compose:cancel", lipgloss.Width(send)+2, y, lipgloss.Width(cancel), 1)
