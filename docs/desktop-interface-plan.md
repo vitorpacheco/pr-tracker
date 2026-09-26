@@ -396,8 +396,10 @@ A GUI também usa terminais externos, diff, navegador e seletor nativo de pasta.
 Há um modo de demonstração explícito para testes sem contas remotas.
 
 A [documentação de desenvolvimento](desktop-development.md) descreve o estado
-atual, comandos e limites de validação. O workflow desktop foi adicionado ao
-repositório, mas não foi disparado remotamente. Build e smoke Linux e testes de
-navegador são verificações locais; os critérios multiplataforma, empacotamento e
-releases continuam abertos. Os registros dos dois incrementos anteriores acima
-são históricos; a interface não está mais limitada ao backend sem janela.
+atual, comandos e limites de validação. O workflow desktop valida o frontend e
+gera pacotes nativos para Linux, macOS e Windows em `amd64` e `arm64`; nightly e
+releases publicam esses pacotes com checksums. Build e smoke Linux e testes de
+navegador são as verificações locais já executadas; ainda falta confirmar os
+executáveis nos ambientes gráficos de cada plataforma. Os registros dos dois
+incrementos anteriores acima são históricos; a interface não está mais limitada
+ao backend sem janela.

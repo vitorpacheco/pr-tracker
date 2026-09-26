@@ -41,10 +41,11 @@ não há CLI oficial e a integração ficou para depois.
 
 ## Instalação
 
-Baixe um binário na página de
+Baixe o binário da TUI ou o pacote `pr-tracker-desktop` da GUI na página de
 [releases](https://github.com/vitorpacheco/pr-tracker/releases). Há uma versão
 estável para cada tag `v*` e uma `nightly`, que é atualizada a cada commit na
-`main`. Também dá para compilar:
+`main`. Os dois executáveis são publicados para Linux, macOS e Windows em
+`amd64` e `arm64`. Também dá para compilar:
 
 ```sh
 go install github.com/vitorpacheco/pr-tracker@latest
@@ -264,9 +265,10 @@ make package  # dist + .tar.gz/.zip + checksums.txt (o que a release publica)
 
 | Workflow | Quando roda | O que faz |
 |---|---|---|
-| `ci.yml` | PRs e pushes em outras branches | `go mod tidy` limpo, `make lint`, testes em Linux (com `-race`), macOS e Windows, `make package` (artefato por 7 dias) e `govulncheck` |
-| `nightly.yml` | push na `main` | roda o CI e recria a pre-release `nightly`, que aponta para o novo commit (versão `nightly-AAAAMMDD-<sha>`) |
-| `release.yml` | push de tag `v*` | roda o CI e publica a release com notas geradas; tags com sufixo (`v1.0.0-rc.1`) viram pre-release |
+| `ci.yml` | PRs e pushes em outras branches | `go mod tidy` limpo, lint, testes, pacotes da CLI e da GUI para as seis combinações de SO/arquitetura e `govulncheck` |
+| `desktop.yml` | chamado pelo CI ou manualmente | valida o frontend e produz os pacotes nativos da GUI para Linux, macOS e Windows em `amd64` e `arm64` |
+| `nightly.yml` | push na `main` | roda o CI e recria a pre-release `nightly` com CLI e GUI, apontando para o novo commit (versão `nightly-AAAAMMDD-<sha>`) |
+| `release.yml` | push de tag `v*` | roda o CI e publica CLI e GUI com notas geradas; tags com sufixo (`v1.0.0-rc.1`) viram pre-release |
 | `vulncheck.yml` | toda segunda e manual | `govulncheck` na `main`, para pegar alertas novos sem depender de commit |
 
 O Dependabot atualiza as dependências Go e as actions uma vez por semana.

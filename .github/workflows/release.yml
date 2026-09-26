@@ -16,6 +16,8 @@ concurrency:
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
+    with:
+      version: ${{ github.ref_name }}
 
   release:
     name: Publicar ${{ github.ref_name }}
@@ -30,6 +32,12 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Baixar pacotes desktop
+        uses: actions/download-artifact@v7
+        with:
+          pattern: pr-tracker-desktop-*
+          path: dist
+          merge-multiple: true
       - run: make package VERSION="$GITHUB_REF_NAME"
       - name: Publicar release
         env:
