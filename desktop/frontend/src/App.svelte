@@ -592,7 +592,7 @@
     {#if themeError}<div class="banner error" role="alert">
         {themeError}
       </div>{/if}
-    {#if error}<div class="banner error" role="alert">
+    {#if error && error !== themeError}<div class="banner error" role="alert">
         {error}<button
           aria-label={t('Fechar erro')}
           onclick={() => (error = '')}>×</button

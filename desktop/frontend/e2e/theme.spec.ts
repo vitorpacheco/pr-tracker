@@ -1,5 +1,44 @@
 import { test, expect } from '@playwright/test';
 
+test('keeps distinct theme and data errors visible and clears recovered theme errors', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.assign(window, {
+      go: {
+        main: {
+          Bridge: {
+            Load: async () => {
+              throw new Error('Data unavailable');
+            },
+            Refresh: async () => {
+              throw new Error('Data unavailable');
+            },
+            Theme: async () => {
+              throw new Error('Invalid color file');
+            },
+          },
+        },
+      },
+    });
+  });
+  await page.goto('/');
+  await expect(page.getByRole('alert')).toHaveText([
+    'Invalid color file',
+    'Data unavailable×',
+  ]);
+  await page.evaluate(() => {
+    const bridge = (
+      window as unknown as {
+        go: { main: { Bridge: { Theme: () => Promise<object> } } };
+      }
+    ).go.main.Bridge;
+    bridge.Theme = async () => ({});
+  });
+  await expect(page.getByRole('alert')).toHaveCount(1);
+  await expect(page.getByRole('alert')).toContainText('Data unavailable');
+});
+
 test('system follows Omarchy changes, manual theme wins, and missing palette restores defaults', async ({
   page,
 }) => {

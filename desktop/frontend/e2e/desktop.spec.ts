@@ -86,6 +86,7 @@ test('keeps selection on resize and reports unavailable bridge', async ({
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(page.locator('.item-row.selected')).toHaveAttribute('id', id!);
   await page.goto('/');
+  await expect(page.getByRole('alert')).toHaveCount(1);
   await expect(page.getByRole('alert')).toContainText(
     'Abra o aplicativo desktop',
   );

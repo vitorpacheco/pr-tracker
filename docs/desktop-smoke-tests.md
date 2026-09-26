@@ -66,7 +66,76 @@ ou clones reais. Conversas remotas, terminal, diff, seletores de pasta e ciclo d
 worktrees reais ainda precisam de validação nativa. Este smoke não conclui a
 matriz multiplataforma nem a rodada de release candidata em GNOME/KDE.
 
-## Roteiro para o MacBook
+## macOS / Apple Silicon — 26/09/2026
+
+Build local do commit `4c30b50` em macOS 26.6.2 (25G83), `darwin/arm64`,
+Go 1.27.1 e Node 26.10.0, com Command Line Tools em
+`/Library/Developer/CommandLineTools`. CLI e GUI produziram executáveis
+Mach-O arm64. Não foi utilizado um pacote baixado de release.
+
+### Verificações realizadas
+
+- `make check` e `go test -race ./...`: todos os pacotes passaram.
+- `make build` e `make desktop-install desktop-check desktop-build
+  DESKTOP_TAGS=gui,desktop,production`: builds concluídos, Svelte sem erros ou
+  avisos e 10 testes frontend passando.
+- `go test -tags gui,desktop,production ./desktop`: passou. O compilador emitiu
+  um aviso de depreciação de `setShowsBaselineSeparator:` no código do Wails;
+  não impediu build nem execução.
+- Executável GUI iniciou sem saída de erro. Para interação pela ferramenta de
+  acessibilidade, foi criado um `.app` local de teste com o mesmo binário,
+  `Info.plist` mínimo e `LSEnvironment` apontando para configuração/cache isolados.
+  Esse wrapper não é um pacote de distribuição validado.
+- GUI renderizada no WebKit nativo, incluindo lista, inspector, branches,
+  totais do diff, status de CI e mensagem de indisponibilidade do provider.
+- `Cmd+K` abriu comandos; configurações abriram pela palette; diagnóstico
+  encontrou `git` em `/opt/homebrew/bin` e `gh`, `glab` e `hunk` no mise.
+  `tea` ausente. O diagnóstico CLI também encontrou herdr e tmux.
+- Seletor nativo de arquivo TOML abriu e foi cancelado normalmente.
+- Idioma alterado de português para inglês, salvo no TOML isolado e preservado
+  após fechar com `Cmd+Q` e reabrir.
+- Cache SQLite sintético com três PRs restaurado na inicialização;
+  `tool_paths.gh = "/usr/bin/false"` simulou falha de consulta, preservando
+  os itens e exibindo aviso de dados anteriores.
+- `j` selecionou o segundo item; `a` abriu confirmação para esse PR e `Esc`
+  cancelou. `/` e busca por `Cache offline` reduziram a lista a um item.
+- TUI executada em PTY com o mesmo cache: renderização, navegação com `j` e
+  saída com `q` concluídas com status 0.
+- GUI fechada normalmente após a rodada.
+
+### Falha encontrada no teste de navegador
+
+`CHROMIUM_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+make desktop-e2e` passou em **18 de 19 testes**. Os testes de layouts em
+600/900/1440 px, temas, idiomas, divisórias e persistência passaram no Chrome.
+Isso não equivale a testar esses tamanhos no WebKit nativo.
+
+Falhou `keeps selection on resize and reports unavailable bridge`, em
+`desktop/frontend/e2e/desktop.spec.ts:89`: `getByRole('alert')` encontrou dois
+elementos com a mensagem `Abra o aplicativo desktop`. A tela sem bridge pode
+renderizar simultaneamente `themeError` e `error`, ambos preenchidos pela falha
+de acesso ao backend. O teste exige um único alerta.
+
+A correção posterior mantém o alerta de tema e só exibe o alerta geral quando
+sua mensagem é diferente. O teste agora verifica explicitamente a existência
+de um único alerta. Um novo cenário garante que falhas distintas de tema e
+dados permaneçam visíveis e que a recuperação do tema preserve o erro de dados.
+Após a correção, os **20 testes E2E passaram**, assim como `make check`,
+`make desktop-check` e o build nativo com `DESKTOP_TAGS=gui,desktop,production`.
+
+Configuração, cache, wrapper `.app`, log nativo e captura `native-cache.png`
+ficam em `dist/macos-smoke/`, fora do versionamento. O contexto da falha E2E
+fica em `dist/desktop-test-results/`, e suas capturas em `dist/desktop-preview/`.
+
+### Limites desta rodada
+
+Não foram consultadas instâncias reais, publicadas mensagens ou alterados PRs
+e clones reais. Autenticação remota, conversas reais, terminal/diff externos,
+worktrees pela GUI, seletor de clone, exportação de cores, mudança de tema e
+redimensionamento nativo permanecem para outra rodada. Não foram validados
+Intel, pacote de release, Gatekeeper/quarentena, `.app` universal ou `.dmg`.
+
+## Roteiro complementar para o MacBook
 
 Registrar macOS, arquitetura, versão/commit do pacote e resultados de cada item.
 Usar o pacote `darwin_arm64` em Apple Silicon ou `darwin_amd64` em Intel enquanto

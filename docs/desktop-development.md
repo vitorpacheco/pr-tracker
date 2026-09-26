@@ -161,8 +161,12 @@ uma falha no caminho acelerado do WebKitGTK/NVIDIA; a GUI agora desativa a
 aceleração do WebView no Linux. O [registro do smoke](desktop-smoke-tests.md)
 descreve a reprodução, a correção, os resultados e o roteiro para o MacBook.
 As capturas automatizadas usam Chromium; elas não substituem testes de WebKitGTK.
-A execução em macOS/Windows e as rodadas em GNOME/KDE ainda precisam de seus
-respectivos ambientes. Terminal, diff e ações remotas não foram executados contra
+A execução nativa em macOS arm64 foi verificada em 26/09/2026, com configuração
+isolada, cache sintético, comandos, diagnóstico, idioma e seletor de arquivo.
+O [registro do smoke](desktop-smoke-tests.md) detalha os resultados, a correção
+dos alertas duplicados encontrados na suíte de navegador e os testes pendentes.
+Windows e as rodadas em GNOME/KDE ainda precisam de seus respectivos ambientes.
+Terminal, diff e ações remotas não foram executados contra
 contas ou clones reais durante estes testes.
 
 O arquivo `.desktop` e o ícone SVG ficam em `desktop/build/linux/`; a aplicação
@@ -172,8 +176,8 @@ incrementos.
 
 No macOS, os pacotes serão distribuídos sem assinatura Developer ID e sem
 notarização. O projeto não exige conta paga Apple Developer nem credenciais
-Apple no CI. O empacotamento em `.app` universal e `.dmg` e os testes nativos
-continuam pendentes; assinatura e notarização não são critérios de conclusão. A GUI não
+Apple no CI. O empacotamento em `.app` universal e `.dmg` e a validação nativa
+completa continuam pendentes; assinatura e notarização não são critérios de conclusão. A GUI não
 persiste nem impõe posição da janela no Wayland.
 
 ## Capturas verificadas
