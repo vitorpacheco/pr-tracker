@@ -55,6 +55,14 @@ XDG_CACHE_HOME="$PWD/.cache/desktop-smoke/cache" \
   e instância, contagens e seleção preservada durante refresh e resize.
 - Lista dedicada abaixo de 700 px, lista e inspector entre 700 e 1099 px e
   navegação lateral adicional a partir de 1100 px.
+- Menu lateral recolhível pelo botão no canto superior esquerdo. Em janelas
+  menores, o mesmo botão abre o menu sobre o conteúdo; `Esc` ou um clique fora
+  dele fecha o menu.
+- Divisórias arrastáveis entre menu, lista e inspector. A lista ocupa o espaço
+  restante e adapta suas colunas à largura disponível. Com foco na divisória,
+  `←`/`→` ajustam 10 px, `Shift` acelera para 40 px e `Home`/`End` levam aos
+  limites. Larguras e estado recolhido são salvos localmente; reduzir a janela
+  limita as larguras temporariamente, sem apagar a preferência para telas maiores.
 - `j/k`, setas, `Enter`, `Esc`, `/`, `Cmd/Ctrl+K`, `r`, `v`, `n`, `a`, `m`, `w`,
   `t`, `d` e `o`. Inputs não executam atalhos de ações durante digitação.
 - Descrição e conversa em Markdown sanitizado, checks, aprovações, conflitos,
@@ -119,8 +127,9 @@ CHROMIUM_PATH=/usr/bin/chromium make desktop-e2e
 ```
 
 Os testes de navegador geram capturas em `dist/desktop-preview/` nos três
-breakpoints e nos dois temas. Testam navegação, busca, rascunho, resize, erros
-parciais, o formato real do bridge e sanitização de Markdown. Os testes Go de
+breakpoints e nos dois temas. Testam navegação, busca, rascunho, resize, menu
+recolhível, divisórias por mouse/teclado, persistência do layout, erros parciais,
+o formato real do bridge e sanitização de Markdown. Os testes Go de
 ações usam adapters falsos; não aprovam PRs nem publicam comentários reais.
 
 Quando caches devem ficar no checkout, use `GOMODCACHE="$PWD/.cache/mod"`,
@@ -156,3 +165,5 @@ Dados fictícios do modo de demonstração:
 - [900 px, escuro](screenshots/gui-900-dark.png)
 - [600 px, escuro](screenshots/gui-600-dark.png)
 - [1440 px, claro](screenshots/gui-1440-light.png)
+- [Menu recolhido](screenshots/gui-sidebar-collapsed.png)
+- [Painéis redimensionados](screenshots/gui-panels-resized.png)

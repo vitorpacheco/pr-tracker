@@ -241,3 +241,152 @@ test('dirty cleanup keeps its target after the closed PR leaves the list', async
     { Action: 'remove_worktree', Force: true, Key: 'work|org/repo|0#7' },
   ]);
 });
+
+test('sidebar toggle preserves selection, draft and saved layout', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/?demo=1');
+  await expect(page.locator('.item-row')).toHaveCount(8);
+  await page.locator('.item-row').nth(2).click();
+  const selected = await page.locator('.item-row.selected').getAttribute('id');
+  await page.getByRole('button', { name: /^Conversa/ }).click();
+  await page.locator('#comment').fill('Rascunho durante ajuste do layout');
+  const width = (await page.locator('.list-pane').boundingBox())!.width;
+  await page
+    .getByRole('button', { name: 'Recolher menu lateral', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Abrir menu lateral', exact: true }),
+  ).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.sidebar')).toBeHidden();
+  await expect(page.getByRole('separator')).toHaveCount(1);
+  expect(
+    (await page.locator('.list-pane').boundingBox())!.width,
+  ).toBeGreaterThan(width);
+  await expect(page.locator('.item-row.selected')).toHaveAttribute(
+    'id',
+    selected!,
+  );
+  await expect(page.locator('#comment')).toHaveValue(
+    'Rascunho durante ajuste do layout',
+  );
+  await page.screenshot({
+    path: '../../dist/desktop-preview/gui-sidebar-collapsed.png',
+  });
+  await page.reload();
+  await expect(page.locator('.sidebar')).toBeHidden();
+  await page
+    .getByRole('button', { name: 'Abrir menu lateral', exact: true })
+    .click();
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await page.reload();
+  await expect(page.locator('.sidebar')).toBeVisible();
+});
+
+test('panel dividers resize by pointer and keyboard, persist and respect available space', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/?demo=1');
+  await expect(page.locator('.item-row')).toHaveCount(8);
+  const menu = page.getByRole('separator', { name: 'Largura do menu lateral' });
+  const details = page.getByRole('separator', { name: 'Largura dos detalhes' });
+  for (const [handle, offset, expected] of [
+    [menu, 60, 260],
+    [details, -130, 500],
+  ] as const) {
+    const box = (await handle.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      box.x + box.width / 2 + offset,
+      box.y + box.height / 2,
+      { steps: 8 },
+    );
+    await page.mouse.up();
+    await expect(handle).toHaveAttribute('aria-valuenow', String(expected));
+  }
+  expect((await page.locator('.sidebar').boundingBox())!.width).toBe(260);
+  expect((await page.locator('.inspector').boundingBox())!.width).toBe(500);
+  await page.screenshot({
+    path: '../../dist/desktop-preview/gui-panels-resized.png',
+  });
+  await page.reload();
+  await expect(menu).toHaveAttribute('aria-valuenow', '260');
+  await expect(details).toHaveAttribute('aria-valuenow', '500');
+  await details.focus();
+  await page.keyboard.press('Shift+ArrowLeft');
+  await expect(details).toHaveAttribute('aria-valuenow', '540');
+  await page.keyboard.press('Home');
+  await expect(details).toHaveAttribute('aria-valuenow', '300');
+  await page.keyboard.press('End');
+  await expect(details).toHaveAttribute('aria-valuenow', '848');
+  expect((await page.locator('.list-pane').boundingBox())!.width).toBe(320);
+  // List content also adapts when the window itself remains wide.
+  await expect(page.locator('.item-row .author').first()).toBeHidden();
+  expect(
+    await page
+      .locator('.rows')
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+  ).toBe(true);
+  const box = (await menu.boundingBox())!;
+  await page.mouse.move(box.x + 3, box.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(1400, box.y + 100, { steps: 8 });
+  await page.mouse.up();
+  await expect(menu).toHaveAttribute('aria-valuenow', '360');
+  expect((await page.locator('.list-pane').boundingBox())!.width).toBe(320);
+  await page.setViewportSize({ width: 700, height: 900 });
+  await expect(menu).toHaveCount(0);
+  await expect(details).toHaveAttribute('aria-valuenow', '374');
+  expect((await page.locator('.list-pane').boundingBox())!.width).toBe(320);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.setViewportSize({ width: 600, height: 900 });
+  await expect(details).toHaveCount(0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(menu).toHaveAttribute('aria-valuenow', '360');
+  await expect(details).toHaveAttribute('aria-valuenow', '748');
+});
+
+for (const width of [600, 900]) {
+  test(`compact sidebar opens and closes without displacing panels at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/?demo=1');
+    await expect(page.locator('.item-row')).toHaveCount(8);
+    const initial = await page.locator('.list-pane').boundingBox();
+    const toggle = page.getByRole('button', {
+      name: 'Abrir menu lateral',
+      exact: true,
+    });
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.sidebar')).toBeVisible();
+    await page
+      .locator('.sidebar')
+      .getByRole('button', { name: 'Revisar' })
+      .click();
+    await expect(page.locator('.list-pane')).toHaveCSS('display', 'flex');
+    expect(await page.locator('.list-pane').boundingBox()).toEqual(initial);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.sidebar')).toBeHidden();
+    await expect(toggle).toBeFocused();
+    await expect(page.locator('.list-pane')).toBeVisible();
+    await toggle.click();
+    await page
+      .getByRole('button', { name: 'Fechar menu lateral', exact: true })
+      .click({ position: { x: width - 10, y: 100 } });
+    await expect(page.locator('.sidebar')).toBeHidden();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  });
+}

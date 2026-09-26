@@ -5,6 +5,7 @@
   import { api, demoMode } from './lib/api';
   import type { View } from './lib/list';
   import { filterItems, nextSelection, relativeAge } from './lib/list';
+  import Splitter from './lib/Splitter.svelte';
   import type { main, provider, config, app } from '../wailsjs/go/models';
   let view: View = {
     RefreshSeconds: 300,
@@ -50,6 +51,40 @@
   let theme = 'system',
     mounted = false,
     detailGeneration = 0;
+  let windowWidth = window.innerWidth;
+  let sidebarCollapsed = false,
+    sidebarDrawerOpen = false,
+    sidebarWidth = 200,
+    inspectorWidth = 370;
+  let sidebarToggle: HTMLButtonElement;
+  $: wideLayout = windowWidth >= 1100;
+  $: sidebarVisible = wideLayout ? !sidebarCollapsed : sidebarDrawerOpen;
+  $: sidebarMax = Math.max(180, Math.min(360, windowWidth - 632));
+  $: sidebarSize = Math.max(180, Math.min(sidebarMax, sidebarWidth));
+  $: sidebarSpace = wideLayout && sidebarVisible ? sidebarSize + 6 : 0;
+  $: inspectorMax = Math.max(300, windowWidth - sidebarSpace - 326);
+  $: inspectorSize = Math.max(300, Math.min(inspectorMax, inspectorWidth));
+
+  function saveLayout() {
+    try {
+      localStorage.setItem(
+        'pr-tracker-layout',
+        JSON.stringify({ sidebarCollapsed, sidebarWidth, inspectorWidth }),
+      );
+    } catch {
+      /* Layout remains usable when storage is disabled. */
+    }
+  }
+  function toggleSidebar() {
+    if (wideLayout) {
+      sidebarCollapsed = !sidebarCollapsed;
+      saveLayout();
+    } else sidebarDrawerOpen = !sidebarDrawerOpen;
+  }
+  function closeDrawer() {
+    sidebarDrawerOpen = false;
+    sidebarToggle?.focus();
+  }
   const isMac =
     typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
   const modifier = isMac ? '⌘' : 'Ctrl';
@@ -316,16 +351,28 @@
     }
     if (palette?.open || confirmation?.open || settingsDialog?.open) return;
     if (e.key === 'Escape') {
+      if (!wideLayout && sidebarDrawerOpen) {
+        closeDrawer();
+        return;
+      }
       detailOpen = false;
       (document.activeElement as HTMLElement)?.blur();
       return;
     }
     if (
       e.target instanceof HTMLElement &&
-      e.target.closest('input,textarea,select,[contenteditable="true"]')
+      e.target.closest(
+        'input,textarea,select,[contenteditable="true"],[role="separator"]',
+      )
     )
       return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (
+      e.key === 'Enter' &&
+      e.target instanceof HTMLElement &&
+      e.target.closest('button,a,summary')
+    )
+      return;
     if (['j', 'k', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
       e.preventDefault();
       const next = nextSelection(
@@ -375,6 +422,24 @@
   onMount(() => {
     mounted = true;
     try {
+      const layout = JSON.parse(
+        localStorage.getItem('pr-tracker-layout') ?? '{}',
+      );
+      sidebarCollapsed = layout.sidebarCollapsed === true;
+      if (
+        typeof layout.sidebarWidth === 'number' &&
+        Number.isFinite(layout.sidebarWidth)
+      )
+        sidebarWidth = Math.max(180, Math.min(360, layout.sidebarWidth));
+      if (
+        typeof layout.inspectorWidth === 'number' &&
+        Number.isFinite(layout.inspectorWidth)
+      )
+        inspectorWidth = Math.max(300, layout.inspectorWidth);
+    } catch {
+      /* Ignore missing or invalid layout preferences. */
+    }
+    try {
       changeTheme(localStorage.getItem('pr-tracker-theme') ?? 'system');
       drafts = JSON.parse(localStorage.getItem('pr-tracker-drafts') ?? '{}');
     } catch {
@@ -410,9 +475,28 @@
   });
 </script>
 
-<svelte:window onkeydown={keydown} />
-<div class="shell" class:route-detail={detailOpen}>
+<svelte:window
+  onkeydown={keydown}
+  bind:innerWidth={windowWidth}
+  onresize={() => (sidebarDrawerOpen = false)}
+/>
+<div
+  class="shell"
+  class:route-detail={detailOpen}
+  style={`--sidebar-width: ${sidebarSpace ? sidebarSize : 0}px; --sidebar-divider: ${sidebarSpace ? 6 : 0}px; --inspector-width: ${inspectorSize}px;`}
+>
   <header class="topbar">
+    <button
+      bind:this={sidebarToggle}
+      class="icon-button sidebar-toggle"
+      title={sidebarVisible ? 'Recolher menu lateral' : 'Abrir menu lateral'}
+      aria-label={sidebarVisible
+        ? 'Recolher menu lateral'
+        : 'Abrir menu lateral'}
+      aria-expanded={sidebarVisible}
+      aria-controls="workspace-sidebar"
+      onclick={toggleSidebar}>☰</button
+    >
     <div class="brand">
       <span class="brand-icon">⑂</span> pr-tracker
       <span class="desktop-label">DESKTOP</span>
@@ -468,7 +552,22 @@
         >
       </div>{/if}
   </div>
-  <aside class="sidebar">
+  {#if sidebarVisible && !wideLayout}
+    <button
+      class="sidebar-backdrop"
+      aria-label="Fechar menu lateral"
+      onclick={closeDrawer}
+    ></button>
+  {/if}
+  <aside
+    id="workspace-sidebar"
+    class="sidebar"
+    hidden={!sidebarVisible}
+    aria-label="Menu lateral"
+  >
+    {#if !wideLayout}<button class="drawer-close" onclick={closeDrawer}
+        >← Recolher menu</button
+      >{/if}
     <div class="eyebrow">WORKSPACE</div>
     <h2>Seu trabalho,<br />em um lugar.</h2>
     <button class:chosen={!instance} onclick={() => (instance = '')}
@@ -510,7 +609,18 @@
       >
     </div>
   </aside>
-  <main class="list-pane" bind:this={list}>
+  {#if wideLayout && sidebarVisible}
+    <Splitter
+      label="Largura do menu lateral"
+      controls="workspace-sidebar"
+      value={sidebarSize}
+      min={180}
+      max={sidebarMax}
+      onresize={(value) => (sidebarWidth = value)}
+      oncommit={saveLayout}
+    />
+  {/if}
+  <main id="item-list" class="list-pane" bind:this={list}>
     <div class="list-heading">
       <div class="eyebrow">SUA FILA DE TRABALHO</div>
       <h1>
@@ -629,7 +739,19 @@
       >
     </footer>
   </main>
-  <section class="inspector" aria-label="Detalhes do item">
+  {#if windowWidth >= 700}
+    <Splitter
+      label="Largura dos detalhes"
+      controls="item-inspector"
+      value={inspectorSize}
+      min={300}
+      max={inspectorMax}
+      direction={-1}
+      onresize={(value) => (inspectorWidth = value)}
+      oncommit={saveLayout}
+    />
+  {/if}
+  <section id="item-inspector" class="inspector" aria-label="Detalhes do item">
     <div class="inspector-heading">
       <span>INSPECTOR</span><button
         class="back"
