@@ -1,3 +1,4 @@
+GO_SOURCES := $(shell git ls-files --cached --others --exclude-standard '*.go')
 BINARY  := pr-tracker
 PKG     := github.com/vitorpacheco/pr-tracker
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -37,11 +38,11 @@ vet: ## Roda go vet
 
 .PHONY: fmt
 fmt: ## Formata o código
-	gofmt -w .
+	gofmt -w $(GO_SOURCES)
 
 .PHONY: lint
 lint: ## Verifica formatação e roda go vet
-	@test -z "$$(gofmt -l .)" || (echo "arquivos não formatados:"; gofmt -l .; exit 1)
+	@test -z "$$(gofmt -l $(GO_SOURCES))" || (echo "arquivos não formatados:"; gofmt -l $(GO_SOURCES); exit 1)
 	go vet ./...
 
 .PHONY: check
@@ -95,3 +96,27 @@ doctor: build ## Verifica CLIs, autenticação e configuração
 .PHONY: clean
 clean: ## Remove artefatos de build
 	rm -rf $(BINARY) $(DIST) coverage.out
+
+# Native desktop builds are separate from the CGO-disabled CLI release loop.
+WAILS_VERSION := v2.16.0
+DESKTOP_TAGS ?= gui,desktop,production,webkit2_41
+
+.PHONY: desktop-install desktop-check desktop-build desktop-dev desktop-bindings desktop-e2e
+desktop-install: ## Instala dependências do frontend desktop
+	cd desktop/frontend && npm ci
+
+desktop-check: ## Verifica TypeScript/Svelte e testes do frontend
+	cd desktop/frontend && npm run check && npm test
+
+desktop-build: ## Compila a GUI nativa em dist/pr-tracker-desktop (Linux com WebKitGTK 4.1)
+	cd desktop/frontend && npm run build
+	go build -trimpath -tags $(DESKTOP_TAGS) -o $(DIST)/pr-tracker-desktop ./desktop
+
+desktop-dev: ## Abre preview da GUI no navegador (use ?demo=1 para dados fictícios)
+	cd desktop/frontend && npm run dev
+
+desktop-bindings: ## Regenera contratos Go/TypeScript (requer assets do frontend)
+	cd desktop && go run github.com/wailsapp/wails/v2/cmd/wails@$(WAILS_VERSION) generate module -tags gui,webkit2_41
+
+desktop-e2e: ## Testa os layouts desktop em Chromium (CHROMIUM_PATH opcional)
+	cd desktop/frontend && npm run test:e2e

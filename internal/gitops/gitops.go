@@ -16,13 +16,18 @@ import (
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
+	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
 
 // Git runs git in dir and returns trimmed stdout.
 func Git(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	path, err := toolchain.Lookup(ctx, "git")
+	if err != nil {
+		return "", fmt.Errorf("localizando git: %w", err)
+	}
+	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(toolchain.Environment(ctx), "GIT_TERMINAL_PROMPT=0")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {

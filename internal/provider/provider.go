@@ -8,12 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
+	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
 
 // Relation is how the current user relates to a pull request (bitmask).
@@ -193,7 +193,7 @@ func InstallHint(tool string) string {
 
 // ToolAvailable reports whether a CLI is on PATH.
 func ToolAvailable(tool string) bool {
-	_, err := exec.LookPath(tool)
+	_, err := toolchain.Lookup(context.Background(), tool)
 	return err == nil
 }
 
@@ -220,12 +220,13 @@ func New(in config.Instance, repos ...config.Repo) Client {
 
 // run executes a CLI and returns stdout; stderr is folded into the error.
 func run(ctx context.Context, dir string, env []string, name string, args ...string) ([]byte, error) {
-	if !ToolAvailable(name) {
+	path, err := toolchain.Lookup(ctx, name)
+	if err != nil {
 		return nil, &MissingToolError{Tool: name}
 	}
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(toolchain.Environment(ctx), env...)
 	// Never let a CLI block on an interactive prompt.
 	cmd.Env = append(cmd.Env, "GH_PROMPT_DISABLED=1", "GLAB_NO_PROMPT=1")
 	cmd.Stdin = nil

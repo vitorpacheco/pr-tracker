@@ -301,3 +301,103 @@ integrado.
 
 Esses itens ficam fora do MVP para reduzir risco de plataforma e preservar a
 profundidade do módulo compartilhado.
+
+## Status de desenvolvimento — 25/09/2026
+
+A issue #5, sem comentários adicionais na consulta desta data, confirma a direção
+registrada neste documento. O primeiro incremento implementa parte da fase 1:
+
+- `internal/app` assume a leitura do cache, a consulta concorrente dos providers,
+  a persistência dos resultados completos e a resolução dos clones.
+- A composição dos resultados preserva itens e clones de instâncias com falha,
+  aceita respostas vazias como sucesso, exclui instâncias removidas/desativadas
+  e ordena os itens por atualização.
+- A TUI já consome essas operações. Cursor, filtros, modais e temporizadores
+  continuam no adapter.
+- Cada operação captura uma cópia da configuração, incluindo slices, para que
+  alterações durante um refresh não modifiquem as dependências em uso.
+- Testes cobrem cache parcial, falha remota, erro ao persistir, cancelamento,
+  concorrência entre instâncias e mudanças de configuração.
+
+A extração é incremental: `Application` ainda representa uma geração imutável
+configurada pelo adapter. `Load` retorna snapshots por instância e `Reconcile`
+compõe o estado anterior com o refresh. A aplicação ainda não centraliza o estado
+nem impede refreshes duplicados; a TUI mantém sua proteção existente. O contrato
+sugerido acima continua sendo o alvo, não uma API desktop já concluída.
+
+### Leitura do protótipo e lacunas
+
+A direção visual é compatível com o escopo da issue. Porém, o desenho é uma
+referência visual, não um contrato dos dados disponíveis:
+
+- O protótipo mostra itens fechados; hoje `provider.Client.List` lista itens
+  abertos. Histórico de fechados exige ampliar o contrato dos providers.
+- O inspector mostra nomes e estatísticas por arquivo; `provider.Item` possui
+  somente totais de arquivos, adições e remoções.
+- Frações como `2/2` exigem o número de aprovações obrigatórias, ainda ausente no
+  modelo. A GUI deve mostrar apenas aprovações e decisões realmente fornecidas.
+- A palette desenhada usa atalhos diferentes da TUI para conversa, comentário e
+  merge. Preservar `v`, `n` e `m`, respectivamente, conforme o objetivo de
+  compatibilidade; os atalhos ilustrados não substituem o contrato existente.
+- O estado intermediário de 900 px e os temas claros ainda precisam de validação
+  visual durante a implementação do frontend.
+
+### Próximos incrementos
+
+1. Extrair detalhe, comandos tipados e operações de worktree, preservando as
+   confirmações e a proteção contra alterações locais.
+2. Centralizar o estado e a coordenação de refresh em `Application`, incluindo
+   reconfiguração e encerramento, para completar a migração da TUI.
+3. Criar a casca Wails/Svelte/TypeScript e validar cedo o runtime GTK/WebKitGTK
+   no Linux, sem alterar os builds da CLI.
+4. Implementar lista e inspector nos três breakpoints com testes do bridge e
+   capturas em 600, 900 e 1440 px.
+
+A fase 1 permanece em andamento. Ainda não há uma janela desktop executável;
+paridade funcional e validação nos três sistemas permanecem pendentes.
+
+### Segundo incremento da fase 1
+
+`Application.Detail` e `Application.Execute` agora atendem a TUI. O comando
+possui uma ação tipada e parâmetros explícitos para comentário, aprovação,
+merge, fechamento, checkout, criação/atualização de worktree, preparação de
+terminal/diff e remoção. Opções de merge são resolvidas no módulo compartilhado,
+inclusive o override por repositório.
+
+O backend rejeita ações incompatíveis com issues, comentários vazios, comandos
+inválidos e itens cuja instância foi desativada ou mudou de host/provider.
+Remoção forçada só é aceita como ação separada. Confirmações, mensagens Bubble
+Tea e abertura efetiva do terminal continuam no adapter.
+
+O resultado conserva o sucesso remoto e solicita refresh mesmo quando a limpeza
+local falha. Worktree sujo continua exigindo uma segunda confirmação; falha na
+ação remota nunca inicia a limpeza local. Os testes usam providers e operações
+Git falsos, sem publicar comentários ou alterar repositórios remotos.
+
+Ainda faltam a centralização de estado/coordenação de refresh, os comandos de
+configuração e diagnóstico e a migração completa dos acessos auxiliares da TUI.
+`Detail` e `Command` recebem por enquanto o item selecionado; a resolução por
+`ItemKey` depende da centralização do estado. Não há scaffold desktop neste
+incremento.
+
+### Terceiro incremento: sessão compartilhada e primeira GUI executável
+
+O estado agora pertence a `internal/app.Session`, consumida pela TUI e pelo
+bridge desktop. Refreshes concorrentes compartilham a mesma operação; mudanças
+de configuração invalidam resultados antigos; encerramento cancela e aguarda o
+trabalho em curso. Configuração é validada e persistida antes de substituir a
+cópia em uso. Ações resolvem o item pela chave e impedem operações simultâneas
+sobre o mesmo item.
+
+A casca Wails, bindings gerados, frontend Svelte/TypeScript, lista adaptativa,
+inspector, conversa, confirmações, configurações e diagnóstico já estão
+implementados. `internal/toolchain` resolve executáveis para os dois adapters.
+A GUI também usa terminais externos, diff, navegador e seletor nativo de pasta.
+Há um modo de demonstração explícito para testes sem contas remotas.
+
+A [documentação de desenvolvimento](desktop-development.md) descreve o estado
+atual, comandos e limites de validação. O workflow desktop foi adicionado ao
+repositório, mas não foi disparado remotamente. Build e smoke Linux e testes de
+navegador são verificações locais; os critérios multiplataforma, empacotamento e
+releases continuam abertos. Os registros dos dois incrementos anteriores acima
+são históricos; a interface não está mais limitada ao backend sem janela.

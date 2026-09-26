@@ -75,6 +75,9 @@ type Repo struct {
 
 // Config is the on-disk configuration.
 type Config struct {
+	// ToolPaths optionally pins external executables for desktop launchers.
+	ToolPaths       map[string]string `toml:"tool_paths,omitempty"`
+	DesktopTerminal string            `toml:"desktop_terminal,omitempty"`
 	// RefreshInterval is a Go duration ("5m", "90s").
 	RefreshInterval string `toml:"refresh_interval"`
 	// WorktreeDir holds the PR worktrees. Defaults to ~/.pr-tracker/worktrees.
