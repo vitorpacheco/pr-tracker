@@ -144,9 +144,13 @@ Linux, macOS e Windows. Ele não publica releases. Em macOS/Windows, o build Go
 usa `-tags gui,desktop,production`; no Linux, acrescenta `webkit2_41`. Os jobs de
 CLI e seu loop com `CGO_ENABLED=0` permanecem separados.
 
+O pacote desktop vincula `UniformTypeIdentifiers` via cgo no macOS. Isso permite
+usar `go build` diretamente, sem depender das flags extras do comando de build
+do Wails para os seletores nativos de arquivos.
+
 O primeiro smoke nativo foi executado apenas no Linux/Wayland disponível nesta
 máquina, com configuração vazia e diretórios isolados. As capturas automatizadas
-usam Chromium; elas não substituem testes de WebKitGTK. Builds e execução em
+usam Chromium; elas não substituem testes de WebKitGTK. A execução em
 macOS/Windows e as rodadas em GNOME/KDE ainda precisam de seus respectivos
 ambientes. Terminal, diff e ações remotas não foram executados contra contas ou
 clones reais durante o desenvolvimento.

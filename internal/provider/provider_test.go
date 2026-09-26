@@ -1,9 +1,11 @@
 package provider
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
+	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
 
 func TestAccumulatorMergesRelations(t *testing.T) {
@@ -88,8 +90,11 @@ func TestGitLabConvert(t *testing.T) {
 }
 
 func TestMissingTool(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
-	_, err := run(t.Context(), "", nil, "gh", "api")
+	// An empty PATH still allows Homebrew discovery on macOS.
+	ctx := toolchain.WithPaths(t.Context(), map[string]string{
+		"gh": filepath.Join(t.TempDir(), "missing-gh"),
+	})
+	_, err := run(ctx, "", nil, "gh", "api")
 	if !isMissing(err) {
 		t.Fatalf("expected MissingToolError, got %v", err)
 	}
