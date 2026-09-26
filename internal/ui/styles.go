@@ -2,103 +2,189 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
+	"github.com/vitorpacheco/pr-tracker/internal/theme"
 )
 
-var (
-	cAccent  = lipgloss.Color("#8B5CF6")
-	cAccent2 = lipgloss.Color("#A78BFA")
-	cGreen   = lipgloss.Color("#22C55E")
-	cRed     = lipgloss.Color("#EF4444")
-	cYellow  = lipgloss.Color("#EAB308")
-	cBlue    = lipgloss.Color("#38BDF8")
-	cMuted   = lipgloss.Color("#7C8594")
-	cDim     = lipgloss.Color("#4B5263")
-	cSel     = lipgloss.Color("#2E2A47")
-	cText    = lipgloss.Color("#E5E7EB")
-	cBlack   = lipgloss.Color("#111111")
-)
+type styles struct {
+	palette    theme.Palette
+	cAccent    color.Color
+	cAccent2   color.Color
+	cGreen     color.Color
+	cRed       color.Color
+	cYellow    color.Color
+	cBlue      color.Color
+	cMuted     color.Color
+	cDim       color.Color
+	cSel       color.Color
+	cText      color.Color
+	cBlack     color.Color
+	sTitle     lipgloss.Style
+	sTab       lipgloss.Style
+	sTabActive lipgloss.Style
+	sKey       lipgloss.Style
+	sMuted     lipgloss.Style
+	sDim       lipgloss.Style
+	sBold      lipgloss.Style
+	sGreen     lipgloss.Style
+	sRed       lipgloss.Style
+	sYellow    lipgloss.Style
+	sBlue      lipgloss.Style
+	sAccent    lipgloss.Style
+	sRowSel    lipgloss.Style
+	sLabel     lipgloss.Style
+	sModal     lipgloss.Style
+	sBanner    lipgloss.Style
+	sLabelTag  lipgloss.Style
+	sGroup     lipgloss.Style
+}
 
-var (
-	sTitle     = lipgloss.NewStyle().Bold(true).Foreground(cBlack).Background(cAccent).Padding(0, 1)
-	sTab       = lipgloss.NewStyle().Foreground(cMuted).Padding(0, 1)
-	sTabActive = lipgloss.NewStyle().Foreground(cText).Background(cSel).Bold(true).Padding(0, 1)
-	sKey       = lipgloss.NewStyle().Foreground(cAccent2).Bold(true)
-	sMuted     = lipgloss.NewStyle().Foreground(cMuted)
-	sDim       = lipgloss.NewStyle().Foreground(cDim)
-	sBold      = lipgloss.NewStyle().Bold(true)
-	sGreen     = lipgloss.NewStyle().Foreground(cGreen)
-	sRed       = lipgloss.NewStyle().Foreground(cRed)
-	sYellow    = lipgloss.NewStyle().Foreground(cYellow)
-	sBlue      = lipgloss.NewStyle().Foreground(cBlue)
-	sAccent    = lipgloss.NewStyle().Foreground(cAccent2)
-	sRowSel    = lipgloss.NewStyle().Background(cSel)
-	sLabel     = lipgloss.NewStyle().Foreground(cMuted).Width(14)
-	sModal     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(cAccent).Padding(0, 1)
-	sBanner    = lipgloss.NewStyle().Foreground(cYellow)
-	sLabelTag  = lipgloss.NewStyle().Foreground(cAccent2).Background(lipgloss.Color("#2A2540")).Padding(0, 1)
-	sGroup     = lipgloss.NewStyle().Foreground(cDim).Bold(true)
-)
+func newStyles(p theme.Palette) *styles {
+	cAccent := lipgloss.Color("#8B5CF6")
+	cAccent2 := lipgloss.Color("#A78BFA")
+	cGreen := lipgloss.Color("#22C55E")
+	cRed := lipgloss.Color("#EF4444")
+	cYellow := lipgloss.Color("#EAB308")
+	cBlue := lipgloss.Color("#38BDF8")
+	cMuted := lipgloss.Color("#7C8594")
+	cDim := lipgloss.Color("#4B5263")
+	cSel := lipgloss.Color("#2E2A47")
+	cText := lipgloss.Color("#E5E7EB")
+	cBlack := lipgloss.Color("#111111")
+
+	if p.Name != "" {
+		cAccent = lipgloss.Color(p.Accent)
+		cAccent2 = lipgloss.Color(firstNonEmpty(p.AccentAlt, p.Accent))
+		cGreen = lipgloss.Color(p.Green)
+		cRed = lipgloss.Color(p.Red)
+		cYellow = lipgloss.Color(p.Yellow)
+		cBlue = lipgloss.Color(p.Blue)
+		cMuted = lipgloss.Color(p.Muted)
+		cDim = lipgloss.Color(firstNonEmpty(p.Dim, p.Muted))
+		cSel = lipgloss.Color(p.Selection)
+		cText = lipgloss.Color(p.Foreground)
+		cBlack = lipgloss.Color(p.Background)
+	}
+
+	sTitle := lipgloss.NewStyle().Bold(true).Foreground(cBlack).Background(cAccent).Padding(0, 1)
+	sTab := lipgloss.NewStyle().Foreground(cMuted).Padding(0, 1)
+	sTabActive := lipgloss.NewStyle().Foreground(cText).Background(cSel).Bold(true).Padding(0, 1)
+	sKey := lipgloss.NewStyle().Foreground(cAccent2).Bold(true)
+	sMuted := lipgloss.NewStyle().Foreground(cMuted)
+	sDim := lipgloss.NewStyle().Foreground(cDim)
+	sBold := lipgloss.NewStyle().Bold(true)
+	sGreen := lipgloss.NewStyle().Foreground(cGreen)
+	sRed := lipgloss.NewStyle().Foreground(cRed)
+	sYellow := lipgloss.NewStyle().Foreground(cYellow)
+	sBlue := lipgloss.NewStyle().Foreground(cBlue)
+	sAccent := lipgloss.NewStyle().Foreground(cAccent2)
+	sRowSel := lipgloss.NewStyle().Background(cSel)
+	sLabel := lipgloss.NewStyle().Foreground(cMuted).Width(14)
+	sModal := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(cAccent).Padding(0, 1)
+	sBanner := lipgloss.NewStyle().Foreground(cYellow)
+	sLabelTag := lipgloss.NewStyle().Foreground(cAccent2).Background(lipgloss.Color("#2A2540")).Padding(0, 1)
+	sGroup := lipgloss.NewStyle().Foreground(cDim).Bold(true)
+
+	if p.Name != "" {
+		sTabActive = sTabActive.Foreground(lipgloss.Color(p.SelectionText))
+		sRowSel = sRowSel.Foreground(lipgloss.Color(p.SelectionText))
+		sLabelTag = sLabelTag.Background(lipgloss.Color(firstNonEmpty(p.LabelBackground, p.Selection)))
+		sTitle = sTitle.Foreground(lipgloss.Color(firstNonEmpty(p.TitleText, p.Background)))
+		sModal = sModal.Background(cBlack).Foreground(cText)
+	}
+	return &styles{palette: p,
+		cAccent:    cAccent,
+		cAccent2:   cAccent2,
+		cGreen:     cGreen,
+		cRed:       cRed,
+		cYellow:    cYellow,
+		cBlue:      cBlue,
+		cMuted:     cMuted,
+		cDim:       cDim,
+		cSel:       cSel,
+		cText:      cText,
+		cBlack:     cBlack,
+		sTitle:     sTitle,
+		sTab:       sTab,
+		sTabActive: sTabActive,
+		sKey:       sKey,
+		sMuted:     sMuted,
+		sDim:       sDim,
+		sBold:      sBold,
+		sGreen:     sGreen,
+		sRed:       sRed,
+		sYellow:    sYellow,
+		sBlue:      sBlue,
+		sAccent:    sAccent,
+		sRowSel:    sRowSel,
+		sLabel:     sLabel,
+		sModal:     sModal,
+		sBanner:    sBanner,
+		sLabelTag:  sLabelTag,
+		sGroup:     sGroup,
+	}
+}
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
-func ciIcon(s provider.CIState) string {
+func (st *styles) ciIcon(s provider.CIState) string {
 	switch s {
 	case provider.CISuccess:
-		return sGreen.Render("✔")
+		return st.sGreen.Render("✔")
 	case provider.CIFailure:
-		return sRed.Render("✘")
+		return st.sRed.Render("✘")
 	case provider.CIPending:
-		return sYellow.Render("●")
+		return st.sYellow.Render("●")
 	case provider.CICanceled:
-		return sMuted.Render("⊘")
+		return st.sMuted.Render("⊘")
 	}
-	return sDim.Render("·")
+	return st.sDim.Render("·")
 }
 
-func ciLabel(s provider.CIState, tr func(string) string) string {
+func (st *styles) ciLabel(s provider.CIState, tr func(string) string) string {
 	switch s {
 	case provider.CISuccess:
-		return sGreen.Render(tr("✔ sucesso"))
+		return st.sGreen.Render(tr("✔ sucesso"))
 	case provider.CIFailure:
-		return sRed.Render(tr("✘ falhou"))
+		return st.sRed.Render(tr("✘ falhou"))
 	case provider.CIPending:
-		return sYellow.Render(tr("● em andamento"))
+		return st.sYellow.Render(tr("● em andamento"))
 	case provider.CICanceled:
-		return sMuted.Render(tr("⊘ cancelado"))
+		return st.sMuted.Render(tr("⊘ cancelado"))
 	}
-	return sDim.Render(tr("sem pipeline"))
+	return st.sDim.Render(tr("sem pipeline"))
 }
 
-func reviewIcon(pr *provider.Item) string {
+func (st *styles) reviewIcon(pr *provider.Item) string {
 	switch {
 	case pr.IsIssue():
 		return " "
 	case pr.ApprovedByMe:
-		return sGreen.Render("✓")
+		return st.sGreen.Render("✓")
 	case pr.Review == provider.ReviewApproved:
-		return sGreen.Render("◆")
+		return st.sGreen.Render("◆")
 	case pr.Review == provider.ReviewChangesRequested:
-		return sRed.Render("±")
+		return st.sRed.Render("±")
 	}
-	return sDim.Render("◇")
+	return st.sDim.Render("◇")
 }
 
-func reviewLabel(pr *provider.Item, tr func(string) string) string {
+func (st *styles) reviewLabel(pr *provider.Item, tr func(string) string) string {
 	switch pr.Review {
 	case provider.ReviewApproved:
-		return sGreen.Render(tr("aprovado"))
+		return st.sGreen.Render(tr("aprovado"))
 	case provider.ReviewChangesRequested:
-		return sRed.Render(tr("alterações solicitadas"))
+		return st.sRed.Render(tr("alterações solicitadas"))
 	case provider.ReviewRequired:
-		return sYellow.Render(tr("aguardando revisão"))
+		return st.sYellow.Render(tr("aguardando revisão"))
 	}
-	return sDim.Render("—")
+	return st.sDim.Render("—")
 }
 
 func age(t time.Time, tr func(string) string) string {

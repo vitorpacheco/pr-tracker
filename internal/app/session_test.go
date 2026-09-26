@@ -12,6 +12,7 @@ import (
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
+	"github.com/vitorpacheco/pr-tracker/internal/theme"
 )
 
 func TestSessionSharesRefreshAndReturnsDetachedState(t *testing.T) {
@@ -241,4 +242,30 @@ func TestSessionCoalescesWaitersAndCancelsOnClose(t *testing.T) {
 			t.Fatalf("closed refresh = %v", err)
 		}
 	})
+}
+
+func TestSaveCustomThemeAndRejectMissingFile(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("PR_TRACKER_CONFIG", filepath.Join(root, "config.toml"))
+	if err := theme.Export(filepath.Join(root, "colors.toml"), theme.DefaultTUI()); err != nil {
+		t.Fatal(err)
+	}
+	s := NewSession(config.Default(), nil)
+	defer s.Close()
+	next := s.Configuration()
+	next.ThemeFile = "colors.toml"
+	if err := s.SaveSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	next.ThemeFile = "missing.toml"
+	if err := s.SaveSettings(next); err == nil {
+		t.Fatal("accepted missing palette")
+	}
+	if s.Configuration().ThemeFile != "colors.toml" {
+		t.Fatal("failed save changed live theme")
+	}
+	persisted, _, err := config.Load()
+	if err != nil || persisted.ThemeFile != "colors.toml" {
+		t.Fatalf("persisted %+v %v", persisted, err)
+	}
 }

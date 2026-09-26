@@ -91,3 +91,25 @@ será sem assinatura Developer ID e sem notarização.
 
 Registrar separadamente bloqueios do Gatekeeper ao abrir o pacote sem assinatura
 e falhas da aplicação. Não desativar o Gatekeeper globalmente para os testes.
+
+## Integração Omarchy — 26/09/2026
+
+A GUI Wails e a TUI no Foot foram abertas no Hyprland com configuração/cache
+isolados e a paleta real do Omarchy. Fundo, texto, destaque laranja e cores de
+status seguiram o `colors.toml` ativo. Em uma segunda rodada, ambas leram uma
+cópia da paleta em `XDG_STATE_HOME` temporário; substituir essa cópia pela paleta
+clara Rose Pine atualizou as duas janelas sem reiniciar. O tema do desktop não
+foi alterado. A TUI também continuou respeitando `NO_COLOR`.
+
+Testes Go cobrem leitura atual/legada, prioridade dos caminhos, paleta inválida,
+recarga e preservação de estado da TUI sem compartilhar estilos entre modelos.
+O teste Playwright cobre a paleta na opção Sistema, precedência de Claro manual,
+retorno a Sistema e remoção das cores quando a paleta deixa de estar disponível.
+Capturas com bridge simulado:
+
+- [GUI com paleta escura](screenshots/gui-omarchy-dark.png)
+- [GUI com paleta clara](screenshots/gui-omarchy-light.png)
+
+Capturas nativas locais: `dist/desktop-smoke/omarchy-gui-settled.png`,
+`omarchy-tui-color.png`, `omarchy-gui-live-light.png` e
+`omarchy-tui-live-light.png` no mesmo diretório.

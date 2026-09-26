@@ -14,6 +14,10 @@ export function Execute(arg1) {
   return window['go']['main']['Bridge']['Execute'](arg1);
 }
 
+export function ExportTheme(arg1) {
+  return window['go']['main']['Bridge']['ExportTheme'](arg1);
+}
+
 export function Load() {
   return window['go']['main']['Bridge']['Load']();
 }
@@ -34,6 +38,10 @@ export function PickFolder() {
   return window['go']['main']['Bridge']['PickFolder']();
 }
 
+export function PickTheme() {
+  return window['go']['main']['Bridge']['PickTheme']();
+}
+
 export function Refresh() {
   return window['go']['main']['Bridge']['Refresh']();
 }
@@ -44,4 +52,8 @@ export function SaveSettings(arg1) {
 
 export function Settings() {
   return window['go']['main']['Bridge']['Settings']();
+}
+
+export function Theme() {
+  return window['go']['main']['Bridge']['Theme']();
 }

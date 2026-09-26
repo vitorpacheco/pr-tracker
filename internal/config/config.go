@@ -78,7 +78,8 @@ type Repo struct {
 // Config is the on-disk configuration.
 type Config struct {
 	// Language is system (default), en or pt; shared by both interfaces.
-	Language string `toml:"language"`
+	Language  string `toml:"language"`
+	ThemeFile string `toml:"theme_file,omitempty"`
 	// ToolPaths optionally pins external executables for desktop launchers.
 	ToolPaths       map[string]string `toml:"tool_paths,omitempty"`
 	DesktopTerminal string            `toml:"desktop_terminal,omitempty"`
@@ -363,3 +364,19 @@ func NormalizeHost(h string) string {
 }
 
 func (c *Config) t(message string) string { return i18n.Text(i18n.Resolve(c.Language), message) }
+
+// ThemePath resolves relative palette files beside the configuration file.
+func (c *Config) ThemePath() string {
+	if c.ThemeFile == "" {
+		return ""
+	}
+	path := ExpandHome(c.ThemeFile)
+	if filepath.IsAbs(path) {
+		return path
+	}
+	base := c.path
+	if base == "" {
+		base, _ = Path()
+	}
+	return filepath.Join(filepath.Dir(base), path)
+}

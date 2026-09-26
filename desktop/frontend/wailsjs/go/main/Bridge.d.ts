@@ -3,6 +3,7 @@
 import {provider} from '../models';
 import {app} from '../models';
 import {main} from '../models';
+import {theme} from '../models';
 import {config} from '../models';
 
 export function Detail(arg1:string):Promise<provider.Thread>;
@@ -10,6 +11,8 @@ export function Detail(arg1:string):Promise<provider.Thread>;
 export function Diagnose():Promise<app.Diagnostics>;
 
 export function Execute(arg1:main.Request):Promise<main.Result>;
+
+export function ExportTheme(arg1:theme.Palette):Promise<string>;
 
 export function Load():Promise<main.View>;
 
@@ -21,8 +24,12 @@ export function OpenItem(arg1:string):Promise<void>;
 
 export function PickFolder():Promise<string>;
 
+export function PickTheme():Promise<string>;
+
 export function Refresh():Promise<main.View>;
 
 export function SaveSettings(arg1:config.Config):Promise<main.View>;
 
 export function Settings():Promise<config.Config>;
+
+export function Theme():Promise<theme.Palette>;

@@ -75,6 +75,12 @@ XDG_CACHE_HOME="$PWD/.cache/desktop-smoke/cache" \
 - Configurações de instâncias, mapeamentos e `track_all`, diagnóstico de CLIs e
   autenticação, tema do sistema ou seleção manual claro/escuro.
 
+No Omarchy, a opção **Tema → Sistema** usa a paleta ativa do desktop, compartilhada
+com a TUI. As duas interfaces releem a paleta aproximadamente a cada dois segundos.
+Claro/Escuro na GUI prevalecem sobre a paleta do Omarchy. Fora do Omarchy ou com
+arquivo ausente/inválido, as cores padrão continuam disponíveis. A integração
+somente lê `colors.toml`, sem executar arquivos de tema ou alterar o sistema.
+
 ## Ferramentas e terminais
 
 Campos novos opcionais no TOML:
@@ -180,3 +186,11 @@ Dados fictícios do modo de demonstração:
 - [1440 px, claro](screenshots/gui-1440-light.png)
 - [Menu recolhido](screenshots/gui-sidebar-collapsed.png)
 - [Painéis redimensionados](screenshots/gui-panels-resized.png)
+
+O campo **Arquivo de cores** é compartilhado com a TUI e salvo em `theme_file`.
+Um arquivo personalizado prevalece sobre a escolha Claro/Escuro e o Omarchy.
+O seletor abre arquivos TOML; **Exportar esquema de cores** grava a paleta que
+está sendo exibida, inclusive o padrão, em um novo arquivo escolhido pelo usuário.
+Caminhos relativos são resolvidos ao lado do `config.toml`. A exportação não altera
+as preferências. A tabela `[gui]` preserva as cores dos controles do tema padrão;
+sem ela, os controles seguem as cores semânticas da paleta.

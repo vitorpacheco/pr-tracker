@@ -137,3 +137,23 @@ func TestLanguagePreferenceRoundTrip(t *testing.T) {
 		t.Fatalf("legacy config = %+v, %v", cfg, err)
 	}
 }
+
+func TestThemePathAndPersistence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("PR_TRACKER_CONFIG", path)
+	cfg, _, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.ThemeFile = "colors.toml"
+	if cfg.ThemePath() != filepath.Join(filepath.Dir(path), "colors.toml") {
+		t.Fatal(cfg.ThemePath())
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _, err := Load()
+	if err != nil || loaded.ThemeFile != cfg.ThemeFile {
+		t.Fatalf("persistence: %+v %v", loaded, err)
+	}
+}

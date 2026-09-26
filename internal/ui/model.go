@@ -21,6 +21,7 @@ import (
 	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/launch"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
+	"github.com/vitorpacheco/pr-tracker/internal/theme"
 	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
 
@@ -85,10 +86,12 @@ const (
 
 // Model is the root Bubble Tea model.
 type Model struct {
-	cfg      *config.Config
-	language string
-	clients  map[string]provider.Client
-	session  *app.Session
+	styles     *styles
+	themeError error
+	cfg        *config.Config
+	language   string
+	clients    map[string]provider.Client
+	session    *app.Session
 
 	prs     []provider.Item
 	instErr map[string]error
@@ -148,6 +151,7 @@ func New(cfg *config.Config, store *cache.Store) *Model {
 	fi.Placeholder = i18n.Text(i18n.Resolve(cfg.Language), "filtrar por título, repo, autor…")
 	fi.SetWidth(40)
 	m := &Model{
+		styles:   newStyles(theme.Palette{}),
 		cfg:      cfg,
 		language: i18n.Resolve(cfg.Language),
 		session:  app.NewSession(cfg, store),
@@ -157,6 +161,12 @@ func New(cfg *config.Config, store *cache.Store) *Model {
 		pending:  map[string]string{},
 		filter:   fi,
 		mode:     launch.Resolve(cfg.Terminal),
+	}
+	p, err := theme.Resolve(cfg.ThemePath())
+	if err != nil {
+		m.themeError = err
+	} else {
+		m.styles = newStyles(p)
 	}
 	m.rebuildClients()
 	return m
@@ -181,6 +191,7 @@ type (
 		refresh bool
 	}
 	clockMsg       struct{}
+	paletteMsg     theme.Palette
 	autoRefreshMsg struct{ gen int }
 	actionDoneMsg  struct {
 		key     string
@@ -345,7 +356,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.status != "" && m.statusKind != stErr && time.Since(m.statusAt) > 8*time.Second {
 			m.status = ""
 		}
+		if m.frame%2 == 0 {
+			path := m.cfg.ThemePath()
+			return m, tea.Batch(clock(), func() tea.Msg { p, err := theme.Resolve(path); return themeLoadedMsg{path, p, err} })
+		}
 		return m, clock()
+	case themeLoadedMsg:
+		if msg.path != m.cfg.ThemePath() {
+			return m, nil
+		}
+		m.themeError = msg.err
+		if msg.err != nil {
+			return m, nil
+		}
+		return m.Update(paletteMsg(msg.palette))
+	case paletteMsg:
+		if p := theme.Palette(msg); !p.Equal(m.styles.palette) {
+			m.styles = newStyles(p)
+			if m.thread != nil {
+				m.thread.lines = nil
+			}
+		}
+		return m, nil
 
 	case autoRefreshMsg:
 		if msg.gen != m.gen {
@@ -678,7 +710,13 @@ func (m *Model) ask(title, yes string, onYes func() tea.Cmd, body ...string) {
 
 func (m *Model) formResult(res formResult) tea.Cmd {
 	switch res {
+	case formExport:
+		m.openThemeExportForm()
 	case formCancel:
+		if m.form.back != nil {
+			m.form = m.form.back
+			return nil
+		}
 		m.modal, m.form = modalNone, nil
 	case formSubmit:
 		f := m.form
@@ -965,7 +1003,7 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 			body = append(body, m.t("apagar branch de origem: sim"))
 		}
 		if p.CI == provider.CIFailure {
-			body = append(body, sRed.Render(m.t("atenção: pipeline falhou")))
+			body = append(body, m.styles.sRed.Render(m.t("atenção: pipeline falhou")))
 		}
 		m.ask(title, "Merge", func() tea.Cmd {
 			return start(m.t("fazendo merge"), func(ctx context.Context) tea.Msg {
@@ -1011,7 +1049,7 @@ func (m *Model) confirmForceRemove(pr provider.Item) {
 			out, err := m.session.Execute(ctx, pr.Key(), app.Command{Action: app.RemoveWorktree, Item: pr, Force: true})
 			return actionResult(pr, "x", out, err)
 		}
-	}, m.wts[key], "", sRed.Render(m.t("As alterações não commitadas serão perdidas.")))
+	}, m.wts[key], "", m.styles.sRed.Render(m.t("As alterações não commitadas serão perdidas.")))
 }
 
 func filepathBase(p string) string {
@@ -1081,13 +1119,21 @@ func (m *Model) find(key string) *provider.Item {
 	return nil
 }
 
+type themeLoadedMsg struct {
+	path    string
+	palette theme.Palette
+	err     error
+}
+
 func (m *Model) openSettingsForm() {
 	c := m.cfg
 	wtDir, _ := c.Worktrees()
 	f := &form{
-		title: m.t("Configurações — ") + c.FilePath(),
+		title:     m.t("Configurações — ") + c.FilePath(),
+		canExport: true,
 		fields: []*field{
 			choiceField("Idioma", []string{"system", "en", "pt"}, firstNonEmpty(c.Language, "system"), m.t("Seguir o idioma do computador ou escolher um idioma")),
+			textField("Arquivo de cores", c.ThemeFile, "colors.toml", m.t("Vazio segue o tema do sistema; caminho relativo à configuração")),
 			textField("Atualização", c.RefreshInterval, "5m", m.t("intervalo de atualização automática (ex.: 90s, 5m, 1h)")),
 			choiceField("Terminal", []string{"auto", "herdr", "tmux", "inline"}, c.Terminal, m.t("onde abrir terminal/diff; auto = herdr > tmux > inline")),
 			choiceField("Diff", []string{"hunk", "git"}, c.DiffTool, m.t("ferramenta de revisão do diff")),
@@ -1099,6 +1145,11 @@ func (m *Model) openSettingsForm() {
 	f.submit = func(f *form) error {
 		next := *c
 		next.Language = f.get("Idioma").value()
+		next.ThemeFile = f.get("Arquivo de cores").value()
+		p, err := theme.Resolve(next.ThemePath())
+		if err != nil {
+			return err
+		}
 		next.RefreshInterval = f.get("Atualização").value()
 		next.Terminal = f.get("Terminal").value()
 		next.DiffTool = f.get("Diff").value()
@@ -1119,6 +1170,8 @@ func (m *Model) openSettingsForm() {
 		if err := m.saveConfiguration(); err != nil {
 			return err
 		}
+		m.styles = newStyles(p)
+		m.themeError = nil
 		m.language = i18n.Resolve(c.Language)
 		m.filter.Placeholder = m.t("filtrar por título, repo, autor…")
 		if m.thread != nil {
@@ -1286,3 +1339,22 @@ func (m *Model) toolAvailable(name string) bool {
 }
 
 func (m *Model) t(message string) string { return i18n.Text(m.language, message) }
+
+func (m *Model) openThemeExportForm() {
+	previous := m.form
+	p := m.styles.palette
+	if p.Name == "" {
+		p = theme.DefaultTUI()
+	}
+	f := &form{title: m.t("Exportar esquema de cores"), back: previous, fields: []*field{textField("Destino", "~/colors.toml", "colors.toml", m.t("Escolha um arquivo novo"))}}
+	f.submit = func(f *form) error {
+		if err := theme.Export(config.ExpandHome(f.get("Destino").value()), p); err != nil {
+			return err
+		}
+		m.setStatus(stOK, m.t("Esquema de cores exportado"))
+		m.form = previous
+		return nil
+	}
+	m.form = f
+	f.setFocus(0)
+}

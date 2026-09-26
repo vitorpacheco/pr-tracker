@@ -34,19 +34,19 @@ type hint struct {
 	key, label string
 }
 
-func renderHint(h hint) string {
-	return sKey.Render(h.key) + " " + sMuted.Render(h.label)
+func (st *styles) renderHint(h hint) string {
+	return st.sKey.Render(h.key) + " " + st.sMuted.Render(h.label)
 }
 
 // hintBar lays hints out left to right, wrapping at width. Each hint becomes
 // a "key:<key>" zone relative to (x0, y0).
-func hintBar(hints []hint, width, x0, y0 int, z *zones) []string {
+func (st *styles) hintBar(hints []hint, width, x0, y0 int, z *zones) []string {
 	var lines []string
 	var cur strings.Builder
 	x := 0
-	sep := sDim.Render("  ")
+	sep := st.sDim.Render("  ")
 	for _, h := range hints {
-		s := renderHint(h)
+		s := st.renderHint(h)
 		w := lipgloss.Width(s)
 		if x > 0 && x+2+w > width {
 			lines = append(lines, cur.String())

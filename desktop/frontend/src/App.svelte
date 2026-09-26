@@ -7,6 +7,7 @@
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import { api, demoMode } from './lib/api';
+  import { applyTheme, preference, snapshotTheme } from './lib/theme';
   import type { View } from './lib/list';
   import { filterItems, nextSelection, relativeAge } from './lib/list';
   import Splitter from './lib/Splitter.svelte';
@@ -30,6 +31,7 @@
   let loading = true,
     refreshing = false,
     error = '',
+    themeError = '',
     notice = '',
     detailError = '',
     detailLoading = false;
@@ -321,12 +323,32 @@
     settingsBusy = true;
     try {
       setView(await api.saveSettings(settings));
+      systemPalette = await api.theme();
+      applyTheme(document.documentElement, preference(theme), systemPalette);
       settingsDialog.close();
       notice = translator(language)('Configurações salvas.');
     } catch (e) {
       error = textError(e);
     } finally {
       settingsBusy = false;
+    }
+  }
+  async function pickThemeFile() {
+    try {
+      const path = await api.pickTheme();
+      if (path && settings) settings.ThemeFile = path;
+    } catch (e) {
+      error = textError(e);
+    }
+  }
+  async function exportColors() {
+    try {
+      const path = await api.exportTheme(
+        snapshotTheme(document.documentElement, systemPalette),
+      );
+      if (path) notice = t('Esquema de cores exportado') + ': ' + path;
+    } catch (e) {
+      error = textError(e);
     }
   }
   async function diagnose() {
@@ -340,14 +362,15 @@
     }
   }
   function changeTheme(value: string) {
-    theme = value;
-    document.documentElement.dataset.theme = value;
+    theme = preference(value);
+    applyTheme(document.documentElement, preference(theme), systemPalette);
     try {
       localStorage.setItem('pr-tracker-theme', value);
     } catch {
       /* storage can be disabled */
     }
   }
+  let systemPalette: Awaited<ReturnType<typeof api.theme>>;
   function keydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
@@ -454,6 +477,20 @@
       drafts = {};
     }
     let stopped = false;
+    const updateTheme = async () => {
+      try {
+        const palette = await api.theme();
+        if (stopped) return;
+        systemPalette = palette;
+        themeError = '';
+        applyTheme(document.documentElement, preference(theme), palette);
+      } catch (e) {
+        if (!stopped) themeError = textError(e);
+        /* Keep the last working palette if its file becomes unreadable. */
+      }
+    };
+    void updateTheme();
+    const themeTimer = setInterval(updateTheme, 2000);
     void (async () => {
       try {
         setView(await api.load());
@@ -477,6 +514,7 @@
       mounted = false;
       clearTimeout(autoTimer);
       clearInterval(draftTimer);
+      clearInterval(themeTimer);
       saveDrafts();
       window.removeEventListener('beforeunload', saveDrafts);
     };
@@ -551,6 +589,9 @@
     >
   </header>
   <div class="notifications">
+    {#if themeError}<div class="banner error" role="alert">
+        {themeError}
+      </div>{/if}
     {#if error}<div class="banner error" role="alert">
         {error}<button
           aria-label={t('Fechar erro')}
@@ -1096,6 +1137,19 @@
     ></label
   >
   {#if settings}
+    <label
+      >{t('Arquivo de cores')}<input
+        bind:value={settings.ThemeFile}
+        placeholder="colors.toml"
+      /></label
+    >
+    <p class="muted">
+      {t('Vazio segue o tema do sistema; caminho relativo à configuração')}
+    </p>
+    <div class="actions">
+      <button onclick={pickThemeFile}>{t('Selecionar arquivo')}</button>
+      <button onclick={exportColors}>{t('Exportar esquema de cores')}</button>
+    </div>
     <label
       >{t('Idioma')}<select bind:value={settings.Language}
         ><option value="system">{t('Sistema')}</option><option value="en"

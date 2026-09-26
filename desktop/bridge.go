@@ -11,6 +11,7 @@ import (
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
+	"github.com/vitorpacheco/pr-tracker/internal/theme"
 )
 
 type Item struct {
@@ -52,10 +53,40 @@ type Bridge struct {
 	terminal      func(string, []string) error
 	folder        func(string) error
 	pickFolder    func() (string, error)
+	pickTheme     func() (string, error)
+	saveTheme     func() (string, error)
 	session       *app.Session
 	openURL       func(string)
 	startupError  string
 	settingsError error
+}
+
+func (b *Bridge) Theme() (theme.Palette, error) {
+	b.wait()
+	cfg := b.session.Configuration()
+	p, err := theme.Resolve(cfg.ThemePath())
+	return p, b.localizedError(err)
+}
+func (b *Bridge) PickTheme() (string, error) {
+	b.wait()
+	if b.pickTheme == nil {
+		return "", errors.New(b.t("Seletor de arquivos indisponível"))
+	}
+	return b.pickTheme()
+}
+func (b *Bridge) ExportTheme(p theme.Palette) (string, error) {
+	b.wait()
+	if b.saveTheme == nil {
+		return "", errors.New(b.t("Seletor de arquivos indisponível"))
+	}
+	path, err := b.saveTheme()
+	if err != nil || path == "" {
+		return "", b.localizedError(err)
+	}
+	if err := theme.Export(path, p); err != nil {
+		return "", b.localizedError(err)
+	}
+	return path, nil
 }
 
 func (b *Bridge) Load() (View, error) {

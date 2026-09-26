@@ -1,6 +1,12 @@
 import { translator, browserLanguage } from './i18n';
 import * as native from '../../wailsjs/go/main/Bridge';
-import type { main, config, provider, app } from '../../wailsjs/go/models';
+import type {
+  main,
+  config,
+  provider,
+  app,
+  theme,
+} from '../../wailsjs/go/models';
 import type { View } from './list';
 function flatten(view: main.View): View {
   return {
@@ -41,6 +47,10 @@ async function call<T>(
   return (native[name] as (...args: unknown[]) => Promise<T>)(...args);
 }
 export const api = {
+  pickTheme: () => call<string>('PickTheme'),
+  exportTheme: (palette: theme.Palette) => call<string>('ExportTheme', palette),
+  theme: () =>
+    demoMode ? Promise.resolve(undefined) : call<theme.Palette>('Theme'),
   load: () => readView('Load'),
   refresh: () => readView('Refresh'),
   detail: (key: string) => call<provider.Thread>('Detail', key),

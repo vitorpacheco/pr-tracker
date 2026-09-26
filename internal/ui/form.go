@@ -62,11 +62,13 @@ func (f *field) value() string {
 
 // form is a modal with labelled fields and Save/Cancel buttons.
 type form struct {
-	title  string
-	fields []*field
-	focus  int
-	err    string
-	submit func(f *form) error
+	canExport bool
+	back      *form
+	title     string
+	fields    []*field
+	focus     int
+	err       string
+	submit    func(f *form) error
 }
 
 func (f *form) get(label string) *field {
@@ -102,11 +104,16 @@ const (
 	formContinue formResult = iota
 	formCancel
 	formSubmit
+	formExport
 )
 
 func (f *form) update(msg tea.KeyPressMsg) (formResult, tea.Cmd) {
 	fl := f.fields[f.focus]
 	switch msg.String() {
+	case "ctrl+e":
+		if f.canExport {
+			return formExport, nil
+		}
 	case "esc":
 		return formCancel, nil
 	case "ctrl+s":
@@ -145,6 +152,10 @@ func (f *form) update(msg tea.KeyPressMsg) (formResult, tea.Cmd) {
 // click handles a zone id belonging to the form.
 func (f *form) click(id string, idx int) (formResult, tea.Cmd) {
 	switch id {
+	case "form:export":
+		if f.canExport {
+			return formExport, nil
+		}
 	case "form:save":
 		return formSubmit, nil
 	case "form:cancel":
@@ -165,19 +176,20 @@ func (f *form) click(id string, idx int) (formResult, tea.Cmd) {
 
 // render returns the modal body; zones are relative to the box's top-left
 // content origin and are offset by the caller.
-func (f *form) render(z *zones, tr func(string) string) string {
+func (f *form) render(z *zones, tr func(string) string, st *styles) string {
 	const labelW = 18
 	var b []string
-	b = append(b, sBold.Foreground(cAccent2).Render(f.title), "")
+	b = append(b, st.sBold.Foreground(st.cAccent2).Render(f.title), "")
 	for i, fl := range f.fields {
 		focused := i == f.focus
-		label := sLabel.Width(labelW).Render(tr(fl.label))
+		label := st.sLabel.Width(labelW).Render(tr(fl.label))
 		if focused {
-			label = sKey.Width(labelW).Render("› " + tr(fl.label))
+			label = st.sKey.Width(labelW).Render("› " + tr(fl.label))
 		}
 		var val string
 		switch fl.kind {
 		case fieldText:
+			st.input(&fl.input)
 			val = fl.input.View()
 		case fieldChoice:
 			var parts []string
@@ -186,38 +198,43 @@ func (f *form) render(z *zones, tr func(string) string) string {
 					o = tr(label)
 				}
 				if j == fl.choice {
-					parts = append(parts, sTabActive.Render(o))
+					parts = append(parts, st.sTabActive.Render(o))
 				} else {
-					parts = append(parts, sTab.Render(o))
+					parts = append(parts, st.sTab.Render(o))
 				}
 			}
 			val = strings.Join(parts, "")
 			if focused {
-				val = sDim.Render("◂ ") + val + sDim.Render(" ▸")
+				val = st.sDim.Render("◂ ") + val + st.sDim.Render(" ▸")
 			}
 		case fieldBool:
 			if fl.on {
-				val = sGreen.Render(tr("[x] sim"))
+				val = st.sGreen.Render(tr("[x] sim"))
 			} else {
-				val = sMuted.Render(tr("[ ] não"))
+				val = st.sMuted.Render(tr("[ ] não"))
 			}
 		}
 		line := label + val
 		z.add("form:field:"+itoa(i), 0, len(b), 60, 1)
 		b = append(b, line)
 		if focused && fl.help != "" {
-			b = append(b, spaces(labelW)+sDim.Render(fl.help))
+			b = append(b, spaces(labelW)+st.sDim.Render(fl.help))
 		}
 	}
 	b = append(b, "")
 	if f.err != "" {
-		b = append(b, sRed.Render("✘ "+f.err), "")
+		b = append(b, st.sRed.Render("✘ "+f.err), "")
 	}
-	save := sTabActive.Render(tr("Salvar ctrl+s"))
-	cancel := sTab.Render(tr("Cancelar esc"))
+	save := st.sTabActive.Render(tr("Salvar ctrl+s"))
+	cancel := st.sTab.Render(tr("Cancelar esc"))
 	z.add("form:save", 0, len(b), lipgloss.Width(save), 1)
 	z.add("form:cancel", lipgloss.Width(save)+2, len(b), lipgloss.Width(cancel), 1)
 	b = append(b, save+"  "+cancel)
-	b = append(b, sDim.Render(tr("tab/↑↓ navega · ←/→/espaço altera opções")))
+	if f.canExport {
+		label := st.sTab.Render(tr("Exportar tema ctrl+e"))
+		z.add("form:export", 0, len(b), lipgloss.Width(label), 1)
+		b = append(b, label)
+	}
+	b = append(b, st.sDim.Render(tr("tab/↑↓ navega · ←/→/espaço altera opções")))
 	return strings.Join(b, "\n")
 }

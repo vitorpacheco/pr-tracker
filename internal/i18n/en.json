@@ -468,5 +468,22 @@
   "resposta inválida do tea: %w": "invalid tea response: %w",
   "tea não tem login para %s. Rode: tea login add --url https://%s": "tea has no login for %s. Run: tea login add --url https://%s",
   "resposta inválida do tea para %s: %w": "invalid tea response for %s: %w",
-  "tea não autenticado em %s (%s). Rode: tea login add --url %s": "tea not authenticated on %s (%s). Run: tea login add --url %s"
+  "tea não autenticado em %s (%s). Rode: tea login add --url %s": "tea not authenticated on %s (%s). Run: tea login add --url %s",
+  "Arquivo de cores": "Color file",
+  "Vazio segue o tema do sistema; caminho relativo à configuração": "Leave empty to follow the system theme; paths are relative to the configuration",
+  "Exportar tema ctrl+e": "Export theme ctrl+e",
+  "Exportar esquema de cores": "Export color scheme",
+  "Esquema de cores exportado": "Color scheme exported",
+  "Selecionar arquivo": "Choose file",
+  "Destino": "Destination",
+  "Escolha um arquivo novo": "Choose a new file",
+  "Seletor de arquivos indisponível": "File picker unavailable",
+  "lendo esquema de cores %q: %w": "reading color scheme %q: %w",
+  "esquema de cores inválido %q: %w": "invalid color scheme %q: %w",
+  "cor inválida em %s: use #RRGGBB": "invalid color in %s: use #RRGGBB",
+  "modo de cores inválido: use light ou dark": "invalid color mode: use light or dark",
+  "tabela gui inválida": "invalid gui table",
+  "cor inválida em gui.%s": "invalid color in gui.%s",
+  "o arquivo já existe; escolha outro destino: %s": "file already exists; choose another destination: %s",
+  "exportando esquema de cores: %w": "exporting color scheme: %w"
 }

@@ -1,4 +1,33 @@
 :root {
+  --selected-text: var(--text);
+  --yellow: #eab308;
+  --blue: #38bdf8;
+  --dialog-shadow: #0008;
+  --backdrop: #030911aa;
+  --success-background: #143c3029;
+  --approve-background: #166b4c;
+  --primary-background: #216ed4;
+  --avatar-background: #254754;
+  --label-background: #2670ae10;
+  --success-border: #287655;
+  --approve-border: #298466;
+  --primary-hover: #2b80ed;
+  --selected-border: #356fa8;
+  --label-border: #3b6184;
+  --primary-border: #3e8ded;
+  --avatar-border: #477081;
+  --label-alt-border: #68538d;
+  --label-alt-background: #7252a115;
+  --danger-background: #9a3044;
+  --error-background: #a646500a;
+  --error-border: #a646504f;
+  --label-alt-text: #b7a0e7;
+  --avatar-text: #b9dde8;
+  --danger-border: #be4860;
+  --pending-text: #e6b85b;
+  --approve-text: #effff8;
+  --primary-text: #fff;
+
   font-family:
     Inter,
     ui-sans-serif,
@@ -447,7 +476,7 @@ code {
 }
 .filters button.active {
   background: var(--selected);
-  border-color: #356fa8;
+  border-color: var(--selected-border);
   color: var(--text);
 }
 .table-head,
@@ -529,17 +558,17 @@ code {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  border: 1px solid #477081;
+  border: 1px solid var(--avatar-border);
   border-radius: 50%;
-  background: #254754;
-  color: #b9dde8;
+  background: var(--avatar-background);
+  color: var(--avatar-text);
   font-size: 7px;
   display: grid;
   place-items: center;
 }
 .ci {
   font-size: 17px;
-  color: #e6b85b;
+  color: var(--pending-text);
 }
 .ci.success {
   color: var(--green);
@@ -569,8 +598,8 @@ code {
 }
 .pill.green {
   color: var(--green);
-  border-color: #287655;
-  background: #143c3029;
+  border-color: var(--success-border);
+  background: var(--success-background);
 }
 .list-footer {
   display: flex;
@@ -669,17 +698,17 @@ code {
   margin: 12px 0 22px;
 }
 .labels span {
-  border: 1px solid #3b6184;
+  border: 1px solid var(--label-border);
   border-radius: 20px;
   padding: 4px 8px;
   font-size: 9px;
   color: var(--accent);
-  background: #2670ae10;
+  background: var(--label-background);
 }
 .labels span:nth-child(2n) {
-  color: #b7a0e7;
-  border-color: #68538d;
-  background: #7252a115;
+  color: var(--label-alt-text);
+  border-color: var(--label-alt-border);
+  background: var(--label-alt-background);
 }
 .detail-tabs {
   display: flex;
@@ -803,17 +832,17 @@ code {
   font-size: 11px;
 }
 .primary {
-  background: #216ed4;
-  color: #fff;
-  border-color: #3e8ded;
+  background: var(--primary-background);
+  color: var(--primary-text);
+  border-color: var(--primary-border);
 }
 .primary:hover {
-  background: #2b80ed;
+  background: var(--primary-hover);
 }
 .approve {
-  background: #166b4c;
-  color: #effff8;
-  border-color: #298466;
+  background: var(--approve-background);
+  color: var(--approve-text);
+  border-color: var(--approve-border);
   flex: 1;
 }
 .more {
@@ -920,9 +949,9 @@ code {
   overflow-wrap: anywhere;
 }
 .banner.error {
-  border-color: #a646504f;
+  border-color: var(--error-border);
   color: var(--red);
-  background: #a646500a;
+  background: var(--error-background);
 }
 .banner button {
   background: none;
@@ -973,11 +1002,11 @@ dialog {
   padding: 28px;
   width: min(530px, calc(100% - 32px));
   max-height: calc(100dvh - 48px);
-  box-shadow: 0 30px 120px #0008;
+  box-shadow: 0 30px 120px var(--dialog-shadow);
   overflow: auto;
 }
 dialog::backdrop {
-  background: #030911aa;
+  background: var(--backdrop);
   backdrop-filter: blur(4px);
 }
 dialog h2 {
@@ -1041,8 +1070,8 @@ dialog h2 {
   margin-top: 25px;
 }
 .danger {
-  background: #9a3044;
-  border-color: #be4860;
+  background: var(--danger-background);
+  border-color: var(--danger-border);
 }
 .settings-dialog {
   width: min(680px, calc(100% - 30px));
@@ -1297,7 +1326,7 @@ legend {
   }
   .item-row.selected {
     box-shadow: inset 3px 0 var(--accent);
-    border: 1px solid #356fa8;
+    border: 1px solid var(--selected-border);
     border-radius: 6px;
   }
   .rows {
@@ -1375,4 +1404,53 @@ legend {
     min-height: 72px;
     padding-block: 10px;
   }
+}
+
+/* System mode uses Omarchy's semantic colors, including controls that normally
+   have fixed brand colors. Manual light/dark choices keep their existing look. */
+:root[data-system-theme='omarchy'] .primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+:root[data-system-theme='omarchy'] .primary:hover {
+  background: color-mix(in srgb, var(--accent) 80%, var(--text));
+}
+:root[data-system-theme='omarchy'] .approve {
+  background: var(--green);
+  color: var(--bg);
+  border-color: var(--green);
+}
+:root[data-system-theme='omarchy'] .danger {
+  background: var(--red);
+  color: var(--bg);
+  border-color: var(--red);
+}
+:root[data-system-theme='omarchy'] .filters button.active,
+:root[data-system-theme='omarchy'] .item-row.selected {
+  color: var(--selected-text);
+  border-color: var(--accent);
+}
+:root[data-system-theme='omarchy'] .avatar,
+:root[data-system-theme='omarchy'] .labels span {
+  border-color: var(--accent);
+  background: var(--raised);
+  color: var(--accent);
+}
+:root[data-system-theme='omarchy'] .ci {
+  color: var(--yellow);
+}
+:root[data-system-theme='omarchy'] .ci.success {
+  color: var(--green);
+}
+:root[data-system-theme='omarchy'] .ci.failure {
+  color: var(--red);
+}
+:root[data-system-theme='omarchy'] .pill.green {
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 10%, var(--bg));
+}
+:root[data-system-theme='omarchy'] .banner.error {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, var(--bg));
 }

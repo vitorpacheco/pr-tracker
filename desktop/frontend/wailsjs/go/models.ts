@@ -39,6 +39,7 @@ export namespace config {
 	}
 	export interface Config {
 	    Language: string;
+	    ThemeFile: string;
 	    ToolPaths: Record<string, string>;
 	    DesktopTerminal: string;
 	    RefreshInterval: string;
@@ -148,6 +149,34 @@ export namespace provider {
 	export interface Thread {
 	    Body: string;
 	    Comments: Comment[];
+	}
+
+}
+
+export namespace theme {
+
+	export interface Palette {
+	    Name: string;
+	    Mode: string;
+	    Background: string;
+	    Panel: string;
+	    Raised: string;
+	    Border: string;
+	    Muted: string;
+	    Foreground: string;
+	    Accent: string;
+	    Selection: string;
+	    SelectionText: string;
+	    Red: string;
+	    Green: string;
+	    Yellow: string;
+	    Blue: string;
+	    AccentAlt: string;
+	    Dim: string;
+	    Heading: string;
+	    LabelBackground: string;
+	    TitleText: string;
+	    GUI: Record<string, string>;
 	}
 
 }

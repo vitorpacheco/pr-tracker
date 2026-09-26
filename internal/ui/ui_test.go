@@ -192,7 +192,7 @@ func TestLanguageSettingsApplyImmediately(t *testing.T) {
 		t.Fatal("placeholder not updated")
 	}
 	m.openSettingsForm()
-	if got := m.form.render(&zones{}, m.t); !strings.Contains(got, "Language") || !strings.Contains(got, "System") || !strings.Contains(got, "Save ctrl+s") {
+	if got := m.form.render(&zones{}, m.t, m.styles); !strings.Contains(got, "Language") || !strings.Contains(got, "System") || !strings.Contains(got, "Save ctrl+s") {
 		t.Fatalf("settings not translated: %s", got)
 	}
 	loaded, _, err := config.Load()

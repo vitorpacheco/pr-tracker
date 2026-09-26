@@ -54,6 +54,12 @@ func main() {
 			bridge.pickFolder = func() (string, error) {
 				return runtime.OpenDirectoryDialog(ctx, runtime.OpenDialogOptions{Title: i18n.Text(i18n.Resolve(session.Configuration().Language), "Selecionar clone local")})
 			}
+			bridge.pickTheme = func() (string, error) {
+				return runtime.OpenFileDialog(ctx, runtime.OpenDialogOptions{Title: bridge.t("Arquivo de cores"), Filters: []runtime.FileFilter{{DisplayName: "TOML", Pattern: "*.toml"}}})
+			}
+			bridge.saveTheme = func() (string, error) {
+				return runtime.SaveFileDialog(ctx, runtime.SaveDialogOptions{Title: bridge.t("Exportar esquema de cores"), DefaultFilename: "colors.toml", CanCreateDirectories: true, Filters: []runtime.FileFilter{{DisplayName: "TOML", Pattern: "*.toml"}}})
+			}
 			bridge.terminal = func(dir string, argv []string) error {
 				settings := session.Configuration()
 				work := toolchain.WithPaths(ctx, settings.ToolPaths)

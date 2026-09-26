@@ -132,7 +132,7 @@ func renderMarkdown(r *glamour.TermRenderer, s string, width int) []string {
 	return lines
 }
 
-func (t *threadView) render(width int, language string) []string {
+func (t *threadView) render(width int, language string, st *styles) []string {
 	tr := func(message string) string { return i18n.Text(language, message) }
 	if t.lines != nil && t.width == width {
 		return t.lines
@@ -140,7 +140,7 @@ func (t *threadView) render(width int, language string) []string {
 	t.width = width
 	it := &t.item
 	var out []string
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF")).Width(width - 2).Render(it.Title)
+	title := lipgloss.NewStyle().Bold(true).Foreground(st.cText).Width(width - 2).Render(it.Title)
 	for _, l := range strings.Split(title, "\n") {
 		out = append(out, " "+l)
 	}
@@ -148,53 +148,53 @@ func (t *threadView) render(width int, language string) []string {
 	if it.IsIssue() {
 		kind = "issue"
 	}
-	out = append(out, " "+sAccent.Render(it.Repo+" "+it.Ref())+sDim.Render(" · "+kind+" · "+it.Instance+" · "+it.URL))
+	out = append(out, " "+st.sAccent.Render(it.Repo+" "+it.Ref())+st.sDim.Render(" · "+kind+" · "+it.Instance+" · "+it.URL))
 	if len(it.Labels) > 0 {
-		out = append(out, " "+labels(it.Labels))
+		out = append(out, " "+st.labels(it.Labels))
 	}
 	switch {
 	case t.thread == nil && t.err != nil:
-		return append(out, "", sRed.Render(" ✘ "+oneLine(i18n.ErrorText(language, t.err))))
+		return append(out, "", st.sRed.Render(" ✘ "+oneLine(i18n.ErrorText(language, t.err))))
 	case t.thread == nil:
 		return out // still loading; not cached
 	}
-	r, err := glamour.NewTermRenderer(glamour.WithStandardStyle("dark"), glamour.WithWordWrap(max(width-6, 20)))
+	r, err := glamour.NewTermRenderer(st.markdownStyle(), glamour.WithWordWrap(max(width-6, 20)))
 	if err != nil {
-		return append(out, sRed.Render(" ✘ "+err.Error()))
+		return append(out, st.sRed.Render(" ✘ "+err.Error()))
 	}
 	sep := func(head string) string {
-		return " " + head + " " + sDim.Render(strings.Repeat("─", max(width-lipgloss.Width(head)-3, 0)))
+		return " " + head + " " + st.sDim.Render(strings.Repeat("─", max(width-lipgloss.Width(head)-3, 0)))
 	}
-	out = append(out, "", sep(sBold.Render(it.Author)+sDim.Render(tr(" · descrição · ")+age(it.CreatedAt, tr))))
+	out = append(out, "", sep(st.sBold.Render(it.Author)+st.sDim.Render(tr(" · descrição · ")+age(it.CreatedAt, tr))))
 	out = append(out, renderMarkdown(r, t.thread.Body, width)...)
 	for _, c := range t.thread.Comments {
 		body := renderMarkdown(r, c.Body, width)
 		if body == nil && (c.Review == "" || c.Review == "commented") {
 			continue // bot markers and empty review wrappers
 		}
-		head := sBold.Render(firstNonEmpty(c.Author, "ghost")) + sDim.Render(" · "+age(c.CreatedAt, tr))
+		head := st.sBold.Render(firstNonEmpty(c.Author, "ghost")) + st.sDim.Render(" · "+age(c.CreatedAt, tr))
 		switch c.Review {
 		case "approved":
-			head += " " + sGreen.Render(tr("✔ aprovou"))
+			head += " " + st.sGreen.Render(tr("✔ aprovou"))
 		case "changes_requested":
-			head += " " + sRed.Render(tr("± pediu alterações"))
+			head += " " + st.sRed.Render(tr("± pediu alterações"))
 		case "commented":
-			head += " " + sMuted.Render("◇ review")
+			head += " " + st.sMuted.Render("◇ review")
 		case "dismissed":
-			head += " " + sDim.Render(tr("review descartado"))
+			head += " " + st.sDim.Render(tr("review descartado"))
 		}
 		if c.Path != "" {
 			loc := c.Path
 			if c.Line > 0 {
 				loc += fmt.Sprintf(":%d", c.Line)
 			}
-			head += " " + sBlue.Render(loc)
+			head += " " + st.sBlue.Render(loc)
 		}
 		out = append(out, "", sep(head))
 		out = append(out, body...)
 	}
 	if len(t.thread.Comments) == 0 {
-		out = append(out, "", sDim.Render(tr(" nenhum comentário ainda — "))+sKey.Render("n")+sDim.Render(tr(" para comentar")))
+		out = append(out, "", st.sDim.Render(tr(" nenhum comentário ainda — "))+st.sKey.Render("n")+st.sDim.Render(tr(" para comentar")))
 	}
 	out = append(out, "")
 	t.lines = out
@@ -204,9 +204,9 @@ func (t *threadView) render(width int, language string) []string {
 func (m *Model) threadBody(W, H int) []string {
 	t := m.thread
 	m.listRows = H
-	lines := t.render(W, m.language)
+	lines := t.render(W, m.language, m.styles)
 	if t.loading && t.thread == nil {
-		lines = append(lines, "", " "+sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)]+m.t(" carregando conversa…")))
+		lines = append(lines, "", " "+m.styles.sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)]+m.t(" carregando conversa…")))
 	}
 	t.offset = max(0, min(t.offset, len(lines)-H))
 	end := min(t.offset+H, len(lines))
@@ -218,9 +218,9 @@ func (m *Model) threadBody(W, H int) []string {
 	if len(lines) > H {
 		pos := t.offset * (H - 1) / max(len(lines)-H, 1)
 		for i := range out {
-			bar := sDim.Render("│")
+			bar := m.styles.sDim.Render("│")
 			if i == pos {
-				bar = sAccent.Render("┃")
+				bar = m.styles.sAccent.Render("┃")
 			}
 			out[i] = fit(out[i], W-1) + bar
 		}
@@ -228,10 +228,10 @@ func (m *Model) threadBody(W, H int) []string {
 	return out
 }
 
-func labels(ls []string) string {
+func (st *styles) labels(ls []string) string {
 	var parts []string
 	for _, l := range ls {
-		parts = append(parts, sLabelTag.Render(l))
+		parts = append(parts, st.sLabelTag.Render(l))
 	}
 	return strings.Join(parts, " ")
 }
@@ -285,10 +285,10 @@ func (m *Model) sendComment() tea.Cmd {
 func (m *Model) composeContent(z *zones) string {
 	it := &m.composeFor
 	var b []string
-	b = append(b, sBold.Foreground(cAccent2).Render(m.t("Comentar em ")+it.Repo+" "+it.Ref()), sDim.Render(fit(it.Title, m.compose.Width())), "")
+	b = append(b, m.styles.sBold.Foreground(m.styles.cAccent2).Render(m.t("Comentar em ")+it.Repo+" "+it.Ref()), m.styles.sDim.Render(fit(it.Title, m.compose.Width())), "")
 	b = append(b, m.compose.View(), "")
-	send := sTabActive.Render(m.t("Enviar ctrl+s"))
-	cancel := sTab.Render(m.t("Cancelar esc"))
+	send := m.styles.sTabActive.Render(m.t("Enviar ctrl+s"))
+	cancel := m.styles.sTab.Render(m.t("Cancelar esc"))
 	y := lipglossHeight(b)
 	z.add("compose:send", 0, y, lipgloss.Width(send), 1)
 	z.add("compose:cancel", lipgloss.Width(send)+2, y, lipgloss.Width(cancel), 1)

@@ -217,6 +217,19 @@ entry persists even without a local folder mapping. When enabled, **All**
 includes every open PR/MR from the repository; **Review**, **Mine**, and
 **Assigned** still show only their respective relations.
 
+### Omarchy theme
+
+On Omarchy, the TUI automatically uses the active theme's colors. The GUI follows
+the same palette when **Settings → Theme → System** is selected; explicit Light
+or Dark choices take precedence. Both interfaces pick up theme changes within
+about two seconds, without restarting. Outside Omarchy, or when its palette is
+missing or invalid, the usual interface colors apply.
+
+The integration reads `colors.toml` from
+`$XDG_STATE_HOME/omarchy/current/theme` (default `~/.local/state/omarchy/current/theme`),
+with support for the older `$XDG_CONFIG_HOME/omarchy/current/theme` location
+(default `~/.config/omarchy/current/theme`). It does not modify Omarchy settings.
+
 ## How data is fetched
 
 Each refresh makes a small number of GraphQL calls per instance:
@@ -312,3 +325,45 @@ open the native GUI. To explore sample data in the browser, run
 
 See [desktop development](docs/desktop-development.md) for requirements,
 configuration, shortcuts, tests, and current cross-platform validation limits.
+
+### Custom colors and export
+
+Set **Color file** in either interface's settings, or add this to `config.toml`:
+
+```toml
+theme_file = "colors.toml"
+```
+
+Relative paths resolve beside `config.toml`; absolute paths and `~/` are also
+accepted. A custom file takes priority over Omarchy and the GUI's light/dark
+preference. Clear the field to restore automatic or manually selected colors.
+Both interfaces reload changes to the palette within about two seconds. Invalid
+files are rejected when saving settings; a later read error keeps the last working
+palette and displays the error.
+
+A minimal palette is:
+
+```toml
+mode = "dark" # optional; inferred from the background when omitted
+background = "#121212"
+foreground = "#bebebe"
+accent = "#e68e0d"
+```
+
+Optional fields include `panel`, `raised`, `border`, `muted_text`, `selection`,
+`selection_foreground`, `red`, `green`, `yellow`, `blue`, `accent_alt`, `dim`,
+`heading`, `label_background`, and `title_text`. Colors use `#RRGGBB`.
+Omarchy's `colors.toml` keys are also accepted.
+
+To export the palette currently displayed:
+
+- **GUI:** Settings → **Export color scheme**, then choose a new TOML file.
+- **TUI:** Settings → **Ctrl+E**, enter a destination, then **Ctrl+S**.
+
+Export works with custom, Omarchy and built-in palettes, including the GUI's
+manual light/dark selection. Exporting does not activate the destination or save
+other pending settings. Existing files are never overwritten. GUI default
+exports also include a `[gui]` table with named control colors (hexadecimal RGB
+or RGBA); the TUI ignores that table. An exported file can be selected by either
+interface. Their layouts and built-in palettes differ, so export from the
+interface whose colors you want to reuse.

@@ -14,6 +14,7 @@ import (
 	"github.com/vitorpacheco/pr-tracker/internal/gitops"
 	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
+	"github.com/vitorpacheco/pr-tracker/internal/theme"
 	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
 
@@ -117,6 +118,10 @@ func (s *Session) SaveSettings(cfg config.Config) error {
 	}
 	next := cloneConfig(s.application.cfg)
 	next.Language = cfg.Language
+	next.ThemeFile = cfg.ThemeFile
+	if _, err := theme.Resolve(next.ThemePath()); err != nil {
+		return err
+	}
 	tr := func(message string) string { return i18n.Text(i18n.Resolve(cfg.Language), message) }
 	next.ToolPaths = maps.Clone(cfg.ToolPaths)
 	next.DesktopTerminal = cfg.DesktopTerminal

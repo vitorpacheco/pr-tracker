@@ -14,6 +14,7 @@ import (
 	"github.com/vitorpacheco/pr-tracker/internal/cache"
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
+	"github.com/vitorpacheco/pr-tracker/internal/theme"
 )
 
 func TestBridgeSerializesCacheAndResolvesBrowserLink(t *testing.T) {
@@ -132,5 +133,28 @@ func TestBridgeLanguageUsesSharedConfiguration(t *testing.T) {
 	}
 	if bridge.Settings().Language != "system" {
 		t.Fatal("failed save changed language")
+	}
+}
+
+func TestThemeExportAndCancellation(t *testing.T) {
+	cfg := config.Default()
+	session := app.NewSession(cfg, nil)
+	defer session.Close()
+	path := filepath.Join(t.TempDir(), "colors.toml")
+	b := &Bridge{session: session, saveTheme: func() (string, error) { return path, nil }}
+	p := theme.DefaultTUI()
+	if got, err := b.ExportTheme(p); err != nil || got != path {
+		t.Fatalf("export %q %v", got, err)
+	}
+	loaded, err := theme.Resolve(path)
+	if err != nil || loaded.Accent != p.Accent {
+		t.Fatalf("file %+v %v", loaded, err)
+	}
+	if _, err := b.ExportTheme(p); err == nil {
+		t.Fatal("overwrote file")
+	}
+	b.saveTheme = func() (string, error) { return "", nil }
+	if got, err := b.ExportTheme(p); got != "" || err != nil {
+		t.Fatalf("cancel %q %v", got, err)
 	}
 }
