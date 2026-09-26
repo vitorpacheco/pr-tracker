@@ -2,3 +2,9 @@
 /dist/
 *.tmp
 coverage.out
+/.cache/
+/desktop/frontend/node_modules/
+/desktop/frontend/dist/
+/desktop/build/bin/
+
+/.t/

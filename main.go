@@ -18,6 +18,7 @@ import (
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/gitops"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
+	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 	"github.com/vitorpacheco/pr-tracker/internal/ui"
 )
 
@@ -89,13 +90,15 @@ func runUI(cfg *config.Config) error {
 	if store != nil {
 		defer store.Close()
 	}
-	_, err := tea.NewProgram(ui.New(cfg, store)).Run()
+	model := ui.New(cfg, store)
+	defer model.Close()
+	_, err := tea.NewProgram(model).Run()
 	return err
 }
 
 // seed creates instances for the hosts the installed CLIs are logged in to.
 func seed(cfg *config.Config) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(toolchain.WithPaths(context.Background(), cfg.ToolPaths), 15*time.Second)
 	defer cancel()
 	for _, p := range []config.Provider{config.GitHub, config.GitLab} {
 		in := config.Instance{Name: p.DefaultHost(), Provider: p, Host: p.DefaultHost()}
@@ -133,7 +136,8 @@ func doctor(cfg *config.Config) {
 	fmt.Println("worktrees:   ", wt)
 	fmt.Println()
 	for _, t := range []string{"git", "gh", "glab", "tea", "hunk", "herdr", "tmux"} {
-		have := provider.ToolAvailable(t)
+		_, lookupErr := toolchain.Lookup(toolchain.WithPaths(context.Background(), cfg.ToolPaths), t)
+		have := lookupErr == nil
 		line := fmt.Sprintf("%s %-6s", ok(have), t)
 		if !have && t != "git" {
 			line += "  " + provider.InstallHint(t)
@@ -141,7 +145,7 @@ func doctor(cfg *config.Config) {
 		fmt.Println(line)
 	}
 	fmt.Println()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(toolchain.WithPaths(context.Background(), cfg.ToolPaths), 30*time.Second)
 	defer cancel()
 	for _, in := range cfg.Instances {
 		c := provider.New(in)
@@ -161,7 +165,7 @@ func doctor(cfg *config.Config) {
 }
 
 func list(cfg *config.Config) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(toolchain.WithPaths(context.Background(), cfg.ToolPaths), 2*time.Minute)
 	defer cancel()
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
 	fmt.Fprintln(w, "INSTÂNCIA\tTIPO\tREPO\tNº\tCI\tREVISÃO\tCOMENT.\tRELAÇÃO\tTÍTULO")
@@ -255,7 +259,7 @@ func instanceCmd(cfg *config.Config, args []string) error {
 		case !provider.ToolAvailable(c.Tool()):
 			fmt.Printf("aviso: %s não está instalado. Instale: %s\n", c.Tool(), provider.InstallHint(c.Tool()))
 		default:
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			ctx, cancel := context.WithTimeout(toolchain.WithPaths(context.Background(), cfg.ToolPaths), 20*time.Second)
 			defer cancel()
 			if err := c.AuthStatus(ctx); err != nil {
 				fmt.Println("aviso:", err)
@@ -307,7 +311,7 @@ func repoCmd(cfg *config.Config, args []string) error {
 		return fmt.Errorf("--repo é obrigatório")
 	}
 	if *path != "" {
-		if err := gitops.ValidateClone(context.Background(), *path); err != nil {
+		if err := gitops.ValidateClone(toolchain.WithPaths(context.Background(), cfg.ToolPaths), *path); err != nil {
 			return err
 		}
 	}

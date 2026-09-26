@@ -6,21 +6,21 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/vitorpacheco/pr-tracker/internal/app"
 	"github.com/vitorpacheco/pr-tracker/internal/cache"
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/gitops"
 	"github.com/vitorpacheco/pr-tracker/internal/launch"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
+	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
 
 type screen int
@@ -86,7 +86,7 @@ const (
 type Model struct {
 	cfg     *config.Config
 	clients map[string]provider.Client
-	cache   *cache.Store
+	session *app.Session
 
 	prs     []provider.Item
 	instErr map[string]error
@@ -147,7 +147,7 @@ func New(cfg *config.Config, store *cache.Store) *Model {
 	fi.SetWidth(40)
 	m := &Model{
 		cfg:     cfg,
-		cache:   store,
+		session: app.NewSession(cfg, store),
 		instErr: map[string]error{},
 		clones:  map[string]string{},
 		wts:     map[string]string{},
@@ -166,23 +166,20 @@ func (m *Model) rebuildClients() {
 	}
 }
 
+// Close cancels pending application work before the cache is closed.
+func (m *Model) Close() { m.session.Close() }
+
 // Messages.
 type (
+	stateMsg struct {
+		state   app.State
+		err     error
+		gen     int
+		refresh bool
+	}
 	clockMsg       struct{}
 	autoRefreshMsg struct{ gen int }
-	cacheMsg       struct {
-		prs      map[string][]provider.Item
-		syncedAt time.Time
-		err      error
-	}
-	refreshMsg struct {
-		gen       int
-		prs       map[string][]provider.Item
-		errs      map[string]error
-		cacheErrs map[string]error
-		clones    map[string]string
-	}
-	actionDoneMsg struct {
+	actionDoneMsg  struct {
 		key     string
 		ok      string
 		err     error
@@ -213,35 +210,9 @@ func (m *Model) Init() tea.Cmd {
 }
 
 func (m *Model) loadCache() tea.Cmd {
-	store := m.cache
-	instances := append([]config.Instance(nil), m.cfg.Instances...)
 	return func() tea.Msg {
-		msg := cacheMsg{prs: map[string][]provider.Item{}}
-		if store == nil {
-			return msg
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		var errs []error
-		for _, in := range instances {
-			if in.Disabled {
-				continue
-			}
-			snapshot, err := store.Load(ctx, in)
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			if snapshot.SyncedAt.IsZero() {
-				continue
-			}
-			msg.prs[in.Name] = snapshot.Items
-			if snapshot.SyncedAt.After(msg.syncedAt) {
-				msg.syncedAt = snapshot.SyncedAt
-			}
-		}
-		msg.err = errors.Join(errs...)
-		return msg
+		state, err := m.session.Load(context.Background())
+		return stateMsg{state: state, err: err}
 	}
 }
 
@@ -252,54 +223,10 @@ func (m *Model) refresh() tea.Cmd {
 	m.loading = true
 	m.gen++
 	gen := m.gen
-	cfg := m.cfg
-	store := m.cache
-	var clients []provider.Client
-	for _, in := range m.cfg.Instances {
-		if !in.Disabled {
-			clients = append(clients, m.clients[in.Name])
-		}
-	}
+	m.session.Configure(m.cfg)
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		res := refreshMsg{
-			gen: gen, prs: map[string][]provider.Item{}, errs: map[string]error{},
-			cacheErrs: map[string]error{}, clones: map[string]string{},
-		}
-		var mu sync.Mutex
-		var wg sync.WaitGroup
-		for _, c := range clients {
-			wg.Go(func() {
-				prs, err := c.List(ctx)
-				var cacheErr error
-				if err == nil && store != nil {
-					cacheErr = store.Replace(ctx, c.Instance(), prs, time.Now())
-				}
-				clones := map[string]string{}
-				for i := range prs {
-					if p, _, ok := gitops.ResolveClone(ctx, cfg, &prs[i]); ok {
-						clones[prs[i].Key()] = p
-					}
-				}
-				mu.Lock()
-				defer mu.Unlock()
-				name := c.Instance().Name
-				if err != nil {
-					res.errs[name] = err
-					return
-				}
-				res.prs[name] = prs
-				if cacheErr != nil {
-					res.cacheErrs[name] = cacheErr
-				}
-				for k, v := range clones {
-					res.clones[k] = v
-				}
-			})
-		}
-		wg.Wait()
-		return res
+		state, err := m.session.Refresh(context.Background())
+		return stateMsg{state: state, err: err, gen: gen, refresh: true}
 	}
 }
 
@@ -318,64 +245,8 @@ func (m *Model) requestRefresh() tea.Cmd {
 	return m.refresh()
 }
 
-func (m *Model) applyRefresh(msg refreshMsg) {
-	byInst := map[string][]provider.Item{}
-	for _, pr := range m.prs {
-		byInst[pr.Instance] = append(byInst[pr.Instance], pr)
-	}
-	m.instErr = map[string]error{}
-	for _, in := range m.cfg.Instances {
-		if in.Disabled {
-			delete(byInst, in.Name)
-			continue
-		}
-		if prs, ok := msg.prs[in.Name]; ok {
-			byInst[in.Name] = prs
-		}
-		if err, ok := msg.errs[in.Name]; ok {
-			m.instErr[in.Name] = err // keep the previous PRs of a failing instance
-		}
-	}
-	m.prs = m.prs[:0]
-	for _, in := range m.cfg.Instances {
-		m.prs = append(m.prs, byInst[in.Name]...)
-	}
-	sort.SliceStable(m.prs, func(i, j int) bool { return m.prs[i].UpdatedAt.After(m.prs[j].UpdatedAt) })
-	for k, v := range m.clones {
-		if pr := m.find(k); pr != nil && msg.errs[pr.Instance] != nil {
-			msg.clones[k] = v
-		}
-	}
-	m.clones = msg.clones
-	m.scanWorktrees()
-	var cacheErrs []error
-	for _, in := range m.cfg.Instances {
-		if err := msg.cacheErrs[in.Name]; err != nil {
-			cacheErrs = append(cacheErrs, err)
-		}
-	}
-	m.cacheErr = errors.Join(cacheErrs...)
-	if len(msg.prs) > 0 {
-		m.lastSync = time.Now()
-	}
-	if !m.tabTouched && m.count(tabs[m.tab]) == 0 {
-		for i, t := range tabs {
-			if m.count(t) > 0 {
-				m.tab = i
-				break
-			}
-		}
-	}
-	m.restoreCursor()
-}
-
 func (m *Model) scanWorktrees() {
-	m.wts = map[string]string{}
-	for i := range m.prs {
-		if p, ok := gitops.WorktreeExists(m.cfg, &m.prs[i]); ok {
-			m.wts[m.prs[i].Key()] = p
-		}
-	}
+	m.wts = m.session.Worktrees()
 }
 
 // visible returns the PRs of the current tab matching the filter.
@@ -479,37 +350,36 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.refresh()
 
-	case cacheMsg:
-		m.cacheErr = msg.err
-		m.prs = m.prs[:0]
-		for _, in := range m.cfg.Instances {
-			m.prs = append(m.prs, msg.prs[in.Name]...)
-		}
-		sort.SliceStable(m.prs, func(i, j int) bool { return m.prs[i].UpdatedAt.After(m.prs[j].UpdatedAt) })
-		m.lastSync = msg.syncedAt
-		m.scanWorktrees()
-		if !m.tabTouched && m.count(tabs[m.tab]) == 0 {
-			for i, tab := range tabs {
-				if m.count(tab) > 0 {
-					m.tab = i
-					break
-				}
-			}
-		}
-		m.restoreCursor()
-		return m, nil
-
-	case refreshMsg:
-		m.loading = false
-		if msg.gen != m.gen {
+	case stateMsg:
+		if msg.refresh && msg.gen != m.gen {
 			return m, nil
 		}
-		m.applyRefresh(msg)
-		if m.refreshQueued {
-			m.refreshQueued = false
-			return m, m.refresh()
+		if msg.refresh {
+			m.loading = false
 		}
-		return m, m.scheduleRefresh()
+		if msg.err != nil {
+			m.setStatus(stErr, msg.err.Error())
+		} else {
+			m.prs, m.instErr, m.clones, m.wts = msg.state.Items, msg.state.Errors, msg.state.Clones, msg.state.Worktrees
+			m.cacheErr, m.lastSync = msg.state.CacheError, msg.state.SyncedAt
+			if !m.tabTouched && m.count(tabs[m.tab]) == 0 {
+				for i, t := range tabs {
+					if m.count(t) > 0 {
+						m.tab = i
+						break
+					}
+				}
+			}
+			m.restoreCursor()
+		}
+		if msg.refresh {
+			if m.refreshQueued {
+				m.refreshQueued = false
+				return m, m.refresh()
+			}
+			return m, m.scheduleRefresh()
+		}
+		return m, nil
 
 	case threadMsg:
 		m.applyThread(msg)
@@ -532,7 +402,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.confirmForceRemove(*msg.dirty)
 		}
 		if msg.refresh {
-			cmds = append(cmds, m.refresh())
+			cmds = append(cmds, m.requestRefresh())
 		}
 		return m, tea.Batch(cmds...)
 
@@ -913,7 +783,7 @@ func (m *Model) openMenu(pr *provider.Item) {
 	}
 	client := m.clients[pr.Instance]
 	noTool := ""
-	if client != nil && !provider.ToolAvailable(client.Tool()) {
+	if client != nil && !m.toolAvailable(client.Tool()) {
 		noTool = client.Tool() + " não instalado"
 	}
 	wtLabel := "Checkout em worktree"
@@ -966,7 +836,7 @@ func firstNonEmpty(s ...string) string {
 }
 
 func (m *Model) diffToolName() string {
-	if m.cfg.DiffTool == "hunk" && provider.ToolAvailable("hunk") {
+	if m.cfg.DiffTool == "hunk" && m.toolAvailable("hunk") {
 		return "hunk"
 	}
 	return "git diff"
@@ -1008,7 +878,6 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 			return fn(ctx)
 		}
 	}
-	cfg := m.cfg
 	switch k {
 	case "R":
 		enabled := false
@@ -1016,7 +885,7 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 			enabled = repo.TrackAll
 		}
 		m.cfg.SetRepoTrackAll(p.Instance, p.Repo, !enabled)
-		if err := m.cfg.Save(); err != nil {
+		if err := m.saveConfiguration(); err != nil {
 			m.cfg.SetRepoTrackAll(p.Instance, p.Repo, enabled)
 			m.setStatus(stErr, err.Error())
 			return nil
@@ -1031,39 +900,31 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 	case "p":
 		m.openRepoPathForm(p, "")
 		return m.form.setFocus(0)
-	case "w":
-		return start("criando worktree", func(ctx context.Context) tea.Msg {
-			wt, msg := ensureWorktree(ctx, cfg, client, &p, "w")
-			if msg != nil {
-				return msg
-			}
-			return actionDoneMsg{key: key, ok: "worktree pronto: " + wt}
-		})
-	case "t", "d":
-		label := "preparando worktree"
+	case "w", "t", "d":
+		action := app.UpdateWorktree
+		label := "criando worktree"
+		if k == "t" {
+			action, label = app.PrepareTerminal, "preparando worktree"
+		}
+		if k == "d" {
+			action, label = app.PrepareDiff, "preparando worktree"
+		}
 		return start(label, func(ctx context.Context) tea.Msg {
-			wt, msg := ensureWorktree(ctx, cfg, client, &p, k)
-			if msg != nil {
-				return msg
+			out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: action, Item: p})
+			if err != nil || k == "w" {
+				return actionResult(p, k, out, err)
 			}
 			name := filepathBase(p.Repo) + "-" + strconv.Itoa(p.Number)
-			if k == "t" {
-				return launchMsg{key: key, dir: wt, label: name}
+			if k == "d" {
+				name = "diff " + name
 			}
-			argv, note := diffCommand(ctx, cfg, wt, &p)
-			return launchMsg{key: key, dir: wt, label: "diff " + name, argv: argv, note: note}
+			return launchMsg{key: key, dir: out.Directory, label: name, argv: out.Args, note: out.Note}
 		})
 	case "c":
 		m.ask("Checkout no clone local?", "Checkout", func() tea.Cmd {
 			return start("checkout", func(ctx context.Context) tea.Msg {
-				clone, _, ok := gitops.ResolveClone(ctx, cfg, &p)
-				if !ok {
-					return needPathMsg{pr: p, action: "c"}
-				}
-				if err := client.Checkout(ctx, &p, clone); err != nil {
-					return actionDoneMsg{key: key, err: err}
-				}
-				return actionDoneMsg{key: key, ok: "branch " + p.SourceBranch + " em " + clone}
+				out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: app.Checkout, Item: p})
+				return actionResult(p, k, out, err)
 			})
 		}, "Troca a branch atual de "+firstNonEmpty(m.clones[key], "(clone não configurado)"), "para a branch do PR usando "+client.Tool()+".")
 	case "a", "A":
@@ -1076,17 +937,19 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 		}
 		m.ask(title, "Aprovar", func() tea.Cmd {
 			return start("aprovando", func(ctx context.Context) tea.Msg {
-				if err := client.Approve(ctx, &p); err != nil {
-					return actionDoneMsg{key: key, err: err}
-				}
-				return removeAfter(ctx, cfg, &p, k == "A", "aprovado "+p.Ref())
+				out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: app.Approve, Item: p, RemoveAfter: k == "A"})
+				return actionResult(p, k, out, err)
 			})
 		}, p.Repo, p.Title)
 	case "m", "M":
 		if k == "M" && !hasWT {
 			return nil
 		}
-		opts := m.mergeOptions(&p)
+		opts, err := m.session.MergeOptions(p.Key())
+		if err != nil {
+			m.setStatus(stErr, err.Error())
+			return nil
+		}
 		title := "Fazer merge de " + p.Ref() + "?"
 		if k == "M" {
 			title = "Fazer merge de " + p.Ref() + " e remover o worktree?"
@@ -1103,10 +966,8 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 		}
 		m.ask(title, "Merge", func() tea.Cmd {
 			return start("fazendo merge", func(ctx context.Context) tea.Msg {
-				if err := client.Merge(ctx, &p, opts); err != nil {
-					return actionDoneMsg{key: key, err: err}
-				}
-				return removeAfter(ctx, cfg, &p, k == "M", "merge de "+p.Ref()+" feito")
+				out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: app.Merge, Item: p, RemoveAfter: k == "M"})
+				return actionResult(p, k, out, err)
 			})
 		}, body...)
 	case "X", "C":
@@ -1119,10 +980,8 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 		}
 		m.ask(title, "Fechar", func() tea.Cmd {
 			return start("fechando", func(ctx context.Context) tea.Msg {
-				if err := client.Close(ctx, &p); err != nil {
-					return actionDoneMsg{key: key, err: err}
-				}
-				return removeAfter(ctx, cfg, &p, k == "C", p.Ref()+" fechado sem merge")
+				out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: app.Close, Item: p, RemoveAfter: k == "C"})
+				return actionResult(p, k, out, err)
 			})
 		}, p.Repo, p.Title, "", "A branch "+p.SourceBranch+" é mantida no servidor.")
 	case "x":
@@ -1131,88 +990,25 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 		}
 		m.ask("Remover o worktree de "+p.Ref()+"?", "Remover", func() tea.Cmd {
 			return start("removendo worktree", func(ctx context.Context) tea.Msg {
-				return removeAfter(ctx, cfg, &p, true, "")
+				out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: app.RemoveWorktree, Item: p})
+				return actionResult(p, k, out, err)
 			})
 		}, m.wts[key])
 	}
 	return nil
 }
 
-func (m *Model) mergeOptions(pr *provider.Item) provider.MergeOptions {
-	in, _ := m.cfg.Instance(pr.Instance)
-	opts := provider.MergeOptions{Method: "merge"}
-	if in != nil {
-		opts = provider.MergeOptions{Method: firstNonEmpty(in.MergeMethod, "merge"), Auto: in.AutoMerge, DeleteBranch: in.DeleteBranch}
-	}
-	if r, ok := m.cfg.Repo(pr.Instance, pr.Repo); ok && r.MergeMethod != "" {
-		opts.Method = r.MergeMethod
-	}
-	return opts
-}
-
-func ensureWorktree(ctx context.Context, cfg *config.Config, client provider.Client, pr *provider.Item, action string) (string, tea.Msg) {
-	if wt, ok := gitops.WorktreeExists(cfg, pr); ok && action != "w" {
-		return wt, nil
-	}
-	clone, remote, ok := gitops.ResolveClone(ctx, cfg, pr)
-	if !ok {
-		return "", needPathMsg{pr: *pr, action: action}
-	}
-	wt, err := gitops.CreateWorktree(ctx, cfg, client, pr, clone, remote)
-	if err != nil {
-		return "", actionDoneMsg{key: pr.Key(), err: err}
-	}
-	return wt, nil
-}
-
-func removeAfter(ctx context.Context, cfg *config.Config, pr *provider.Item, remove bool, ok string) tea.Msg {
-	if !remove {
-		return actionDoneMsg{key: pr.Key(), ok: ok, refresh: true}
-	}
-	err := gitops.RemoveWorktree(ctx, cfg, pr, false)
-	switch {
-	case errors.Is(err, gitops.ErrDirty):
-		return actionDoneMsg{key: pr.Key(), ok: ok, refresh: ok != "", dirty: pr}
-	case err != nil:
-		return actionDoneMsg{key: pr.Key(), err: err, refresh: ok != ""}
-	}
-	return actionDoneMsg{key: pr.Key(), ok: strings.TrimPrefix(ok+" · worktree removido", " · "), refresh: ok != ""}
-}
-
 func (m *Model) confirmForceRemove(pr provider.Item) {
-	cfg := m.cfg
 	key := pr.Key()
 	m.ask("O worktree tem alterações locais", "Remover mesmo assim", func() tea.Cmd {
 		m.pending[key] = "removendo worktree"
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
-			if err := gitops.RemoveWorktree(ctx, cfg, &pr, true); err != nil {
-				return actionDoneMsg{key: key, err: err}
-			}
-			return actionDoneMsg{key: key, ok: "worktree removido (alterações descartadas)"}
+			out, err := m.session.Execute(ctx, pr.Key(), app.Command{Action: app.RemoveWorktree, Item: pr, Force: true})
+			return actionResult(pr, "x", out, err)
 		}
 	}, m.wts[key], "", sRed.Render("As alterações não commitadas serão perdidas."))
-}
-
-func diffCommand(ctx context.Context, cfg *config.Config, wt string, pr *provider.Item) ([]string, string) {
-	base := "HEAD~1"
-	if up, err := gitops.Git(ctx, wt, "rev-parse", "--abbrev-ref", "@{upstream}"); err == nil || pr.TargetBranch != "" {
-		remote := "origin"
-		if i := strings.Index(up, "/"); err == nil && i > 0 {
-			remote = up[:i]
-		}
-		if mb, err := gitops.Git(ctx, wt, "merge-base", remote+"/"+pr.TargetBranch, "HEAD"); err == nil {
-			base = mb
-		}
-	}
-	if cfg.DiffTool == "hunk" {
-		if provider.ToolAvailable("hunk") {
-			return []string{"hunk", "diff", base}, ""
-		}
-		return []string{"git", "diff", base}, "hunk não instalado (" + provider.InstallHint("hunk") + "); usando git diff"
-	}
-	return []string{"git", "diff", base}, ""
 }
 
 func filepathBase(p string) string {
@@ -1248,7 +1044,7 @@ func (m *Model) openRepoPathForm(pr provider.Item, then string) {
 		if r, ok := m.cfg.Repo(pr.Instance, pr.Repo); ok {
 			r.Remote = f.get("Remote").value()
 		}
-		if err := m.cfg.Save(); err != nil {
+		if err := m.saveConfiguration(); err != nil {
 			return err
 		}
 		if path == "" {
@@ -1314,7 +1110,7 @@ func (m *Model) openSettingsForm() {
 			return err
 		}
 		*c = next
-		if err := c.Save(); err != nil {
+		if err := m.saveConfiguration(); err != nil {
 			return err
 		}
 		m.mode = launch.Resolve(c.Terminal)
@@ -1350,7 +1146,7 @@ func (m *Model) instancesKey(k string) tea.Cmd {
 		if m.instCur < n {
 			in := &m.cfg.Instances[m.instCur]
 			in.Disabled = !in.Disabled
-			if err := m.cfg.Save(); err != nil {
+			if err := m.saveConfiguration(); err != nil {
 				m.setStatus(stErr, err.Error())
 			}
 			m.rebuildClients()
@@ -1361,7 +1157,7 @@ func (m *Model) instancesKey(k string) tea.Cmd {
 			name := m.cfg.Instances[m.instCur].Name
 			m.ask("Remover a instância "+name+"?", "Remover", func() tea.Cmd {
 				m.cfg.RemoveInstance(name)
-				if err := m.cfg.Save(); err != nil {
+				if err := m.saveConfiguration(); err != nil {
 					m.setStatus(stErr, err.Error())
 				}
 				m.instCur = max(0, min(m.instCur, len(m.cfg.Instances)-1))
@@ -1426,7 +1222,7 @@ func (m *Model) openInstanceForm(in *config.Instance) {
 			m.cfg.Instances, m.cfg.Repos = backup, backupRepos
 			return err
 		}
-		if err := m.cfg.Save(); err != nil {
+		if err := m.saveConfiguration(); err != nil {
 			return err
 		}
 		m.rebuildClients()
@@ -1453,3 +1249,26 @@ func (m *Model) openInstanceForm(in *config.Instance) {
 }
 
 func itoa(i int) string { return strconv.Itoa(i) }
+
+func actionResult(item provider.Item, action string, out app.Outcome, err error) tea.Msg {
+	if errors.Is(err, app.ErrCloneRequired) {
+		return needPathMsg{pr: item, action: action}
+	}
+	msg := actionDoneMsg{key: item.Key(), ok: out.Message, err: err, refresh: out.Refresh, reloadThread: out.ReloadThread}
+	if errors.Is(err, app.ErrDirtyWorktree) {
+		msg.err, msg.dirty = nil, &item
+	}
+	return msg
+}
+
+// saveConfiguration restores the last committed settings when persistence fails.
+func (m *Model) saveConfiguration() error {
+	err := m.session.SaveSettings(*m.cfg)
+	*m.cfg = m.session.Configuration()
+	return err
+}
+
+func (m *Model) toolAvailable(name string) bool {
+	_, err := toolchain.Lookup(toolchain.WithPaths(context.Background(), m.cfg.ToolPaths), name)
+	return err == nil
+}

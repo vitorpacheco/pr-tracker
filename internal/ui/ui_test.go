@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/vitorpacheco/pr-tracker/internal/app"
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
 )
@@ -112,52 +113,54 @@ func TestTrackAllRepoActionPersistsAndToggles(t *testing.T) {
 	}
 }
 
-func TestCachedItemsSurviveFailedRefresh(t *testing.T) {
+func TestSnapshotSelectsNonEmptyTabAndPreservesSyncStatus(t *testing.T) {
 	cfg := config.Default()
 	cfg.WorktreeDir = t.TempDir()
-	cfg.Instances = []config.Instance{{Name: "work", Provider: config.GitHub, Host: "github.example.com"}}
 	m := New(cfg, nil)
-	cachedAt := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
-	item := provider.Item{Instance: "work", Provider: config.GitHub, Host: "github.example.com", Repo: "acme/app", Number: 7}
-	m.Update(cacheMsg{
-		prs:      map[string][]provider.Item{"work": {item}},
-		syncedAt: cachedAt,
-	})
-
-	m.Update(refreshMsg{
-		gen:       m.gen,
-		prs:       map[string][]provider.Item{},
-		errs:      map[string]error{"work": errors.New("test error")},
-		cacheErrs: map[string]error{},
-		clones:    map[string]string{},
-	})
-	if len(m.prs) != 1 || m.prs[0].Key() != item.Key() {
-		t.Fatalf("failed refresh discarded cached items: %+v", m.prs)
+	defer m.Close()
+	syncedAt := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+	item := provider.Item{Instance: "work", Kind: provider.KindPR, Relations: provider.Authored}
+	m.Update(stateMsg{state: app.State{Snapshot: app.Snapshot{Items: []provider.Item{item}, Errors: map[string]error{"work": errors.New("offline")}}, SyncedAt: syncedAt}, refresh: true, gen: m.gen})
+	if m.tab != 1 {
+		t.Fatalf("tab = %d, want authored", m.tab)
 	}
-	if !m.lastSync.Equal(cachedAt) {
-		t.Fatalf("lastSync = %v, want cached time %v", m.lastSync, cachedAt)
+	if !m.lastSync.Equal(syncedAt) || m.instErr["work"] == nil || len(m.prs) != 1 {
+		t.Fatal("snapshot lost cached items or offline status")
 	}
 }
 
-func TestRefreshSelectsNonEmptyTabAfterEmptyCache(t *testing.T) {
+func TestActionOutcomePreservesPartialSuccessAndDirtyConfirmation(t *testing.T) {
 	cfg := config.Default()
 	cfg.WorktreeDir = t.TempDir()
-	cfg.Instances = []config.Instance{{Name: "work", Provider: config.GitHub, Host: "github.example.com"}}
+	cfg.Instances = []config.Instance{{Name: "work", Provider: config.GitHub, Host: "github.com"}}
+	item := provider.Item{Instance: "work", Provider: config.GitHub, Host: "github.com", Repo: "org/repo", Number: 7}
 	m := New(cfg, nil)
-	m.Update(cacheMsg{
-		prs:      map[string][]provider.Item{"work": nil},
-		syncedAt: time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC),
-	})
-	m.Update(refreshMsg{
-		gen: m.gen,
-		prs: map[string][]provider.Item{"work": {{
-			Instance: "work", Kind: provider.KindPR, Relations: provider.Authored,
-		}}},
-		errs:      map[string]error{},
-		cacheErrs: map[string]error{},
-		clones:    map[string]string{},
-	})
-	if m.tab != 1 {
-		t.Fatalf("tab = %d, want authored tab", m.tab)
+	m.pending[item.Key()] = "aprovando"
+	msg := actionResult(item, "A", app.Outcome{Message: "aprovado #7", Refresh: true}, app.ErrDirtyWorktree).(actionDoneMsg)
+	if msg.err != nil || msg.dirty == nil || !msg.refresh || msg.ok != "aprovado #7" {
+		t.Fatalf("message = %+v", msg)
+	}
+	_, cmd := m.Update(msg)
+	if m.modal != modalConfirm || m.confirm == nil || m.confirm.yes != "Remover mesmo assim" {
+		t.Fatal("missing separate confirmation for dirty worktree")
+	}
+	if m.status != "aprovado #7" || cmd == nil || !m.loading {
+		t.Fatal("remote success did not trigger refresh")
+	}
+	if _, busy := m.pending[item.Key()]; busy {
+		t.Fatal("action remained pending")
+	}
+}
+
+func TestActionOutcomeRequestsCloneAndPreservesCleanupError(t *testing.T) {
+	item := provider.Item{Instance: "work", Repo: "org/repo", Number: 7}
+	missing := actionResult(item, "d", app.Outcome{}, app.ErrCloneRequired).(needPathMsg)
+	if missing.pr.Key() != item.Key() || missing.action != "d" {
+		t.Fatalf("missing clone message = %+v", missing)
+	}
+	failure := errors.New("cleanup failed")
+	msg := actionResult(item, "M", app.Outcome{Message: "merge feito", Refresh: true}, failure).(actionDoneMsg)
+	if !errors.Is(msg.err, failure) || !msg.refresh || msg.ok != "merge feito" || msg.dirty != nil {
+		t.Fatalf("partial success = %+v", msg)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/vitorpacheco/pr-tracker/internal/app"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
 )
 
@@ -42,16 +43,12 @@ func (m *Model) openThread(it *provider.Item) tea.Cmd {
 
 func (m *Model) loadThread() tea.Cmd {
 	t := m.thread
-	client := m.clients[t.item.Instance]
-	if client == nil {
-		return nil
-	}
 	t.loading = true
 	it := t.item
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		th, err := client.Thread(ctx, &it)
+		th, err := m.session.Detail(ctx, it.Key())
 		return threadMsg{key: it.Key(), thread: th, err: err}
 	}
 }
@@ -272,20 +269,14 @@ func (m *Model) sendComment() tea.Cmd {
 		return nil
 	}
 	it := m.composeFor
-	client := m.clients[it.Instance]
 	m.modal, m.compose = modalNone, nil
-	if client == nil {
-		return nil
-	}
 	key := it.Key()
 	m.pending[key] = "enviando comentário"
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		if err := client.AddComment(ctx, &it, body); err != nil {
-			return actionDoneMsg{key: key, err: err}
-		}
-		return actionDoneMsg{key: key, ok: "comentário enviado em " + it.Repo + it.Ref(), refresh: true, reloadThread: true}
+		out, err := m.session.Execute(ctx, it.Key(), app.Command{Action: app.Comment, Item: it, Body: body})
+		return actionResult(it, "n", out, err)
 	}
 }
 

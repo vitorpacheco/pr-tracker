@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=pr-tracker
+Comment=Pull requests, issues e worktrees em um lugar
+Exec=pr-tracker-desktop
+Icon=io.github.vitorpacheco.pr_tracker
+Terminal=false
+Categories=Development;
+StartupWMClass=io.github.vitorpacheco.pr_tracker

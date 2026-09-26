@@ -279,3 +279,13 @@ git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0
 A estrutura é `internal/config` (arquivo e caminhos), `internal/provider`
 (gh/glab/bitbucket), `internal/gitops` (clones e worktrees), `internal/launch`
 (herdr/tmux/inline/navegador) e `internal/ui` (Bubble Tea v2).
+
+## Interface desktop (em desenvolvimento)
+
+A GUI Wails/Svelte está em `desktop/` e compartilha o backend da TUI. No Linux com
+GTK 3 e WebKitGTK 4.1, execute `make desktop-install desktop-build` e abra
+`./dist/pr-tracker-desktop`. Para explorar dados fictícios no navegador, use
+`make desktop-dev` e abra `http://127.0.0.1:5173/?demo=1`.
+
+Veja [desenvolvimento da GUI](docs/desktop-development.md) para requisitos,
+configuração, atalhos, testes e limitações atuais de validação multiplataforma.
