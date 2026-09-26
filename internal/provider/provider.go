@@ -6,13 +6,13 @@ package provider
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
 
@@ -165,7 +165,7 @@ type Client interface {
 }
 
 // ErrNotSupported is returned by providers without a CLI integration yet.
-var ErrNotSupported = errors.New("provider ainda não suportado")
+var ErrNotSupported = i18n.Errorf("provider ainda não suportado")
 
 // MissingToolError reports that a required CLI is not installed.
 type MissingToolError struct{ Tool string }

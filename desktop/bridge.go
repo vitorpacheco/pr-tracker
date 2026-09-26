@@ -9,6 +9,7 @@ import (
 
 	"github.com/vitorpacheco/pr-tracker/internal/app"
 	"github.com/vitorpacheco/pr-tracker/internal/config"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
 )
 
@@ -20,6 +21,7 @@ type Item struct {
 	Worktree string
 }
 type View struct {
+	Language       string
 	RefreshSeconds int
 	Instances      []config.Instance
 	Items          []Item
@@ -59,16 +61,17 @@ type Bridge struct {
 func (b *Bridge) Load() (View, error) {
 	b.wait()
 	state, err := b.session.Load(context.Background())
-	return b.view(state), err
+	return b.view(state), b.localizedError(err)
 }
 func (b *Bridge) Refresh() (View, error) {
 	b.wait()
 	state, err := b.session.Refresh(context.Background())
-	return b.view(state), err
+	return b.view(state), b.localizedError(err)
 }
 func (b *Bridge) Detail(key string) (*provider.Thread, error) {
 	b.wait()
-	return b.session.Detail(context.Background(), key)
+	thread, err := b.session.Detail(context.Background(), key)
+	return thread, b.localizedError(err)
 }
 func (b *Bridge) Execute(request Request) Result {
 	b.wait()
@@ -76,16 +79,16 @@ func (b *Bridge) Execute(request Request) Result {
 	result := Result{Message: out.Message, ReloadThread: out.ReloadThread}
 	if err == nil && (request.Action == app.PrepareTerminal || request.Action == app.PrepareDiff) {
 		if b.terminal == nil {
-			err = errors.New("terminal desktop indisponível")
+			err = errors.New(b.t("terminal desktop indisponível"))
 		} else {
 			err = b.terminal(out.Directory, out.Args)
 			if err == nil {
-				result.Message = "Terminal aberto"
+				result.Message = b.t("Terminal aberto")
 			}
 		}
 	}
 	if err != nil {
-		result.Error = err.Error()
+		result.Error = b.errorText(err)
 		result.Dirty = errors.Is(err, app.ErrDirtyWorktree)
 		result.NeedsClone = errors.Is(err, app.ErrCloneRequired)
 	}
@@ -94,7 +97,7 @@ func (b *Bridge) Execute(request Request) Result {
 		state, loadErr = b.session.Refresh(context.Background())
 	}
 	if loadErr != nil && result.Error == "" {
-		result.Error = loadErr.Error()
+		result.Error = b.errorText(loadErr)
 	}
 	result.View = b.view(state)
 	return result
@@ -106,7 +109,7 @@ func (b *Bridge) SaveSettings(cfg config.Config) (View, error) {
 		return View{}, b.settingsError
 	}
 	if err := b.session.SaveSettings(cfg); err != nil {
-		return View{}, err
+		return View{}, b.localizedError(err)
 	}
 	return b.Refresh()
 }
@@ -114,7 +117,11 @@ func (b *Bridge) Diagnose() (app.Diagnostics, error) {
 	b.wait()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	return b.session.Diagnose(ctx)
+	diagnostics, err := b.session.Diagnose(ctx)
+	if err != nil {
+		return diagnostics, b.localizedError(err)
+	}
+	return diagnostics, nil
 }
 func (b *Bridge) OpenItem(key string) error {
 	b.wait()
@@ -128,24 +135,24 @@ func (b *Bridge) OpenItem(key string) error {
 		}
 		parsed, err := url.Parse(item.URL)
 		if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
-			return errors.New("link inválido")
+			return errors.New(b.t("link inválido"))
 		}
 		if b.openURL == nil {
-			return errors.New("navegador indisponível")
+			return errors.New(b.t("navegador indisponível"))
 		}
 		b.openURL(item.URL)
 		return nil
 	}
-	return errors.New("item não encontrado")
+	return errors.New(b.t("item não encontrado"))
 }
 func (b *Bridge) view(state app.State) View {
 	cfg := b.session.Configuration()
-	result := View{RefreshSeconds: int(cfg.Interval().Seconds()), Instances: cfg.Instances, Items: []Item{}, Errors: map[string]string{}, SyncedAt: state.SyncedAt, Revision: state.Revision, CacheError: b.startupError}
+	result := View{Language: i18n.Resolve(cfg.Language), RefreshSeconds: int(cfg.Interval().Seconds()), Instances: cfg.Instances, Items: []Item{}, Errors: map[string]string{}, SyncedAt: state.SyncedAt, Revision: state.Revision, CacheError: b.startupError}
 	if state.CacheError != nil {
-		result.CacheError = state.CacheError.Error()
+		result.CacheError = b.errorText(state.CacheError)
 	}
 	for name, err := range state.Errors {
-		result.Errors[name] = err.Error()
+		result.Errors[name] = b.errorText(err)
 	}
 	for _, item := range state.Items {
 		result.Items = append(result.Items, Item{Data: item, Key: item.Key(), Ref: item.Ref(), Clone: state.Clones[item.Key()], Worktree: state.Worktrees[item.Key()]})
@@ -155,12 +162,13 @@ func (b *Bridge) view(state app.State) View {
 
 func (b *Bridge) MergeOptions(key string) (provider.MergeOptions, error) {
 	b.wait()
-	return b.session.MergeOptions(key)
+	options, err := b.session.MergeOptions(key)
+	return options, b.localizedError(err)
 }
 func (b *Bridge) PickFolder() (string, error) {
 	b.wait()
 	if b.pickFolder == nil {
-		return "", errors.New("seletor de pasta indisponível")
+		return "", errors.New(b.t("seletor de pasta indisponível"))
 	}
 	return b.pickFolder()
 }
@@ -175,23 +183,40 @@ func (b *Bridge) OpenFolder(key string) error {
 		dir = state.Clones[key]
 	}
 	if dir == "" {
-		return app.ErrCloneRequired
+		return b.localizedError(app.ErrCloneRequired)
 	}
 	info, err := os.Stat(dir)
 	if err != nil {
 		return err
 	}
 	if !info.IsDir() {
-		return errors.New("pasta não encontrada")
+		return errors.New(b.t("pasta não encontrada"))
 	}
 	if b.folder == nil {
-		return errors.New("gerenciador de arquivos indisponível")
+		return errors.New(b.t("gerenciador de arquivos indisponível"))
 	}
-	return b.folder(dir)
+	return b.localizedError(b.folder(dir))
 }
 
 func (b *Bridge) wait() {
 	if b.ready != nil {
 		<-b.ready
 	}
+}
+
+func (b *Bridge) t(message string) string {
+	cfg := b.session.Configuration()
+	return i18n.Text(i18n.Resolve(cfg.Language), message)
+}
+
+func (b *Bridge) errorText(err error) string {
+	cfg := b.session.Configuration()
+	return i18n.ErrorText(i18n.Resolve(cfg.Language), err)
+}
+
+func (b *Bridge) localizedError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return errors.New(b.errorText(err))
 }

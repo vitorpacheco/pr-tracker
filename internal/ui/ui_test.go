@@ -44,6 +44,7 @@ func TestTabMatch(t *testing.T) {
 }
 func TestCloseWithoutMerge(t *testing.T) {
 	cfg := config.Default()
+	cfg.Language = "pt"
 	cfg.Instances = []config.Instance{{Name: "gh", Provider: config.GitHub, Host: "github.com"}}
 	m := New(cfg, nil)
 	pr := provider.Item{Kind: provider.KindPR, Instance: "gh", Provider: config.GitHub, Repo: "o/r", Number: 3, SourceBranch: "feat"}
@@ -76,6 +77,7 @@ func TestCloseWithoutMerge(t *testing.T) {
 func TestTrackAllRepoActionPersistsAndToggles(t *testing.T) {
 	t.Setenv("PR_TRACKER_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
 	cfg := config.Default()
+	cfg.Language = "pt"
 	cfg.Instances = []config.Instance{{Name: "gl", Provider: config.GitLab, Host: "gitlab.example.com"}}
 	m := New(cfg, nil)
 	pr := provider.Item{Kind: provider.KindPR, Instance: "gl", Provider: config.GitLab, Repo: "group/project", Number: 7}
@@ -115,6 +117,7 @@ func TestTrackAllRepoActionPersistsAndToggles(t *testing.T) {
 
 func TestSnapshotSelectsNonEmptyTabAndPreservesSyncStatus(t *testing.T) {
 	cfg := config.Default()
+	cfg.Language = "pt"
 	cfg.WorktreeDir = t.TempDir()
 	m := New(cfg, nil)
 	defer m.Close()
@@ -131,6 +134,7 @@ func TestSnapshotSelectsNonEmptyTabAndPreservesSyncStatus(t *testing.T) {
 
 func TestActionOutcomePreservesPartialSuccessAndDirtyConfirmation(t *testing.T) {
 	cfg := config.Default()
+	cfg.Language = "pt"
 	cfg.WorktreeDir = t.TempDir()
 	cfg.Instances = []config.Instance{{Name: "work", Provider: config.GitHub, Host: "github.com"}}
 	item := provider.Item{Instance: "work", Provider: config.GitHub, Host: "github.com", Repo: "org/repo", Number: 7}
@@ -162,5 +166,68 @@ func TestActionOutcomeRequestsCloneAndPreservesCleanupError(t *testing.T) {
 	msg := actionResult(item, "M", app.Outcome{Message: "merge feito", Refresh: true}, failure).(actionDoneMsg)
 	if !errors.Is(msg.err, failure) || !msg.refresh || msg.ok != "merge feito" || msg.dirty != nil {
 		t.Fatalf("partial success = %+v", msg)
+	}
+}
+
+func TestLanguageSettingsApplyImmediately(t *testing.T) {
+	t.Setenv("PR_TRACKER_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	t.Setenv("LC_ALL", "pt_BR.UTF-8")
+	t.Setenv("LANGUAGE", "")
+	cfg := config.Default()
+	m := New(cfg, nil)
+	defer m.Close()
+	if m.language != "pt" {
+		t.Fatalf("system language = %s", m.language)
+	}
+	m.openSettingsForm()
+	language := m.form.get("Idioma")
+	language.choice = 1 // English
+	if err := m.form.submit(m.form); err != nil {
+		t.Fatal(err)
+	}
+	if m.language != "en" || cfg.Language != "en" || m.status != "settings saved" {
+		t.Fatalf("language change not applied: %+v", m)
+	}
+	if !strings.Contains(m.filter.Placeholder, "filter by title") {
+		t.Fatal("placeholder not updated")
+	}
+	m.openSettingsForm()
+	if got := m.form.render(&zones{}, m.t); !strings.Contains(got, "Language") || !strings.Contains(got, "System") || !strings.Contains(got, "Save ctrl+s") {
+		t.Fatalf("settings not translated: %s", got)
+	}
+	loaded, _, err := config.Load()
+	if err != nil || loaded.Language != "en" {
+		t.Fatalf("saved config = %+v, %v", loaded, err)
+	}
+	m.form.get("Idioma").choice = 0 // Follow system again.
+	if err := m.form.submit(m.form); err != nil {
+		t.Fatal(err)
+	}
+	if m.language != "pt" || cfg.Language != "system" {
+		t.Fatal("system language not restored")
+	}
+}
+
+func TestLocalizedRenderingPreservesRepositoryContent(t *testing.T) {
+	for _, language := range []string{"en", "pt"} {
+		t.Run(language, func(t *testing.T) {
+			cfg := config.Default()
+			cfg.Language = language
+			m := New(cfg, nil)
+			defer m.Close()
+			item := provider.Item{Title: "Configurações", Repo: "org/repo", Author: "Nome", Kind: provider.KindPR}
+			detail := strings.Join(m.detail(&item, 100, 30), "\n")
+			if !strings.Contains(detail, "Configurações") || !strings.Contains(detail, "Nome") {
+				t.Fatalf("repository content was translated: %s", detail)
+			}
+			m.openMenu(&item)
+			want := "View conversation"
+			if language == "pt" {
+				want = "Ver conversa"
+			}
+			if !strings.Contains(m.menu[0].label, want) {
+				t.Fatalf("menu = %+v", m.menu)
+			}
+		})
 	}
 }

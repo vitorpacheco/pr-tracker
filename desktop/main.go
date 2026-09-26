@@ -8,16 +8,18 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/vitorpacheco/pr-tracker/internal/app"
-	"github.com/vitorpacheco/pr-tracker/internal/cache"
-	"github.com/vitorpacheco/pr-tracker/internal/config"
-	"github.com/vitorpacheco/pr-tracker/internal/launch"
-	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"github.com/vitorpacheco/pr-tracker/internal/app"
+	"github.com/vitorpacheco/pr-tracker/internal/cache"
+	"github.com/vitorpacheco/pr-tracker/internal/config"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
+	"github.com/vitorpacheco/pr-tracker/internal/launch"
+	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
 
 //go:embed all:frontend/dist
@@ -48,7 +50,7 @@ func main() {
 			bridge.session = session
 			bridge.folder = launch.Folder
 			bridge.pickFolder = func() (string, error) {
-				return runtime.OpenDirectoryDialog(ctx, runtime.OpenDialogOptions{Title: "Selecionar clone local"})
+				return runtime.OpenDirectoryDialog(ctx, runtime.OpenDialogOptions{Title: i18n.Text(i18n.Resolve(session.Configuration().Language), "Selecionar clone local")})
 			}
 			bridge.terminal = func(dir string, argv []string) error {
 				settings := session.Configuration()

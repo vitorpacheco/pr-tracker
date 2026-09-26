@@ -18,6 +18,7 @@ import (
 	"github.com/vitorpacheco/pr-tracker/internal/cache"
 	"github.com/vitorpacheco/pr-tracker/internal/config"
 	"github.com/vitorpacheco/pr-tracker/internal/gitops"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/launch"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
 	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
@@ -84,9 +85,10 @@ const (
 
 // Model is the root Bubble Tea model.
 type Model struct {
-	cfg     *config.Config
-	clients map[string]provider.Client
-	session *app.Session
+	cfg      *config.Config
+	language string
+	clients  map[string]provider.Client
+	session  *app.Session
 
 	prs     []provider.Item
 	instErr map[string]error
@@ -143,17 +145,18 @@ type Model struct {
 func New(cfg *config.Config, store *cache.Store) *Model {
 	fi := textinput.New()
 	fi.Prompt = "/ "
-	fi.Placeholder = "filtrar por título, repo, autor…"
+	fi.Placeholder = i18n.Text(i18n.Resolve(cfg.Language), "filtrar por título, repo, autor…")
 	fi.SetWidth(40)
 	m := &Model{
-		cfg:     cfg,
-		session: app.NewSession(cfg, store),
-		instErr: map[string]error{},
-		clones:  map[string]string{},
-		wts:     map[string]string{},
-		pending: map[string]string{},
-		filter:  fi,
-		mode:    launch.Resolve(cfg.Terminal),
+		cfg:      cfg,
+		language: i18n.Resolve(cfg.Language),
+		session:  app.NewSession(cfg, store),
+		instErr:  map[string]error{},
+		clones:   map[string]string{},
+		wts:      map[string]string{},
+		pending:  map[string]string{},
+		filter:   fi,
+		mode:     launch.Resolve(cfg.Terminal),
 	}
 	m.rebuildClients()
 	return m
@@ -358,7 +361,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loading = false
 		}
 		if msg.err != nil {
-			m.setStatus(stErr, msg.err.Error())
+			m.setStatus(stErr, i18n.ErrorText(m.language, msg.err))
 		} else {
 			m.prs, m.instErr, m.clones, m.wts = msg.state.Items, msg.state.Errors, msg.state.Clones, msg.state.Worktrees
 			m.cacheErr, m.lastSync = msg.state.CacheError, msg.state.SyncedAt
@@ -393,8 +396,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.loadThread())
 		}
 		if msg.err != nil {
-			m.showMessage("Erro", msg.err.Error())
-			m.setStatus(stErr, msg.err.Error())
+			m.showMessage(m.t("Erro"), i18n.ErrorText(m.language, msg.err))
+			m.setStatus(stErr, i18n.ErrorText(m.language, msg.err))
 		} else if msg.ok != "" {
 			m.setStatus(stOK, msg.ok)
 		}
@@ -418,19 +421,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmd, err := launch.Open(m.mode, msg.dir, msg.label, msg.argv)
 		if err != nil {
-			m.showMessage("Erro ao abrir", err.Error())
+			m.showMessage(m.t("Erro ao abrir"), i18n.ErrorText(m.language, err))
 			return m, nil
 		}
 		if cmd != nil {
 			return m, tea.ExecProcess(cmd, func(err error) tea.Msg { return execDoneMsg{err} })
 		}
-		m.setStatus(stOK, "aberto em nova aba ("+string(m.mode)+"): "+msg.label)
+		m.setStatus(stOK, m.t("aberto em nova aba (")+string(m.mode)+"): "+msg.label)
 		return m, nil
 
 	case execDoneMsg:
 		m.scanWorktrees()
 		if msg.err != nil {
-			m.setStatus(stErr, msg.err.Error())
+			m.setStatus(stErr, i18n.ErrorText(m.language, msg.err))
 		}
 		return m, nil
 
@@ -550,7 +553,7 @@ func (m *Model) press(k string) tea.Cmd {
 		if m.loading {
 			return nil
 		}
-		m.setStatus(stInfo, "atualizando…")
+		m.setStatus(stInfo, m.t("atualizando…"))
 		return m.requestRefresh()
 	case "i":
 		m.thread = nil
@@ -680,7 +683,7 @@ func (m *Model) formResult(res formResult) tea.Cmd {
 	case formSubmit:
 		f := m.form
 		if err := f.submit(f); err != nil {
-			f.err = oneLine(err.Error())
+			f.err = oneLine(i18n.ErrorText(m.language, err))
 			return nil
 		}
 		// submit may have opened another modal or chained an action.
@@ -769,26 +772,26 @@ func (m *Model) openMenu(pr *provider.Item) {
 	m.menuCur = 0
 	m.modal = modalMenu
 	conversation := []menuItem{
-		{key: "v", label: fmt.Sprintf("Ver conversa (%d comentários)", pr.Comments)},
-		{key: "n", label: "Comentar"},
+		{key: "v", label: fmt.Sprintf(m.t("Ver conversa (%d comentários)"), pr.Comments)},
+		{key: "n", label: m.t("Comentar")},
 	}
 	if pr.IsIssue() {
-		m.menu = append(conversation, menuItem{key: "o", label: "Abrir no navegador"})
+		m.menu = append(conversation, menuItem{key: "o", label: m.t("Abrir no navegador")})
 		return
 	}
 	_, hasWT := m.wts[pr.Key()]
 	noWT := ""
 	if !hasWT {
-		noWT = "não há worktree para este PR"
+		noWT = m.t("não há worktree para este PR")
 	}
 	client := m.clients[pr.Instance]
 	noTool := ""
 	if client != nil && !m.toolAvailable(client.Tool()) {
-		noTool = client.Tool() + " não instalado"
+		noTool = client.Tool() + m.t(" não instalado")
 	}
-	wtLabel := "Checkout em worktree"
+	wtLabel := m.t("Checkout em worktree")
 	if hasWT {
-		wtLabel = "Atualizar worktree"
+		wtLabel = m.t("Atualizar worktree")
 	}
 	tracked := false
 	if repo, ok := m.cfg.Repo(pr.Instance, pr.Repo); ok {
@@ -798,31 +801,31 @@ func (m *Model) openMenu(pr *provider.Item) {
 	if pr.Provider == config.GitLab {
 		kind = "MRs"
 	}
-	trackLabel := "Acompanhar todos os " + kind + " deste repositório"
+	trackLabel := m.t("Acompanhar todos os ") + kind + m.t(" deste repositório")
 	if tracked {
-		trackLabel = "Parar de acompanhar todos os " + kind + " deste repositório"
+		trackLabel = m.t("Parar de acompanhar todos os ") + kind + m.t(" deste repositório")
 	}
 	m.menu = append(conversation, []menuItem{
 		{key: "w", label: wtLabel},
-		{key: "c", label: "Checkout no clone local", disabled: noTool},
-		{key: "d", label: "Ver diff (" + m.diffToolName() + ")"},
-		{key: "t", label: "Abrir terminal no worktree (" + string(m.mode) + ")"},
-		{key: "a", label: "Aprovar", disabled: noTool},
-		{key: "A", label: "Aprovar e remover worktree", disabled: firstNonEmpty(noTool, noWT)},
+		{key: "c", label: m.t("Checkout no clone local"), disabled: noTool},
+		{key: "d", label: m.t("Ver diff (") + m.diffToolName() + ")"},
+		{key: "t", label: m.t("Abrir terminal no worktree (") + string(m.mode) + ")"},
+		{key: "a", label: m.t("Aprovar"), disabled: noTool},
+		{key: "A", label: m.t("Aprovar e remover worktree"), disabled: firstNonEmpty(noTool, noWT)},
 		{key: "m", label: "Merge", disabled: noTool},
-		{key: "M", label: "Merge e remover worktree", disabled: firstNonEmpty(noTool, noWT)},
-		{key: "X", label: "Fechar sem merge", disabled: noTool},
-		{key: "C", label: "Fechar sem merge e remover worktree", disabled: firstNonEmpty(noTool, noWT)},
-		{key: "x", label: "Remover worktree (sem aprovar)", disabled: noWT},
-		{key: "o", label: "Abrir no navegador"},
+		{key: "M", label: m.t("Merge e remover worktree"), disabled: firstNonEmpty(noTool, noWT)},
+		{key: "X", label: m.t("Fechar sem merge"), disabled: noTool},
+		{key: "C", label: m.t("Fechar sem merge e remover worktree"), disabled: firstNonEmpty(noTool, noWT)},
+		{key: "x", label: m.t("Remover worktree (sem aprovar)"), disabled: noWT},
+		{key: "o", label: m.t("Abrir no navegador")},
 		{key: "R", label: trackLabel},
-		{key: "p", label: "Definir pasta local do repositório"},
+		{key: "p", label: m.t("Definir pasta local do repositório")},
 	}...)
 }
 
 func (m *Model) openBrowser(url string) {
 	if err := launch.Browser(url); err != nil {
-		m.setStatus(stErr, err.Error())
+		m.setStatus(stErr, i18n.ErrorText(m.language, err))
 	}
 }
 
@@ -844,7 +847,7 @@ func (m *Model) diffToolName() string {
 
 func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 	if _, busy := m.pending[pr.Key()]; busy && k != "o" && k != "p" {
-		m.setStatus(stInfo, "aguarde: "+m.pending[pr.Key()])
+		m.setStatus(stInfo, m.t("aguarde: ")+m.pending[pr.Key()])
 		return nil
 	}
 	client := m.clients[pr.Instance]
@@ -862,7 +865,7 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 	}
 	if pr.IsIssue() {
 		if strings.Contains("wcdtaAmMXCxp", k) {
-			m.setStatus(stInfo, "ação disponível apenas para pull/merge requests")
+			m.setStatus(stInfo, m.t("ação disponível apenas para pull/merge requests"))
 		}
 		return nil
 	}
@@ -887,14 +890,14 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 		m.cfg.SetRepoTrackAll(p.Instance, p.Repo, !enabled)
 		if err := m.saveConfiguration(); err != nil {
 			m.cfg.SetRepoTrackAll(p.Instance, p.Repo, enabled)
-			m.setStatus(stErr, err.Error())
+			m.setStatus(stErr, i18n.ErrorText(m.language, err))
 			return nil
 		}
 		m.rebuildClients()
 		if enabled {
-			m.setStatus(stOK, "acompanhamento de todos os PRs/MRs desativado para "+p.Repo)
+			m.setStatus(stOK, m.t("acompanhamento de todos os PRs/MRs desativado para ")+p.Repo)
 		} else {
-			m.setStatus(stOK, "acompanhando todos os PRs/MRs de "+p.Repo)
+			m.setStatus(stOK, m.t("acompanhando todos os PRs/MRs de ")+p.Repo)
 		}
 		return m.requestRefresh()
 	case "p":
@@ -902,12 +905,12 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 		return m.form.setFocus(0)
 	case "w", "t", "d":
 		action := app.UpdateWorktree
-		label := "criando worktree"
+		label := m.t("criando worktree")
 		if k == "t" {
-			action, label = app.PrepareTerminal, "preparando worktree"
+			action, label = app.PrepareTerminal, m.t("preparando worktree")
 		}
 		if k == "d" {
-			action, label = app.PrepareDiff, "preparando worktree"
+			action, label = app.PrepareDiff, m.t("preparando worktree")
 		}
 		return start(label, func(ctx context.Context) tea.Msg {
 			out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: action, Item: p})
@@ -921,22 +924,22 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 			return launchMsg{key: key, dir: out.Directory, label: name, argv: out.Args, note: out.Note}
 		})
 	case "c":
-		m.ask("Checkout no clone local?", "Checkout", func() tea.Cmd {
+		m.ask(m.t("Checkout no clone local?"), "Checkout", func() tea.Cmd {
 			return start("checkout", func(ctx context.Context) tea.Msg {
 				out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: app.Checkout, Item: p})
 				return actionResult(p, k, out, err)
 			})
-		}, "Troca a branch atual de "+firstNonEmpty(m.clones[key], "(clone não configurado)"), "para a branch do PR usando "+client.Tool()+".")
+		}, m.t("Troca a branch atual de ")+firstNonEmpty(m.clones[key], m.t("(clone não configurado)")), m.t("para a branch do PR usando ")+client.Tool()+".")
 	case "a", "A":
 		if k == "A" && !hasWT {
 			return nil
 		}
-		title := "Aprovar " + p.Ref() + "?"
+		title := m.t("Aprovar ") + p.Ref() + "?"
 		if k == "A" {
-			title = "Aprovar " + p.Ref() + " e remover o worktree?"
+			title = m.t("Aprovar ") + p.Ref() + m.t(" e remover o worktree?")
 		}
-		m.ask(title, "Aprovar", func() tea.Cmd {
-			return start("aprovando", func(ctx context.Context) tea.Msg {
+		m.ask(title, m.t("Aprovar"), func() tea.Cmd {
+			return start(m.t("aprovando"), func(ctx context.Context) tea.Msg {
 				out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: app.Approve, Item: p, RemoveAfter: k == "A"})
 				return actionResult(p, k, out, err)
 			})
@@ -947,25 +950,25 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 		}
 		opts, err := m.session.MergeOptions(p.Key())
 		if err != nil {
-			m.setStatus(stErr, err.Error())
+			m.setStatus(stErr, i18n.ErrorText(m.language, err))
 			return nil
 		}
-		title := "Fazer merge de " + p.Ref() + "?"
+		title := m.t("Fazer merge de ") + p.Ref() + "?"
 		if k == "M" {
-			title = "Fazer merge de " + p.Ref() + " e remover o worktree?"
+			title = m.t("Fazer merge de ") + p.Ref() + m.t(" e remover o worktree?")
 		}
-		body := []string{p.Repo, p.Title, "", "método: " + opts.Method}
+		body := []string{p.Repo, p.Title, "", m.t("método: ") + opts.Method}
 		if opts.Auto {
-			body = append(body, "auto-merge: sim (aguarda pipeline)")
+			body = append(body, m.t("auto-merge: sim (aguarda pipeline)"))
 		}
 		if opts.DeleteBranch {
-			body = append(body, "apagar branch de origem: sim")
+			body = append(body, m.t("apagar branch de origem: sim"))
 		}
 		if p.CI == provider.CIFailure {
-			body = append(body, sRed.Render("atenção: pipeline falhou"))
+			body = append(body, sRed.Render(m.t("atenção: pipeline falhou")))
 		}
 		m.ask(title, "Merge", func() tea.Cmd {
-			return start("fazendo merge", func(ctx context.Context) tea.Msg {
+			return start(m.t("fazendo merge"), func(ctx context.Context) tea.Msg {
 				out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: app.Merge, Item: p, RemoveAfter: k == "M"})
 				return actionResult(p, k, out, err)
 			})
@@ -974,22 +977,22 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 		if k == "C" && !hasWT {
 			return nil
 		}
-		title := "Fechar " + p.Ref() + " sem merge?"
+		title := m.t("Fechar ") + p.Ref() + m.t(" sem merge?")
 		if k == "C" {
-			title = "Fechar " + p.Ref() + " sem merge e remover o worktree?"
+			title = m.t("Fechar ") + p.Ref() + m.t(" sem merge e remover o worktree?")
 		}
-		m.ask(title, "Fechar", func() tea.Cmd {
-			return start("fechando", func(ctx context.Context) tea.Msg {
+		m.ask(title, m.t("Fechar"), func() tea.Cmd {
+			return start(m.t("fechando"), func(ctx context.Context) tea.Msg {
 				out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: app.Close, Item: p, RemoveAfter: k == "C"})
 				return actionResult(p, k, out, err)
 			})
-		}, p.Repo, p.Title, "", "A branch "+p.SourceBranch+" é mantida no servidor.")
+		}, p.Repo, p.Title, "", m.t("A branch ")+p.SourceBranch+m.t(" é mantida no servidor."))
 	case "x":
 		if !hasWT {
 			return nil
 		}
-		m.ask("Remover o worktree de "+p.Ref()+"?", "Remover", func() tea.Cmd {
-			return start("removendo worktree", func(ctx context.Context) tea.Msg {
+		m.ask(m.t("Remover o worktree de ")+p.Ref()+"?", m.t("Remover"), func() tea.Cmd {
+			return start(m.t("removendo worktree"), func(ctx context.Context) tea.Msg {
 				out, err := m.session.Execute(ctx, p.Key(), app.Command{Action: app.RemoveWorktree, Item: p})
 				return actionResult(p, k, out, err)
 			})
@@ -1000,15 +1003,15 @@ func (m *Model) prAction(pr *provider.Item, k string) tea.Cmd {
 
 func (m *Model) confirmForceRemove(pr provider.Item) {
 	key := pr.Key()
-	m.ask("O worktree tem alterações locais", "Remover mesmo assim", func() tea.Cmd {
-		m.pending[key] = "removendo worktree"
+	m.ask(m.t("O worktree tem alterações locais"), m.t("Remover mesmo assim"), func() tea.Cmd {
+		m.pending[key] = m.t("removendo worktree")
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 			out, err := m.session.Execute(ctx, pr.Key(), app.Command{Action: app.RemoveWorktree, Item: pr, Force: true})
 			return actionResult(pr, "x", out, err)
 		}
-	}, m.wts[key], "", sRed.Render("As alterações não commitadas serão perdidas."))
+	}, m.wts[key], "", sRed.Render(m.t("As alterações não commitadas serão perdidas.")))
 }
 
 func filepathBase(p string) string {
@@ -1027,10 +1030,10 @@ func (m *Model) openRepoPathForm(pr provider.Item, then string) {
 		cur, remote = r.Path, r.Remote
 	}
 	f := &form{
-		title: "Pasta local de " + pr.Repo + " (" + pr.Instance + ")",
+		title: m.t("Pasta local de ") + pr.Repo + " (" + pr.Instance + ")",
 		fields: []*field{
-			textField("Pasta do clone", cur, "~/code/"+filepathBase(pr.Repo), "caminho de um clone existente; vazio remove o mapeamento"),
-			textField("Remote", remote, "detectar automaticamente", "remote que aponta para o repositório (ex.: origin, upstream)"),
+			textField("Pasta do clone", cur, "~/code/"+filepathBase(pr.Repo), m.t("caminho de um clone existente; vazio remove o mapeamento")),
+			textField("Remote", remote, m.t("detectar automaticamente"), m.t("remote que aponta para o repositório (ex.: origin, upstream)")),
 		},
 	}
 	f.submit = func(f *form) error {
@@ -1056,7 +1059,7 @@ func (m *Model) openRepoPathForm(pr provider.Item, then string) {
 				}
 			}
 		}
-		m.setStatus(stOK, "pasta local salva para "+pr.Repo)
+		m.setStatus(stOK, m.t("pasta local salva para ")+pr.Repo)
 		if then != "" {
 			m.modal, m.form = modalNone, nil
 			if cur := m.find(pr.Key()); cur != nil {
@@ -1082,17 +1085,20 @@ func (m *Model) openSettingsForm() {
 	c := m.cfg
 	wtDir, _ := c.Worktrees()
 	f := &form{
-		title: "Configurações — " + c.FilePath(),
+		title: m.t("Configurações — ") + c.FilePath(),
 		fields: []*field{
-			textField("Atualização", c.RefreshInterval, "5m", "intervalo de atualização automática (ex.: 90s, 5m, 1h)"),
-			choiceField("Terminal", []string{"auto", "herdr", "tmux", "inline"}, c.Terminal, "onde abrir terminal/diff; auto = herdr > tmux > inline"),
-			choiceField("Diff", []string{"hunk", "git"}, c.DiffTool, "ferramenta de revisão do diff"),
-			textField("Worktrees", firstNonEmpty(c.WorktreeDir, wtDir), "~/.pr-tracker/worktrees", "pasta onde os worktrees são criados"),
-			textField("Clone roots", strings.Join(c.CloneRoots, ", "), "~/code, ~/work", "pastas onde procurar clones automaticamente (separadas por vírgula)"),
+			choiceField("Idioma", []string{"system", "en", "pt"}, firstNonEmpty(c.Language, "system"), m.t("Seguir o idioma do computador ou escolher um idioma")),
+			textField("Atualização", c.RefreshInterval, "5m", m.t("intervalo de atualização automática (ex.: 90s, 5m, 1h)")),
+			choiceField("Terminal", []string{"auto", "herdr", "tmux", "inline"}, c.Terminal, m.t("onde abrir terminal/diff; auto = herdr > tmux > inline")),
+			choiceField("Diff", []string{"hunk", "git"}, c.DiffTool, m.t("ferramenta de revisão do diff")),
+			textField("Worktrees", firstNonEmpty(c.WorktreeDir, wtDir), "~/.pr-tracker/worktrees", m.t("pasta onde os worktrees são criados")),
+			textField("Clone roots", strings.Join(c.CloneRoots, ", "), "~/code, ~/work", m.t("pastas onde procurar clones automaticamente (separadas por vírgula)")),
 		},
 	}
+	f.get("Idioma").optionLabels = map[string]string{"system": "Sistema", "en": "English", "pt": "Português"}
 	f.submit = func(f *form) error {
 		next := *c
+		next.Language = f.get("Idioma").value()
 		next.RefreshInterval = f.get("Atualização").value()
 		next.Terminal = f.get("Terminal").value()
 		next.DiffTool = f.get("Diff").value()
@@ -1113,8 +1119,13 @@ func (m *Model) openSettingsForm() {
 		if err := m.saveConfiguration(); err != nil {
 			return err
 		}
+		m.language = i18n.Resolve(c.Language)
+		m.filter.Placeholder = m.t("filtrar por título, repo, autor…")
+		if m.thread != nil {
+			m.thread.lines = nil
+		}
 		m.mode = launch.Resolve(c.Terminal)
-		m.setStatus(stOK, "configurações salvas")
+		m.setStatus(stOK, m.t("configurações salvas"))
 		m.afterSubmit = m.refresh()
 		return nil
 	}
@@ -1147,7 +1158,7 @@ func (m *Model) instancesKey(k string) tea.Cmd {
 			in := &m.cfg.Instances[m.instCur]
 			in.Disabled = !in.Disabled
 			if err := m.saveConfiguration(); err != nil {
-				m.setStatus(stErr, err.Error())
+				m.setStatus(stErr, i18n.ErrorText(m.language, err))
 			}
 			m.rebuildClients()
 			return m.refresh()
@@ -1155,28 +1166,29 @@ func (m *Model) instancesKey(k string) tea.Cmd {
 	case "D", "delete":
 		if m.instCur < n {
 			name := m.cfg.Instances[m.instCur].Name
-			m.ask("Remover a instância "+name+"?", "Remover", func() tea.Cmd {
+			m.ask(m.t("Remover a instância ")+name+"?", m.t("Remover"), func() tea.Cmd {
 				m.cfg.RemoveInstance(name)
 				if err := m.saveConfiguration(); err != nil {
-					m.setStatus(stErr, err.Error())
+					m.setStatus(stErr, i18n.ErrorText(m.language, err))
 				}
 				m.instCur = max(0, min(m.instCur, len(m.cfg.Instances)-1))
 				m.rebuildClients()
 				m.prs = slices.DeleteFunc(m.prs, func(p provider.Item) bool { return p.Instance == name })
 				return m.refresh()
-			}, "Os mapeamentos de pastas locais desta instância também serão removidos.")
+			}, m.t("Os mapeamentos de pastas locais desta instância também serão removidos."))
 		}
 	case "t":
 		if m.instCur < n {
 			c := provider.New(m.cfg.Instances[m.instCur])
-			m.setStatus(stInfo, "verificando autenticação de "+c.Instance().Name+"…")
+			m.setStatus(stInfo, m.t("verificando autenticação de ")+c.Instance().Name+"…")
+			authenticated := m.t(" autenticado em ")
 			return func() tea.Msg {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 				if err := c.AuthStatus(ctx); err != nil {
 					return actionDoneMsg{err: err}
 				}
-				return actionDoneMsg{ok: c.Tool() + " autenticado em " + c.Instance().Host}
+				return actionDoneMsg{ok: c.Tool() + authenticated + c.Instance().Host}
 			}
 		}
 	}
@@ -1190,20 +1202,20 @@ func (m *Model) openInstanceForm(in *config.Instance) {
 		old, cur = in.Name, *in
 	}
 	providers := []string{string(config.GitHub), string(config.GitLab), string(config.Gitea), string(config.Bitbucket)}
-	title := "Nova instância"
+	title := m.t("Nova instância")
 	if old != "" {
-		title = "Editar instância " + old
+		title = m.t("Editar instância ") + old
 	}
 	f := &form{
 		title: title,
 		fields: []*field{
-			choiceField("Provider", providers, string(cur.Provider), "github (gh) · gitlab (glab) · gitea (tea) · bitbucket (ainda não suportado)"),
-			textField("Host", cur.Host, "github.com, gitlab.empresa.com…", "host da instância; vazio usa o SaaS do provider"),
-			textField("Nome", cur.Name, "igual ao host", "identificador único da instância"),
-			choiceField("Merge", []string{"merge", "squash", "rebase"}, firstNonEmpty(cur.MergeMethod, "merge"), "método de merge padrão"),
-			boolField("Auto-merge", cur.AutoMerge, "habilita merge automático quando o pipeline passar"),
-			boolField("Apagar branch", cur.DeleteBranch, "apaga a branch de origem após o merge"),
-			boolField("Desativada", cur.Disabled, "mantém a instância mas não consulta"),
+			choiceField("Provider", providers, string(cur.Provider), m.t("github (gh) · gitlab (glab) · gitea (tea) · bitbucket (ainda não suportado)")),
+			textField("Host", cur.Host, m.t("github.com, gitlab.empresa.com…"), m.t("host da instância; vazio usa o SaaS do provider")),
+			textField("Nome", cur.Name, m.t("igual ao host"), m.t("identificador único da instância")),
+			choiceField("Merge", []string{"merge", "squash", "rebase"}, firstNonEmpty(cur.MergeMethod, "merge"), m.t("método de merge padrão")),
+			boolField("Auto-merge", cur.AutoMerge, m.t("habilita merge automático quando o pipeline passar")),
+			boolField("Apagar branch", cur.DeleteBranch, m.t("apaga a branch de origem após o merge")),
+			boolField("Desativada", cur.Disabled, m.t("mantém a instância mas não consulta")),
 		},
 	}
 	f.submit = func(f *form) error {
@@ -1228,11 +1240,11 @@ func (m *Model) openInstanceForm(in *config.Instance) {
 		m.rebuildClients()
 		tool := provider.New(next).Tool()
 		if next.Provider == config.Bitbucket {
-			m.setStatus(stErr, "Bitbucket salvo, mas a integração ainda não existe (veja docs/bitbucket.md)")
+			m.setStatus(stErr, m.t("Bitbucket salvo, mas a integração ainda não existe (veja docs/bitbucket.md)"))
 		} else if !provider.ToolAvailable(tool) {
-			m.setStatus(stErr, tool+" não instalado. Instale: "+provider.InstallHint(tool))
+			m.setStatus(stErr, tool+m.t(" não instalado. Instale: ")+provider.InstallHint(tool))
 		} else {
-			m.setStatus(stOK, "instância salva")
+			m.setStatus(stOK, m.t("instância salva"))
 		}
 		if old != "" && old != next.Name {
 			for i := range m.prs {
@@ -1272,3 +1284,5 @@ func (m *Model) toolAvailable(name string) bool {
 	_, err := toolchain.Lookup(toolchain.WithPaths(context.Background(), m.cfg.ToolPaths), name)
 	return err == nil
 }
+
+func (m *Model) t(message string) string { return i18n.Text(m.language, message) }

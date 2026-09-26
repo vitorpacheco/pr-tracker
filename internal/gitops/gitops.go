@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
 	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
@@ -23,7 +23,7 @@ import (
 func Git(ctx context.Context, dir string, args ...string) (string, error) {
 	path, err := toolchain.Lookup(ctx, "git")
 	if err != nil {
-		return "", fmt.Errorf("localizando git: %w", err)
+		return "", i18n.Errorf("localizando git: %w", err)
 	}
 	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Dir = dir
@@ -137,10 +137,10 @@ func matchRemote(ctx context.Context, dir string, pr *provider.Item) (string, bo
 func ValidateClone(ctx context.Context, path string) error {
 	path = config.ExpandHome(path)
 	if st, err := os.Stat(path); err != nil || !st.IsDir() {
-		return fmt.Errorf("pasta não existe: %s", path)
+		return i18n.Errorf("pasta não existe: %s", path)
 	}
 	if _, err := Git(ctx, path, "rev-parse", "--git-dir"); err != nil {
-		return fmt.Errorf("não é um repositório git: %s", path)
+		return i18n.Errorf("não é um repositório git: %s", path)
 	}
 	return nil
 }
@@ -185,7 +185,7 @@ func CreateWorktree(ctx context.Context, cfg *config.Config, client provider.Cli
 }
 
 // ErrDirty is returned when a worktree has local changes.
-var ErrDirty = errors.New("worktree tem alterações locais")
+var ErrDirty = i18n.Errorf("worktree tem alterações locais")
 
 // RemoveWorktree removes the PR worktree and its local branch.
 func RemoveWorktree(ctx context.Context, cfg *config.Config, pr *provider.Item, force bool) error {

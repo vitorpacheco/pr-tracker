@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
 	"github.com/vitorpacheco/pr-tracker/internal/toolchain"
 )
@@ -46,7 +47,7 @@ func (s *Session) Diagnose(ctx context.Context) (Diagnostics, error) {
 		status := InstanceStatus{Name: in.Name, Disabled: in.Disabled}
 		if !in.Disabled {
 			if err := a.client(in, a.cfg.Repos...).AuthStatus(work); err != nil {
-				status.Error = err.Error()
+				status.Error = i18n.ErrorText(i18n.Resolve(a.cfg.Language), err)
 			}
 		}
 		result.Instances = append(result.Instances, status)

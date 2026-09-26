@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 )
 
 const appName = "pr-tracker"
@@ -75,6 +77,8 @@ type Repo struct {
 
 // Config is the on-disk configuration.
 type Config struct {
+	// Language is system (default), en or pt; shared by both interfaces.
+	Language string `toml:"language"`
 	// ToolPaths optionally pins external executables for desktop launchers.
 	ToolPaths       map[string]string `toml:"tool_paths,omitempty"`
 	DesktopTerminal string            `toml:"desktop_terminal,omitempty"`
@@ -134,7 +138,7 @@ func Path() (string, error) {
 
 // Default returns a configuration with defaults and no instances.
 func Default() *Config {
-	return &Config{RefreshInterval: "5m", Terminal: "auto", DiffTool: "hunk"}
+	return &Config{Language: "system", RefreshInterval: "5m", Terminal: "auto", DiffTool: "hunk"}
 }
 
 // Load reads the configuration file. A missing file yields defaults and
@@ -150,7 +154,7 @@ func Load() (cfg *Config, created bool, err error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return cfg, true, nil
 		}
-		return nil, false, fmt.Errorf("lendo %s: %w", path, err)
+		return nil, false, fmt.Errorf(cfg.t("lendo %s: %w"), path, err)
 	}
 	cfg.path = path
 	return cfg, false, cfg.Validate()
@@ -188,31 +192,34 @@ func (c *Config) FilePath() string { return c.path }
 
 // Validate checks field values.
 func (c *Config) Validate() error {
+	if !i18n.Supported(c.Language) {
+		return fmt.Errorf(c.t("idioma inválido %q (system, en, pt)"), c.Language)
+	}
 	if _, err := time.ParseDuration(c.RefreshInterval); err != nil {
-		return fmt.Errorf("refresh_interval inválido %q: %w", c.RefreshInterval, err)
+		return fmt.Errorf(c.t("refresh_interval inválido %q: %w"), c.RefreshInterval, err)
 	}
 	seen := map[string]bool{}
 	for _, in := range c.Instances {
 		if in.Name == "" {
-			return errors.New("instância sem nome")
+			return errors.New(c.t("instância sem nome"))
 		}
 		if seen[in.Name] {
-			return fmt.Errorf("instância duplicada %q", in.Name)
+			return fmt.Errorf(c.t("instância duplicada %q"), in.Name)
 		}
 		seen[in.Name] = true
 		if !slices.Contains(Providers, in.Provider) {
-			return fmt.Errorf("instância %q: provider desconhecido %q", in.Name, in.Provider)
+			return fmt.Errorf(c.t("instância %q: provider desconhecido %q"), in.Name, in.Provider)
 		}
 		switch in.MergeMethod {
 		case "", "merge", "squash", "rebase":
 		default:
-			return fmt.Errorf("instância %q: merge_method inválido %q", in.Name, in.MergeMethod)
+			return fmt.Errorf(c.t("instância %q: merge_method inválido %q"), in.Name, in.MergeMethod)
 		}
 	}
 	switch c.Terminal {
 	case "auto", "herdr", "tmux", "inline":
 	default:
-		return fmt.Errorf("terminal inválido %q (auto, herdr, tmux, inline)", c.Terminal)
+		return fmt.Errorf(c.t("terminal inválido %q (auto, herdr, tmux, inline)"), c.Terminal)
 	}
 	return nil
 }
@@ -259,7 +266,7 @@ func (c *Config) UpsertInstance(oldName string, in Instance) error {
 	}
 	for i := range c.Instances {
 		if c.Instances[i].Name == in.Name && in.Name != oldName {
-			return fmt.Errorf("já existe uma instância chamada %q", in.Name)
+			return fmt.Errorf(c.t("já existe uma instância chamada %q"), in.Name)
 		}
 	}
 	for i := range c.Instances {
@@ -354,3 +361,5 @@ func NormalizeHost(h string) string {
 	h = strings.TrimPrefix(h, "http://")
 	return strings.TrimRight(h, "/")
 }
+
+func (c *Config) t(message string) string { return i18n.Text(i18n.Resolve(c.Language), message) }

@@ -1,3 +1,5 @@
+import { browserLanguage, translator } from './i18n';
+let preference = 'system';
 import type { Item } from './list';
 const rows = [
   [
@@ -107,8 +109,15 @@ items.push({
   Number: 88,
 });
 export async function invoke(name: string, _args: unknown[]): Promise<unknown> {
+  if (name === 'SaveSettings') {
+    preference = (_args[0] as { Language: string }).Language;
+    localStorage.setItem('pr-tracker-demo-language', preference);
+    return invoke('Load', []);
+  }
+  preference = localStorage.getItem('pr-tracker-demo-language') || preference;
   if (name === 'Load' || name === 'Refresh')
     return {
+      Language: preference === 'system' ? browserLanguage() : preference,
       RefreshSeconds: 300,
       Instances: [
         { Name: 'Corp Git', Disabled: false },
@@ -136,6 +145,7 @@ export async function invoke(name: string, _args: unknown[]): Promise<unknown> {
     };
   if (name === 'Settings')
     return {
+      Language: preference,
       RefreshInterval: '5m',
       Terminal: 'auto',
       DiffTool: 'hunk',
@@ -176,5 +186,9 @@ export async function invoke(name: string, _args: unknown[]): Promise<unknown> {
         { Name: 'Work Git', Disabled: false, Error: '' },
       ],
     };
-  throw new Error('Demonstração: esta ação não altera dados.');
+  throw new Error(
+    translator(preference === 'system' ? browserLanguage() : preference)(
+      'Demonstração: esta ação não altera dados.',
+    ),
+  );
 }

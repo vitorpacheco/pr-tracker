@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
+	"github.com/vitorpacheco/pr-tracker/internal/i18n"
 	"github.com/vitorpacheco/pr-tracker/internal/provider"
 )
 
@@ -34,7 +35,7 @@ func (m *Model) View() tea.View {
 	if m.screen == screenPRs && (m.filtering || m.filter.Value() != "") {
 		f := " " + m.filter.View()
 		if !m.filtering {
-			f = " " + sAccent.Render("/ "+m.filter.Value()) + sDim.Render("  (esc limpa)")
+			f = " " + sAccent.Render("/ "+m.filter.Value()) + sDim.Render(m.t("  (esc limpa)"))
 		}
 		lines = append(lines, fit(f, W))
 	}
@@ -87,13 +88,13 @@ func (m *Model) header(W int) string {
 	x := lipgloss.Width(title) + 1
 	parts := []string{title, " "}
 	if m.screen == screenInstances || m.screen == screenThread {
-		name := "Instâncias"
+		name := m.t("Instâncias")
 		if m.screen == screenThread {
-			name = "Conversa " + m.thread.item.Ref()
+			name = m.t("Conversa ") + m.thread.item.Ref()
 		}
 		parts = append(parts, sTabActive.Render(name))
 		x += lipgloss.Width(parts[len(parts)-1])
-		back := sTab.Render("← voltar")
+		back := sTab.Render(m.t("← voltar"))
 		m.zones.add("key:esc", x, 0, lipgloss.Width(back), 1)
 		parts = append(parts, back)
 	} else {
@@ -109,7 +110,7 @@ func (m *Model) header(W int) string {
 				x += lipgloss.Width(g)
 				parts = append(parts, g)
 			}
-			label := fmt.Sprintf("%s %s %s", sKey.Render(itoa(i+1)), t.label, sMuted.Render(itoa(m.count(t))))
+			label := fmt.Sprintf("%s %s %s", sKey.Render(itoa(i+1)), m.t(t.label), sMuted.Render(itoa(m.count(t))))
 			if compact && i != m.tab {
 				label = fmt.Sprintf("%s %s", sKey.Render(itoa(i+1)), sMuted.Render(itoa(m.count(t))))
 			}
@@ -128,10 +129,10 @@ func (m *Model) header(W int) string {
 	var right string
 	switch {
 	case m.loading:
-		right = sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)] + " atualizando")
+		right = sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)] + m.t(" atualizando"))
 	case !m.lastSync.IsZero():
-		right = sMuted.Render("atualizado há "+duration(time.Since(m.lastSync))) +
-			sDim.Render(" · próxima em "+duration(max(time.Until(m.nextSync), 0)))
+		right = sMuted.Render(m.t("atualizado há ")+duration(time.Since(m.lastSync))) +
+			sDim.Render(m.t(" · próxima em ")+duration(max(time.Until(m.nextSync), 0)))
 	}
 	right = sKey.Render("r") + " " + right + " "
 	gap := W - lipgloss.Width(left) - lipgloss.Width(right)
@@ -146,7 +147,7 @@ func (m *Model) header(W int) string {
 func (m *Model) banners() []string {
 	var out []string
 	if m.cacheErr != nil {
-		out = append(out, "cache local indisponível: "+m.cacheErr.Error())
+		out = append(out, m.t("cache local indisponível: ")+i18n.ErrorText(m.language, m.cacheErr))
 	}
 	missing := map[string]bool{}
 	for _, in := range m.cfg.Instances {
@@ -156,7 +157,7 @@ func (m *Model) banners() []string {
 		tool := provider.New(in).Tool()
 		if !provider.ToolAvailable(tool) && !missing[tool] {
 			missing[tool] = true
-			out = append(out, fmt.Sprintf("%s não está instalado e é necessário para %s. Instale: %s", tool, in.Name, provider.InstallHint(tool)))
+			out = append(out, fmt.Sprintf(m.t("%s não está instalado e é necessário para %s. Instale: %s"), tool, in.Name, provider.InstallHint(tool)))
 		}
 	}
 	var errs []string
@@ -166,7 +167,7 @@ func (m *Model) banners() []string {
 		}
 	}
 	if len(errs) > 0 {
-		out = append(out, fmt.Sprintf("falha ao consultar %s — clique ou pressione i para detalhes", strings.Join(errs, ", ")))
+		out = append(out, fmt.Sprintf(m.t("falha ao consultar %s — clique ou pressione i para detalhes"), strings.Join(errs, ", ")))
 	}
 	return out
 }
@@ -174,26 +175,26 @@ func (m *Model) banners() []string {
 func (m *Model) hints() []hint {
 	if m.screen == screenThread {
 		return []hint{
-			{"↑↓", "rolar"}, {"space", "página"}, {"g", "início"}, {"G", "fim"}, {"n", "comentar"},
-			{"o", "navegador"}, {"r", "recarregar"}, {"esc", "voltar"}, {"?", "ajuda"},
+			{"↑↓", m.t("rolar")}, {"space", m.t("página")}, {"g", m.t("início")}, {"G", m.t("fim")}, {"n", m.t("comentar")},
+			{"o", m.t("navegador")}, {"r", m.t("recarregar")}, {"esc", m.t("voltar")}, {"?", m.t("ajuda")},
 		}
 	}
 	if cur := m.current(); m.screen == screenPRs && cur != nil && cur.IsIssue() {
 		return []hint{
-			{"enter", "ações"}, {"v", "conversa"}, {"n", "comentar"}, {"o", "navegador"},
-			{"/", "filtrar"}, {"r", "atualizar"}, {"i", "instâncias"}, {"s", "config"}, {"?", "ajuda"}, {"q", "sair"},
+			{"enter", m.t("ações")}, {"v", m.t("conversa")}, {"n", m.t("comentar")}, {"o", m.t("navegador")},
+			{"/", m.t("filtrar")}, {"r", m.t("atualizar")}, {"i", m.t("instâncias")}, {"s", "config"}, {"?", m.t("ajuda")}, {"q", m.t("sair")},
 		}
 	}
 	if m.screen == screenInstances {
 		return []hint{
-			{"n", "nova"}, {"e", "editar"}, {"space", "ativar/desativar"}, {"t", "testar auth"},
-			{"D", "remover"}, {"s", "config"}, {"esc", "voltar"}, {"?", "ajuda"}, {"q", "sair"},
+			{"n", m.t("nova")}, {"e", m.t("editar")}, {"space", m.t("ativar/desativar")}, {"t", m.t("testar auth")},
+			{"D", m.t("remover")}, {"s", "config"}, {"esc", m.t("voltar")}, {"?", m.t("ajuda")}, {"q", m.t("sair")},
 		}
 	}
 	return []hint{
-		{"enter", "ações"}, {"v", "conversa"}, {"n", "comentar"}, {"w", "worktree"}, {"d", "diff"}, {"t", "terminal"}, {"c", "checkout"},
-		{"a", "aprovar"}, {"m", "merge"}, {"X", "fechar"}, {"x", "rm worktree"}, {"o", "navegador"}, {"R", "todos do repo"},
-		{"/", "filtrar"}, {"r", "atualizar"}, {"i", "instâncias"}, {"s", "config"}, {"?", "ajuda"}, {"q", "sair"},
+		{"enter", m.t("ações")}, {"v", m.t("conversa")}, {"n", m.t("comentar")}, {"w", "worktree"}, {"d", "diff"}, {"t", "terminal"}, {"c", "checkout"},
+		{"a", m.t("aprovar")}, {"m", "merge"}, {"X", m.t("fechar")}, {"x", "rm worktree"}, {"o", m.t("navegador")}, {"R", m.t("todos do repo")},
+		{"/", m.t("filtrar")}, {"r", m.t("atualizar")}, {"i", m.t("instâncias")}, {"s", "config"}, {"?", m.t("ajuda")}, {"q", m.t("sair")},
 	}
 }
 
@@ -227,9 +228,9 @@ func (m *Model) statusLine(W int) string {
 func (m *Model) prsBody(W, H, top int) []string {
 	if len(m.cfg.Instances) == 0 {
 		return centered(W, H, []string{
-			sBold.Render("Nenhuma instância configurada"),
+			sBold.Render(m.t("Nenhuma instância configurada")),
 			"",
-			sMuted.Render("Pressione ") + sKey.Render("i") + sMuted.Render(" e depois ") + sKey.Render("n") + sMuted.Render(" para cadastrar GitHub/GitLab/Gitea (inclusive self-hosted)."),
+			sMuted.Render(m.t("Pressione ")) + sKey.Render("i") + sMuted.Render(m.t(" e depois ")) + sKey.Render("n") + sMuted.Render(m.t(" para cadastrar GitHub/GitLab/Gitea (inclusive self-hosted).")),
 		})
 	}
 	listW, detailW := W, 0
@@ -246,11 +247,11 @@ func (m *Model) prsBody(W, H, top int) []string {
 	list = append(list, m.columns(listW))
 	switch {
 	case len(vis) == 0 && m.loading && m.lastSync.IsZero():
-		list = append(list, centered(listW, H-1, []string{sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)] + " carregando pull requests…")})...)
+		list = append(list, centered(listW, H-1, []string{sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)] + m.t(" carregando pull requests…"))})...)
 	case len(vis) == 0:
-		msg := "Nada por aqui ✨"
+		msg := m.t("Nada por aqui ✨")
 		if m.filter.Value() != "" {
-			msg = "Nenhum PR corresponde ao filtro"
+			msg = m.t("Nenhum PR corresponde ao filtro")
 		}
 		list = append(list, centered(listW, H-1, []string{sMuted.Render(msg)})...)
 	default:
@@ -309,11 +310,11 @@ func (m *Model) widths(W int) colWidths {
 
 func (m *Model) columns(W int) string {
 	c := m.widths(W)
-	s := "  " + "CI " + "RV " + fit("REPOSITÓRIO", c.repo) + " " + fit("#", c.ref) + " " + fit("TÍTULO", c.title) + " "
+	s := "  " + "CI " + "RV " + fit(m.t("REPOSITÓRIO"), c.repo) + " " + fit("#", c.ref) + " " + fit(m.t("TÍTULO"), c.title) + " "
 	if c.author > 0 {
-		s += fit("AUTOR", c.author)
+		s += fit(m.t("AUTOR"), c.author)
 	}
-	s += fit("COM", 4) + fit(" ATU.", 5)
+	s += fit("COM", 4) + fit(m.t(" ATU."), 5)
 	return sDim.Render(fit(s, W))
 }
 
@@ -361,7 +362,7 @@ func (m *Model) row(pr *provider.Item, selected bool, W int) string {
 	if c.author > 0 {
 		s += fit(sMuted.Render(pr.Author), c.author-1) + " "
 	}
-	s += fit(sMuted.Render(comments), 4) + fit(sDim.Render(" "+age(pr.UpdatedAt)), 5) + strings.Join(flags, "")
+	s += fit(sMuted.Render(comments), 4) + fit(sDim.Render(" "+age(pr.UpdatedAt, m.t)), 5) + strings.Join(flags, "")
 	if selected {
 		return sRowSel.Render(fit(s, W))
 	}
@@ -383,19 +384,19 @@ func (m *Model) detail(pr *provider.Item, W, H int) []string {
 	d = append(d, sDim.Render(pr.URL), "")
 
 	kv := func(k, v string) { d = append(d, sLabel.Render(k)+v) }
-	kv("Autor", pr.Author)
+	kv(m.t("Autor"), pr.Author)
 	if len(pr.Assignees) > 0 {
-		kv("Atribuído a", strings.Join(pr.Assignees, ", "))
+		kv(m.t("Atribuído a"), strings.Join(pr.Assignees, ", "))
 	}
 	if len(pr.Labels) > 0 {
 		kv("Labels", labels(pr.Labels))
 	}
-	kv("Comentários", fmt.Sprintf("%d ", pr.Comments)+sKey.Render("v")+sMuted.Render(" ver · ")+sKey.Render("n")+sMuted.Render(" comentar"))
+	kv(m.t("Comentários"), fmt.Sprintf("%d ", pr.Comments)+sKey.Render("v")+sMuted.Render(m.t(" ver · "))+sKey.Render("n")+sMuted.Render(m.t(" comentar")))
 	if pr.IsIssue() {
-		kv("Você é", relations(pr))
-		kv("Atualizado", age(pr.UpdatedAt)+sDim.Render(" · criada "+age(pr.CreatedAt)))
+		kv(m.t("Você é"), relations(pr, m.t))
+		kv(m.t("Atualizado"), age(pr.UpdatedAt, m.t)+sDim.Render(m.t(" · criada ")+age(pr.CreatedAt, m.t)))
 		if l, ok := m.pending[pr.Key()]; ok {
-			kv("Executando", sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)]+" "+l))
+			kv(m.t("Executando"), sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)]+" "+l))
 		}
 		return d
 	}
@@ -404,48 +405,48 @@ func (m *Model) detail(pr *provider.Item, W, H int) []string {
 		branch += sYellow.Render(" (fork)")
 	}
 	kv("Branch", branch)
-	state := sGreen.Render("aberto")
+	state := sGreen.Render(m.t("aberto"))
 	if pr.Draft {
-		state = sMuted.Render("rascunho")
+		state = sMuted.Render(m.t("rascunho"))
 	}
 	if pr.Conflicts {
-		state += sRed.Render(" · com conflitos")
+		state += sRed.Render(m.t(" · com conflitos"))
 	}
-	kv("Estado", state)
-	rev := reviewLabel(pr)
+	kv(m.t("Estado"), state)
+	rev := reviewLabel(pr, m.t)
 	if pr.ApprovedByMe {
-		rev += sGreen.Render(" · você aprovou")
+		rev += sGreen.Render(m.t(" · você aprovou"))
 	}
-	kv("Revisão", rev)
+	kv(m.t("Revisão"), rev)
 	if len(pr.ApprovedBy) > 0 {
-		kv("Aprovado por", strings.Join(pr.ApprovedBy, ", "))
+		kv(m.t("Aprovado por"), strings.Join(pr.ApprovedBy, ", "))
 	}
-	kv("Você é", relations(pr))
+	kv(m.t("Você é"), relations(pr, m.t))
 	if pr.Additions+pr.Deletions+pr.Files > 0 {
-		kv("Mudanças", sGreen.Render(fmt.Sprintf("+%d", pr.Additions))+" "+sRed.Render(fmt.Sprintf("-%d", pr.Deletions))+sMuted.Render(fmt.Sprintf(" em %d arquivos", pr.Files)))
+		kv(m.t("Mudanças"), sGreen.Render(fmt.Sprintf("+%d", pr.Additions))+" "+sRed.Render(fmt.Sprintf("-%d", pr.Deletions))+sMuted.Render(fmt.Sprintf(m.t(" em %d arquivos"), pr.Files)))
 	}
-	kv("Atualizado", age(pr.UpdatedAt)+sDim.Render(" · criado "+age(pr.CreatedAt)))
+	kv(m.t("Atualizado"), age(pr.UpdatedAt, m.t)+sDim.Render(m.t(" · criado ")+age(pr.CreatedAt, m.t)))
 	if c := m.clones[pr.Key()]; c != "" {
 		kv("Clone", c)
 	} else {
-		kv("Clone", sYellow.Render("não configurado ")+sKey.Render("p")+sMuted.Render(" define"))
+		kv("Clone", sYellow.Render(m.t("não configurado "))+sKey.Render("p")+sMuted.Render(m.t(" define")))
 	}
 	if wt, ok := m.wts[pr.Key()]; ok {
 		kv("Worktree", sBlue.Render(wt))
 	} else {
-		kv("Worktree", sDim.Render("— ")+sKey.Render("w")+sMuted.Render(" cria"))
+		kv("Worktree", sDim.Render("— ")+sKey.Render("w")+sMuted.Render(m.t(" cria")))
 	}
 	if l, ok := m.pending[pr.Key()]; ok {
-		kv("Executando", sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)]+" "+l))
+		kv(m.t("Executando"), sYellow.Render(spinnerFrames[m.frame%len(spinnerFrames)]+" "+l))
 	}
-	d = append(d, "", sLabel.Render("Pipeline")+ciLabel(pr.CI))
+	d = append(d, "", sLabel.Render("Pipeline")+ciLabel(pr.CI, m.t))
 	checks := slices.Clone(pr.Checks)
 	rank := map[provider.CIState]int{provider.CIFailure: 0, provider.CIPending: 1, provider.CICanceled: 2, provider.CISuccess: 3, provider.CINone: 4}
 	slices.SortStableFunc(checks, func(a, b provider.Check) int { return rank[a.State] - rank[b.State] })
 	room := H - len(d)
 	for i, c := range checks {
 		if i >= room-1 && len(checks) > room {
-			d = append(d, sDim.Render(fmt.Sprintf("  … mais %d", len(checks)-i)))
+			d = append(d, sDim.Render(fmt.Sprintf(m.t("  … mais %d"), len(checks)-i)))
 			break
 		}
 		d = append(d, "  "+ciIcon(c.State)+" "+c.Name)
@@ -453,19 +454,19 @@ func (m *Model) detail(pr *provider.Item, W, H int) []string {
 	return d
 }
 
-func relations(it *provider.Item) string {
+func relations(it *provider.Item, tr func(string) string) string {
 	var rel []string
 	if it.Relations&provider.ReviewRequested != 0 {
-		rel = append(rel, "revisor")
+		rel = append(rel, tr("revisor"))
 	}
 	if it.Relations&provider.Authored != 0 {
-		rel = append(rel, "autor")
+		rel = append(rel, tr("autor"))
 	}
 	if it.Relations&provider.Assigned != 0 {
-		rel = append(rel, "atribuído")
+		rel = append(rel, tr("atribuído"))
 	}
 	if it.Relations&provider.Mentioned != 0 {
-		rel = append(rel, "mencionado")
+		rel = append(rel, tr("mencionado"))
 	}
 	return strings.Join(rel, ", ")
 }
@@ -488,13 +489,13 @@ func (m *Model) instancesBody(W, H, top int) []string {
 	var out []string
 	if len(m.cfg.Instances) == 0 {
 		return centered(W, H, []string{
-			sBold.Render("Nenhuma instância"),
+			sBold.Render(m.t("Nenhuma instância")),
 			"",
-			sMuted.Render("Pressione ") + sKey.Render("n") + sMuted.Render(" para adicionar github.com, gitlab.com ou uma instância self-hosted."),
-			sDim.Render("A autenticação usa os próprios gh / glab / tea (gh auth login --hostname …)."),
+			sMuted.Render(m.t("Pressione ")) + sKey.Render("n") + sMuted.Render(m.t(" para adicionar github.com, gitlab.com ou uma instância self-hosted.")),
+			sDim.Render(m.t("A autenticação usa os próprios gh / glab / tea (gh auth login --hostname …).")),
 		})
 	}
-	out = append(out, sDim.Render(fit("  "+fit("NOME", 22)+fit("PROVIDER", 11)+fit("HOST", 30)+fit("CLI", 7)+"STATUS", W)))
+	out = append(out, sDim.Render(fit("  "+fit(m.t("NOME"), 22)+fit("PROVIDER", 11)+fit("HOST", 30)+fit("CLI", 7)+"STATUS", W)))
 	for i, in := range m.cfg.Instances {
 		cl := provider.New(in)
 		tool := cl.Tool()
@@ -505,13 +506,13 @@ func (m *Model) instancesBody(W, H, top int) []string {
 		var status string
 		switch {
 		case in.Provider == config.Bitbucket:
-			status = sYellow.Render("não suportado ainda")
+			status = sYellow.Render(m.t("não suportado ainda"))
 		case in.Disabled:
-			status = sDim.Render("desativada")
+			status = sDim.Render(m.t("desativada"))
 		case !provider.ToolAvailable(tool):
-			status = sRed.Render("CLI não instalado")
+			status = sRed.Render(m.t("CLI não instalado"))
 		case m.instErr[in.Name] != nil:
-			status = sRed.Render("erro")
+			status = sRed.Render(m.t("erro"))
 		case m.lastSync.IsZero():
 			status = sMuted.Render("…")
 		default:
@@ -539,25 +540,25 @@ func (m *Model) instancesBody(W, H, top int) []string {
 		cl := provider.New(in)
 		out = append(out, "", sDim.Render(strings.Repeat("─", W)))
 		kv := func(k, v string) { out = append(out, " "+sLabel.Render(k)+v) }
-		kv("Merge", firstNonEmpty(in.MergeMethod, "merge")+sDim.Render(fmt.Sprintf(" · auto-merge %v · apagar branch %v", in.AutoMerge, in.DeleteBranch)))
+		kv("Merge", firstNonEmpty(in.MergeMethod, "merge")+sDim.Render(fmt.Sprintf(m.t(" · auto-merge %v · apagar branch %v"), in.AutoMerge, in.DeleteBranch)))
 		repos := 0
 		for _, r := range m.cfg.Repos {
 			if r.Instance == in.Name {
 				repos++
 			}
 		}
-		kv("Repos locais", fmt.Sprint(repos))
+		kv(m.t("Repos locais"), fmt.Sprint(repos))
 		if !provider.ToolAvailable(cl.Tool()) {
-			kv("CLI", sRed.Render(cl.Tool()+" não instalado — "+provider.InstallHint(cl.Tool())))
+			kv("CLI", sRed.Render(cl.Tool()+m.t(" não instalado — ")+provider.InstallHint(cl.Tool())))
 		}
 		if in.Provider == config.Bitbucket {
-			kv("Bitbucket", sYellow.Render("sem CLI oficial; integração adiada (docs/bitbucket.md)"))
+			kv("Bitbucket", sYellow.Render(m.t("sem CLI oficial; integração adiada (docs/bitbucket.md)")))
 		}
 		if err := m.instErr[in.Name]; err != nil {
-			wrapped := lipgloss.NewStyle().Width(max(W-16, 20)).Render(err.Error())
+			wrapped := lipgloss.NewStyle().Width(max(W-16, 20)).Render(i18n.ErrorText(m.language, err))
 			for j, l := range strings.Split(wrapped, "\n") {
 				if j == 0 {
-					kv("Erro", sRed.Render(l))
+					kv(m.t("Erro"), sRed.Render(l))
 				} else {
 					out = append(out, " "+spaces(12)+sRed.Render(l))
 				}
@@ -596,7 +597,7 @@ func (m *Model) modalContent(W, H int, z *zones) string {
 			z.add("menu:"+itoa(i), 0, len(b), min(maxW, 64), 1)
 			b = append(b, line)
 		}
-		b = append(b, "", sDim.Render("↑↓ navega · enter/atalho executa · esc fecha"))
+		b = append(b, "", sDim.Render(m.t("↑↓ navega · enter/atalho executa · esc fecha")))
 		return strings.Join(b, "\n")
 
 	case modalConfirm:
@@ -608,14 +609,14 @@ func (m *Model) modalContent(W, H int, z *zones) string {
 		}
 		b = append(b, "")
 		yes := sTabActive.Render(c.yes + " (y/enter)")
-		no := sTab.Render("Cancelar (n/esc)")
+		no := sTab.Render(m.t("Cancelar (n/esc)"))
 		z.add("confirm:yes", 0, lipglossHeight(b), lipgloss.Width(yes), 1)
 		z.add("confirm:no", lipgloss.Width(yes)+2, lipglossHeight(b), lipgloss.Width(no), 1)
 		b = append(b, yes+"  "+no)
 		return strings.Join(b, "\n")
 
 	case modalForm:
-		return m.form.render(z)
+		return m.form.render(z, m.t)
 
 	case modalCompose:
 		return m.composeContent(z)
@@ -649,48 +650,48 @@ func (m *Model) helpContent(z *zones) string {
 	sec := func(t string) string { return sBold.Foreground(cAccent2).Render(t) }
 	row := func(k, d string) string { return "  " + sKey.Render(fit(k, 16)) + d }
 	left := []string{
-		sec("Navegação"),
-		row("↑↓ / j k", "mover seleção"),
-		row("1-4 / 5-7", "abas de PRs / issues"),
-		row("tab", "próxima aba"),
-		row("g / G", "início / fim"),
-		row("pgup / pgdn", "página"),
-		row("/", "filtrar"),
-		row("enter / clique", "menu de ações"),
-		row("r", "atualizar agora"),
-		row("i", "instâncias"),
-		row("s", "configurações"),
-		row("q / ctrl+c", "sair"),
+		sec(m.t("Navegação")),
+		row("↑↓ / j k", m.t("mover seleção")),
+		row("1-4 / 5-7", m.t("abas de PRs / issues")),
+		row("tab", m.t("próxima aba")),
+		row("g / G", m.t("início / fim")),
+		row("pgup / pgdn", m.t("página")),
+		row("/", m.t("filtrar")),
+		row(m.t("enter / clique"), m.t("menu de ações")),
+		row("r", m.t("atualizar agora")),
+		row("i", m.t("instâncias")),
+		row("s", m.t("configurações")),
+		row("q / ctrl+c", m.t("sair")),
 	}
 	right := []string{
-		sec("Ações"),
-		row("v", "ver conversa (comentários)"),
-		row("n", "comentar"),
-		row("w", "checkout em worktree"),
-		row("c", "checkout no clone local"),
+		sec(m.t("Ações")),
+		row("v", m.t("ver conversa (comentários)")),
+		row("n", m.t("comentar")),
+		row("w", m.t("checkout em worktree")),
+		row("c", m.t("checkout no clone local")),
 		row("d", "diff (hunk/git)"),
-		row("t", "terminal no worktree"),
-		row("a / A", "aprovar / + remover wt"),
-		row("m / M", "merge / + remover wt"),
-		row("X / C", "fechar sem merge / + remover wt"),
-		row("x", "remover worktree"),
-		row("o", "abrir no navegador"),
-		row("R", "todos os PRs/MRs do repo"),
-		row("p", "definir pasta local"),
-		sDim.Render("  (w…x/R/p só em PRs)"),
+		row("t", m.t("terminal no worktree")),
+		row("a / A", m.t("aprovar / + remover wt")),
+		row("m / M", m.t("merge / + remover wt")),
+		row("X / C", m.t("fechar sem merge / + remover wt")),
+		row("x", m.t("remover worktree")),
+		row("o", m.t("abrir no navegador")),
+		row("R", m.t("todos os PRs/MRs do repo")),
+		row("p", m.t("definir pasta local")),
+		sDim.Render(m.t("  (w…x/R/p só em PRs)")),
 	}
 	legend := []string{
 		"",
-		sec("Legenda"),
-		"  " + ciIcon(provider.CISuccess) + " pipeline ok  " + ciIcon(provider.CIFailure) + " falhou  " + ciIcon(provider.CIPending) + " rodando  " + ciIcon(provider.CICanceled) + " cancelado",
-		"  " + sGreen.Render("◉") + " issue aberta  " + sGreen.Render("✓") + " você aprovou  " + sGreen.Render("◆") + " aprovado  " + sRed.Render("±") + " alterações pedidas  " + sBlue.Render("⎇") + " worktree  " + sRed.Render("⚠") + " conflito",
+		sec(m.t("Legenda")),
+		"  " + ciIcon(provider.CISuccess) + " pipeline ok  " + ciIcon(provider.CIFailure) + m.t(" falhou  ") + ciIcon(provider.CIPending) + m.t(" rodando  ") + ciIcon(provider.CICanceled) + m.t(" cancelado"),
+		"  " + sGreen.Render("◉") + m.t(" issue aberta  ") + sGreen.Render("✓") + m.t(" você aprovou  ") + sGreen.Render("◆") + m.t(" aprovado  ") + sRed.Render("±") + m.t(" alterações pedidas  ") + sBlue.Render("⎇") + " worktree  " + sRed.Render("⚠") + m.t(" conflito"),
 		"",
 		sDim.Render("  Terminal: " + string(m.mode) + " · config: " + m.cfg.FilePath()),
 	}
 	cols := lipgloss.JoinHorizontal(lipgloss.Top, strings.Join(left, "\n"), "    ", strings.Join(right, "\n"))
 	b := append([]string{cols}, legend...)
 	h := lipglossHeight(b)
-	closeBtn := sTabActive.Render("Fechar (esc)")
+	closeBtn := sTabActive.Render(m.t("Fechar (esc)"))
 	z.add("close", 0, h+1, lipgloss.Width(closeBtn), 1)
 	b = append(b, "", closeBtn)
 	return strings.Join(b, "\n")

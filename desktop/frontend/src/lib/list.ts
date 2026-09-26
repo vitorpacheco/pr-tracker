@@ -37,14 +37,18 @@ export function nextSelection(
     )
   ].Key;
 }
-export function relativeAge(value: string): string {
+export function relativeAge(value: string, language = 'en'): string {
   const minutes = Math.max(
     0,
     Math.floor((Date.now() - new Date(value).getTime()) / 60000),
   );
   if (!Number.isFinite(minutes)) return '—';
-  if (minutes < 1) return 'agora';
-  if (minutes < 60) return `há ${minutes} min`;
-  if (minutes < 1440) return `há ${Math.floor(minutes / 60)} h`;
-  return `há ${Math.floor(minutes / 1440)} d`;
+  const format = new Intl.RelativeTimeFormat(language, {
+    numeric: 'auto',
+    style: 'short',
+  });
+  if (minutes < 1) return format.format(0, 'second');
+  if (minutes < 60) return format.format(-minutes, 'minute');
+  if (minutes < 1440) return format.format(-Math.floor(minutes / 60), 'hour');
+  return format.format(-Math.floor(minutes / 1440), 'day');
 }

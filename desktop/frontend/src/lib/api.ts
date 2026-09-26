@@ -1,3 +1,4 @@
+import { translator, browserLanguage } from './i18n';
 import * as native from '../../wailsjs/go/main/Bridge';
 import type { main, config, provider, app } from '../../wailsjs/go/models';
 import type { View } from './list';
@@ -33,7 +34,9 @@ async function call<T>(
   }
   if (!('go' in window))
     throw new Error(
-      'Abra o aplicativo desktop. Para explorar dados fictícios no navegador, use ?demo=1.',
+      translator(browserLanguage())(
+        'Abra o aplicativo desktop. Para explorar dados fictícios no navegador, use ?demo=1.',
+      ),
     );
   return (native[name] as (...args: unknown[]) => Promise<T>)(...args);
 }

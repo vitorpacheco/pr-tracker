@@ -61,18 +61,18 @@ func ciIcon(s provider.CIState) string {
 	return sDim.Render("·")
 }
 
-func ciLabel(s provider.CIState) string {
+func ciLabel(s provider.CIState, tr func(string) string) string {
 	switch s {
 	case provider.CISuccess:
-		return sGreen.Render("✔ sucesso")
+		return sGreen.Render(tr("✔ sucesso"))
 	case provider.CIFailure:
-		return sRed.Render("✘ falhou")
+		return sRed.Render(tr("✘ falhou"))
 	case provider.CIPending:
-		return sYellow.Render("● em andamento")
+		return sYellow.Render(tr("● em andamento"))
 	case provider.CICanceled:
-		return sMuted.Render("⊘ cancelado")
+		return sMuted.Render(tr("⊘ cancelado"))
 	}
-	return sDim.Render("sem pipeline")
+	return sDim.Render(tr("sem pipeline"))
 }
 
 func reviewIcon(pr *provider.Item) string {
@@ -89,26 +89,26 @@ func reviewIcon(pr *provider.Item) string {
 	return sDim.Render("◇")
 }
 
-func reviewLabel(pr *provider.Item) string {
+func reviewLabel(pr *provider.Item, tr func(string) string) string {
 	switch pr.Review {
 	case provider.ReviewApproved:
-		return sGreen.Render("aprovado")
+		return sGreen.Render(tr("aprovado"))
 	case provider.ReviewChangesRequested:
-		return sRed.Render("alterações solicitadas")
+		return sRed.Render(tr("alterações solicitadas"))
 	case provider.ReviewRequired:
-		return sYellow.Render("aguardando revisão")
+		return sYellow.Render(tr("aguardando revisão"))
 	}
 	return sDim.Render("—")
 }
 
-func age(t time.Time) string {
+func age(t time.Time, tr func(string) string) string {
 	if t.IsZero() {
 		return ""
 	}
 	d := time.Since(t)
 	switch {
 	case d < time.Minute:
-		return "agora"
+		return tr("agora")
 	case d < time.Hour:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
 	case d < 48*time.Hour:
@@ -118,7 +118,7 @@ func age(t time.Time) string {
 	case d < 365*24*time.Hour:
 		return fmt.Sprintf("%dmo", int(d.Hours()/24/30))
 	}
-	return fmt.Sprintf("%da", int(d.Hours()/24/365))
+	return fmt.Sprintf(tr("%da"), int(d.Hours()/24/365))
 }
 
 func duration(d time.Duration) string {

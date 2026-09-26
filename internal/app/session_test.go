@@ -100,6 +100,7 @@ func TestSessionDiscardsOldGenerationAndClosesWork(t *testing.T) {
 
 func TestSessionResolvesCommandItemAndSerializesItemActions(t *testing.T) {
 	a, c, item := actionFixture()
+	a.cfg.Language = "pt"
 	s := NewSession(&a.cfg, nil)
 	s.application = a
 	s.loaded = true
