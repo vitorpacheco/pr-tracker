@@ -4,8 +4,6 @@ package app
 import (
 	"context"
 	"errors"
-	"maps"
-	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -36,11 +34,7 @@ type Application struct {
 }
 
 func New(cfg *config.Config, store *cache.Store) *Application {
-	a := &Application{cfg: *cfg, client: provider.New, resolveClone: gitops.ResolveClone, worktreeExists: gitops.WorktreeExists, createWorktree: gitops.CreateWorktree, removeWorktree: gitops.RemoveWorktree}
-	a.cfg.ToolPaths = maps.Clone(cfg.ToolPaths)
-	a.cfg.Instances = slices.Clone(cfg.Instances)
-	a.cfg.Repos = slices.Clone(cfg.Repos)
-	a.cfg.CloneRoots = slices.Clone(cfg.CloneRoots)
+	a := &Application{cfg: cloneConfig(*cfg), client: provider.New, resolveClone: gitops.ResolveClone, worktreeExists: gitops.WorktreeExists, createWorktree: gitops.CreateWorktree, removeWorktree: gitops.RemoveWorktree}
 	if store != nil {
 		a.store = store
 	}

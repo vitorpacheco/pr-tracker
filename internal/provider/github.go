@@ -498,6 +498,15 @@ func (g *github) Close(ctx context.Context, pr *Item) error {
 	return err
 }
 
+func (g *github) SetDraft(ctx context.Context, pr *Item, draft bool) error {
+	args := []string{"pr", "ready", strconv.Itoa(pr.Number), "-R", g.repoArg(pr)}
+	if draft {
+		args = append(args, "--undo")
+	}
+	_, err := run(ctx, "", g.env(), "gh", args...)
+	return err
+}
+
 func (g *github) Checkout(ctx context.Context, pr *Item, dir string) error {
 	_, err := run(ctx, dir, g.env(), "gh", "pr", "checkout", strconv.Itoa(pr.Number), "-R", g.repoArg(pr))
 	return err

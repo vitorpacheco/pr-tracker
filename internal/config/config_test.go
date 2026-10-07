@@ -3,10 +3,44 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"testing"
 	"time"
 )
+
+func TestCommentPresetsRoundTripAndValidation(t *testing.T) {
+	t.Setenv("PR_TRACKER_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	cfg := Default()
+	presets := []CommentPreset{{Label: "Aprovado", Body: "aprovado"}, {Label: "Reprovado", Body: "reprovado\n\nRevise os testes."}}
+	cfg.Instances = []Instance{
+		{Name: "work", Provider: GitLab, Host: "git.company.com", CommentPresets: presets},
+		{Name: "other", Provider: GitHub, Host: "github.com"},
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _, err := Load()
+	if err != nil || !reflect.DeepEqual(loaded.Instances[0].CommentPresets, presets) || len(loaded.Instances[1].CommentPresets) != 0 {
+		t.Fatalf("presets = %+v, %v", loaded, err)
+	}
+	for _, tc := range []struct {
+		name   string
+		preset CommentPreset
+	}{
+		{"empty label", CommentPreset{Body: "aprovado"}},
+		{"blank label", CommentPreset{Label: "  ", Body: "aprovado"}},
+		{"empty body", CommentPreset{Label: "Aprovado"}},
+		{"blank body", CommentPreset{Label: "Aprovado", Body: " \n\t"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg.Instances[0].CommentPresets = []CommentPreset{tc.preset}
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("invalid preset accepted")
+			}
+		})
+	}
+}
 
 func TestDirUsesXDGOnLinux(t *testing.T) {
 	if runtime.GOOS != "linux" {

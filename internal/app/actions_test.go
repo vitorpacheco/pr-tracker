@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/vitorpacheco/pr-tracker/internal/config"
@@ -28,6 +29,14 @@ func (c *actionClient) Merge(_ context.Context, _ *provider.Item, opts provider.
 }
 func (c *actionClient) Close(context.Context, *provider.Item) error {
 	c.calls = append(c.calls, "close")
+	return c.err
+}
+func (c *actionClient) SetDraft(_ context.Context, _ *provider.Item, draft bool) error {
+	if draft {
+		c.calls = append(c.calls, "draft")
+	} else {
+		c.calls = append(c.calls, "ready")
+	}
 	return c.err
 }
 func (c *actionClient) AddComment(_ context.Context, _ *provider.Item, body string) error {
@@ -178,6 +187,48 @@ func TestCommentAndDetailForIssue(t *testing.T) {
 	detail, err := a.Detail(context.Background(), item)
 	if err != nil || detail.Body != "<details>raw markdown</details>" {
 		t.Fatalf("detail = %+v, %v", detail, err)
+	}
+}
+
+func TestDraftActionsRefreshOnlyAfterSuccess(t *testing.T) {
+	for _, action := range []Action{MarkReady, MarkDraft} {
+		for _, fail := range []bool{false, true} {
+			t.Run(string(action)+fmt.Sprint(fail), func(t *testing.T) {
+				a, client, item := actionFixture()
+				failure := errors.New("not permitted")
+				if fail {
+					client.err = failure
+				}
+				out, err := a.Execute(t.Context(), Command{Action: action, Item: item})
+				want := "ready"
+				if action == MarkDraft {
+					want = "draft"
+				}
+				if len(client.calls) != 1 || client.calls[0] != want {
+					t.Fatalf("calls = %v", client.calls)
+				}
+				if fail {
+					if !errors.Is(err, failure) || out.Refresh || out.Message != "" {
+						t.Fatalf("failure = %+v, %v", out, err)
+					}
+				} else if err != nil || !out.Refresh || out.ReloadThread || out.Message == "" {
+					t.Fatalf("success = %+v, %v", out, err)
+				}
+			})
+		}
+		for _, command := range []Command{
+			{Action: action, Item: provider.Item{Kind: provider.KindIssue}},
+			{Action: action, RemoveAfter: true},
+			{Action: action, Force: true},
+		} {
+			a, client, item := actionFixture()
+			if command.Item.Kind != provider.KindIssue {
+				command.Item = item
+			}
+			if _, err := a.Execute(t.Context(), command); err == nil || len(client.calls) != 0 {
+				t.Fatalf("invalid command = %+v, %v, calls %v", command, err, client.calls)
+			}
+		}
 	}
 }
 

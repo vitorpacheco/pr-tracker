@@ -20,7 +20,7 @@ import (
 func TestBridgeSerializesCacheAndResolvesBrowserLink(t *testing.T) {
 	cfg := config.Default()
 	cfg.WorktreeDir = t.TempDir()
-	cfg.Instances = []config.Instance{{Name: "test", Provider: config.GitHub, Host: "github.com"}}
+	cfg.Instances = []config.Instance{{Name: "test", Provider: config.GitHub, Host: "github.com", CommentPresets: []config.CommentPreset{{Label: "Aprovado", Body: "aprovado"}}}}
 	store, err := cache.Open(filepath.Join(t.TempDir(), "cache.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +43,8 @@ func TestBridgeSerializesCacheAndResolvesBrowserLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	var decoded struct {
-		Items []struct {
+		Instances []config.Instance
+		Items     []struct {
 			Key  string
 			Data struct {
 				Title  string
@@ -57,6 +58,9 @@ func TestBridgeSerializesCacheAndResolvesBrowserLink(t *testing.T) {
 	}
 	if len(decoded.Items) != 1 || decoded.Items[0].Key != item.Key() || decoded.Items[0].Data.Title != "Cached PR" || len(decoded.Items[0].Data.Checks) != 1 {
 		t.Fatalf("contract = %s", data)
+	}
+	if len(decoded.Instances) != 1 || len(decoded.Instances[0].CommentPresets) != 1 || decoded.Instances[0].CommentPresets[0].Body != "aprovado" {
+		t.Fatalf("preset contract = %s", data)
 	}
 	if err := bridge.OpenItem(item.Key()); err != nil || opened != item.URL {
 		t.Fatalf("open = %q, %v", opened, err)

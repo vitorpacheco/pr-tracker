@@ -52,6 +52,9 @@ XDG_CACHE_HOME="$PWD/.cache/desktop-smoke/cache" \
   anteriores quando o provider está indisponível.
 - PRs e issues, busca por título/repositório/autor/referência, filtros por relação
   e instância, contagens e seleção preservada durante refresh e resize.
+- PRs agrupados por repositório, com instância e contagem no cabeçalho de cada
+  grupo. Grupos e PRs seguem a atualização mais recente; a navegação por teclado
+  acompanha a ordem exibida. Repositórios de instâncias diferentes têm grupos próprios.
 - Lista dedicada abaixo de 700 px, lista e inspector entre 700 e 1099 px e
   navegação lateral adicional a partir de 1100 px.
 - Menu lateral recolhível pelo botão no canto superior esquerdo. Em janelas
@@ -64,11 +67,31 @@ XDG_CACHE_HOME="$PWD/.cache/desktop-smoke/cache" \
   limita as larguras temporariamente, sem apagar a preferência para telas maiores.
 - `j/k`, setas, `Enter`, `Esc`, `/`, `Cmd/Ctrl+K`, `r`, `v`, `n`, `a`, `m`, `w`,
   `t`, `d` e `o`. Inputs não executam atalhos de ações durante digitação.
+- `Ctrl+-` e `Ctrl++` reduzem e aumentam a fonte; no macOS, use `⌘+-` e
+  `⌘++`. `Ctrl/⌘+=` também aumenta e `Ctrl/⌘+0` restaura o tamanho padrão.
+  O ajuste varia de 50% a 200%, é salvo localmente e funciona também em
+  campos de texto e diálogos.
 - Descrição e conversa em Markdown sanitizado, checks, aprovações, conflitos,
   branches e totais do diff. Sem inventar aprovações obrigatórias nem arquivos
   individuais ausentes no provider.
 - Rascunhos locais por item, revisão antes do envio, aprovação, merge,
   fechamento, checkout e ciclo de vida dos worktrees.
+- Botão **Marcar como Ready** / **Marcar como Draft** junto ao estado do PR/MR,
+  com confirmação e atualização da lista após a alteração. GitHub usa
+  [`gh pr ready` / `--undo`](https://cli.github.com/manual/gh_pr_ready) e GitLab
+  usa [`glab mr update --ready` / `--draft`](https://docs.gitlab.com/cli/mr/update/).
+  No Gitea, o draft é [derivado do prefixo do título](https://github.com/go-gitea/gitea/blob/main/models/issues/pull.go).
+  A ação relê o título no servidor, adiciona `WIP:` ao marcar Draft e remove
+  `WIP:`, `[WIP]`, `Draft:` ou `[Draft]` ao marcar Ready. Prefixos personalizados
+  não reconhecidos exigem a alteração no próprio servidor; a resposta da API
+  é verificada para não informar sucesso se o estado não foi aplicado.
+- Comentários predefinidos por instância, editáveis em **Configurações →
+  Instâncias → Comentários predefinidos**. Cada entrada tem nome do botão e texto
+  em Markdown. A visualização do PR/MR mostra um botão por comentário da sua
+  instância, em todas as abas, e exige confirmação com destino e texto completo
+  antes do envio. O rascunho manual é preservado; esses botões publicam comentários
+  comuns, sem mudar o estado de aprovação. A configuração é salva em
+  `instances.comment_presets`, com campos `label` e `body`.
 - Confirmação separada para remoção de worktree sujo, inclusive após o PR sair
   da lista por merge/fechamento. Falha remota não inicia limpeza local.
 - Terminal e diff externos, navegador, pasta local e seletor nativo de clone.

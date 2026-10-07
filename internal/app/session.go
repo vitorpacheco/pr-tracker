@@ -72,10 +72,18 @@ func (s *Session) Configuration() config.Config {
 
 func cloneConfig(cfg config.Config) config.Config {
 	cfg.ToolPaths = maps.Clone(cfg.ToolPaths)
-	cfg.Instances = slices.Clone(cfg.Instances)
+	cfg.Instances = cloneInstances(cfg.Instances)
 	cfg.Repos = slices.Clone(cfg.Repos)
 	cfg.CloneRoots = slices.Clone(cfg.CloneRoots)
 	return cfg
+}
+
+func cloneInstances(instances []config.Instance) []config.Instance {
+	instances = slices.Clone(instances)
+	for i := range instances {
+		instances[i].CommentPresets = slices.Clone(instances[i].CommentPresets)
+	}
+	return instances
 }
 
 // Configure adopts already-persisted TUI settings. Desktop edits use SaveSettings.
@@ -128,7 +136,7 @@ func (s *Session) SaveSettings(cfg config.Config) error {
 	next.RefreshInterval, next.Terminal, next.DiffTool = cfg.RefreshInterval, cfg.Terminal, cfg.DiffTool
 	next.WorktreeDir = cfg.WorktreeDir
 	next.CloneRoots = slices.Clone(cfg.CloneRoots)
-	next.Instances = slices.Clone(cfg.Instances)
+	next.Instances = cloneInstances(cfg.Instances)
 	next.Repos = slices.Clone(cfg.Repos)
 	for i := range next.Instances {
 		in := &next.Instances[i]

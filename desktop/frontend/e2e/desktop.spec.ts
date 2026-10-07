@@ -79,7 +79,10 @@ test('keeps selection on resize and reports unavailable bridge', async ({
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/?demo=1');
   await expect(page.locator('.item-row')).toHaveCount(8);
-  await page.locator('.item-row').nth(3).click();
+  await page
+    .locator('.item-row')
+    .filter({ hasText: 'Novo componente de tabela' })
+    .click();
   const id = await page.locator('.item-row.selected').getAttribute('id');
   await page.setViewportSize({ width: 600, height: 900 });
   await expect(page.locator('.detail-title')).toContainText('tabela');

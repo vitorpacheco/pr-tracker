@@ -1,6 +1,13 @@
 import { browserLanguage, translator } from './i18n';
 let preference = 'system';
 import type { Item } from './list';
+import type { config } from '../../wailsjs/go/models';
+let commentPresets: Record<string, config.CommentPreset[]> = {
+  'Work Git': [
+    { Label: 'Aprovado', Body: 'aprovado' },
+    { Label: 'Reprovado', Body: 'reprovado' },
+  ],
+};
 const rows = [
   [
     'platform/web',
@@ -110,18 +117,42 @@ items.push({
 });
 export async function invoke(name: string, _args: unknown[]): Promise<unknown> {
   if (name === 'SaveSettings') {
-    preference = (_args[0] as { Language: string }).Language;
+    const settings = _args[0] as config.Config;
+    preference = settings.Language;
+    commentPresets = Object.fromEntries(
+      settings.Instances.map((inst) => [inst.Name, inst.CommentPresets ?? []]),
+    );
+    localStorage.setItem(
+      'pr-tracker-demo-comment-presets',
+      JSON.stringify(commentPresets),
+    );
     localStorage.setItem('pr-tracker-demo-language', preference);
     return invoke('Load', []);
   }
   preference = localStorage.getItem('pr-tracker-demo-language') || preference;
+  try {
+    commentPresets = JSON.parse(
+      localStorage.getItem('pr-tracker-demo-comment-presets') ??
+        JSON.stringify(commentPresets),
+    );
+  } catch {
+    /* Keep the demo defaults if stored preferences are invalid. */
+  }
   if (name === 'Load' || name === 'Refresh')
     return {
       Language: preference === 'system' ? browserLanguage() : preference,
       RefreshSeconds: 300,
       Instances: [
-        { Name: 'Corp Git', Disabled: false },
-        { Name: 'Work Git', Disabled: false },
+        {
+          Name: 'Corp Git',
+          Disabled: false,
+          CommentPresets: commentPresets['Corp Git'] ?? [],
+        },
+        {
+          Name: 'Work Git',
+          Disabled: false,
+          CommentPresets: commentPresets['Work Git'] ?? [],
+        },
       ],
       Items: items,
       Errors: {},
@@ -160,6 +191,7 @@ export async function invoke(name: string, _args: unknown[]): Promise<unknown> {
           MergeMethod: 'squash',
           AutoMerge: false,
           DeleteBranch: false,
+          CommentPresets: commentPresets['Corp Git'] ?? [],
         },
         {
           Name: 'Work Git',
@@ -169,6 +201,7 @@ export async function invoke(name: string, _args: unknown[]): Promise<unknown> {
           MergeMethod: 'merge',
           AutoMerge: false,
           DeleteBranch: false,
+          CommentPresets: commentPresets['Work Git'] ?? [],
         },
       ],
       Repos: [],

@@ -46,6 +46,12 @@ func (p Provider) DefaultHost() string {
 	return ""
 }
 
+// CommentPreset is a reusable PR/MR comment with a button label.
+type CommentPreset struct {
+	Label string `toml:"label"`
+	Body  string `toml:"body"`
+}
+
 // Instance is one account on one host (SaaS or self-hosted).
 type Instance struct {
 	Name     string   `toml:"name"`
@@ -58,7 +64,8 @@ type Instance struct {
 	// AutoMerge asks the provider to merge once the pipeline succeeds.
 	AutoMerge bool `toml:"auto_merge,omitempty"`
 	// DeleteBranch removes the source branch after merging.
-	DeleteBranch bool `toml:"delete_branch,omitempty"`
+	DeleteBranch   bool            `toml:"delete_branch,omitempty"`
+	CommentPresets []CommentPreset `toml:"comment_presets,omitempty"`
 }
 
 // Repo holds per-repository settings, including its optional local clone.
@@ -208,6 +215,11 @@ func (c *Config) Validate() error {
 			return fmt.Errorf(c.t("instância duplicada %q"), in.Name)
 		}
 		seen[in.Name] = true
+		for i, preset := range in.CommentPresets {
+			if strings.TrimSpace(preset.Label) == "" || strings.TrimSpace(preset.Body) == "" {
+				return fmt.Errorf(c.t("instância %q: comentário predefinido %d exige nome e texto"), in.Name, i+1)
+			}
+		}
 		if !slices.Contains(Providers, in.Provider) {
 			return fmt.Errorf(c.t("instância %q: provider desconhecido %q"), in.Name, in.Provider)
 		}

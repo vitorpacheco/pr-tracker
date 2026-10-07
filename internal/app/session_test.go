@@ -151,6 +151,38 @@ func TestSaveSettingsRollbackAndIsolation(t *testing.T) {
 	}
 }
 
+func TestCommentPresetSettingsIsolation(t *testing.T) {
+	t.Setenv("PR_TRACKER_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	cfg := config.Default()
+	cfg.Instances = []config.Instance{{Name: "work", Provider: config.GitLab, CommentPresets: []config.CommentPreset{{Label: "Aprovado", Body: "aprovado"}}}}
+	s := NewSession(cfg, nil)
+	defer s.Close()
+	cfg.Instances[0].CommentPresets[0].Body = "mutated input"
+	next := s.Configuration()
+	if next.Instances[0].CommentPresets[0].Body != "aprovado" {
+		t.Fatal("session shares presets with original configuration")
+	}
+	next.Instances[0].CommentPresets[0].Body = "aprovado\n\nTestes verificados."
+	if err := s.SaveSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	next.Instances[0].CommentPresets[0].Body = "mutated settings"
+	snapshot := s.Configuration()
+	snapshot.Instances[0].CommentPresets[0].Body = "mutated snapshot"
+	if got := s.Configuration().Instances[0].CommentPresets[0].Body; got != "aprovado\n\nTestes verificados." {
+		t.Fatalf("live preset = %q", got)
+	}
+	invalid := s.Configuration()
+	invalid.Instances[0].CommentPresets[0].Body = " "
+	if err := s.SaveSettings(invalid); err == nil {
+		t.Fatal("blank preset accepted")
+	}
+	loaded, _, err := config.Load()
+	if err != nil || loaded.Instances[0].CommentPresets[0].Body != s.Configuration().Instances[0].CommentPresets[0].Body {
+		t.Fatalf("persisted presets = %+v, %v", loaded, err)
+	}
+}
+
 func TestDirtyCleanupRemainsPossibleAfterClosedItemDisappears(t *testing.T) {
 	a, _, item := actionFixture()
 	s := NewSession(&a.cfg, nil)

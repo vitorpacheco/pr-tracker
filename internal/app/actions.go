@@ -19,6 +19,8 @@ const (
 	Approve         Action = "approve"
 	Merge           Action = "merge"
 	Close           Action = "close"
+	MarkReady       Action = "mark_ready"
+	MarkDraft       Action = "mark_draft"
 	Checkout        Action = "checkout"
 	UpdateWorktree  Action = "update_worktree"
 	PrepareTerminal Action = "prepare_terminal"
@@ -98,7 +100,7 @@ func (a *Application) Execute(ctx context.Context, command Command) (Outcome, er
 		return out, err
 	}
 	switch command.Action {
-	case Comment, Approve, Merge, Close, Checkout, UpdateWorktree, PrepareTerminal, PrepareDiff, RemoveWorktree:
+	case Comment, Approve, Merge, Close, MarkReady, MarkDraft, Checkout, UpdateWorktree, PrepareTerminal, PrepareDiff, RemoveWorktree:
 	default:
 		return out, fmt.Errorf(a.t("ação desconhecida: %q"), command.Action)
 	}
@@ -142,6 +144,12 @@ func (a *Application) Execute(ctx context.Context, command Command) (Outcome, er
 	case Close:
 		err = client.Close(ctx, &item)
 		out.Message = item.Ref() + a.t(" fechado sem merge")
+	case MarkReady, MarkDraft:
+		err = client.SetDraft(ctx, &item, command.Action == MarkDraft)
+		out.Message = item.Ref() + a.t(" marcado como Ready")
+		if command.Action == MarkDraft {
+			out.Message = item.Ref() + a.t(" marcado como Draft")
+		}
 	case Checkout:
 		clone, _, ok := a.resolveClone(ctx, &a.cfg, &item)
 		if !ok {

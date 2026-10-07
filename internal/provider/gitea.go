@@ -740,6 +740,81 @@ func (g *gitea) Close(ctx context.Context, pr *Item) error {
 	return err
 }
 
+type gtDraftState struct {
+	Title          string `json:"title"`
+	Draft          *bool  `json:"draft"`
+	ContentVersion *int   `json:"content_version"`
+}
+
+func decodeDraftState(data []byte) (gtDraftState, error) {
+	var state gtDraftState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return state, i18n.Errorf("resposta inválida do tea: %w", err)
+	}
+	if state.Title == "" || state.Draft == nil {
+		return state, i18n.Errorf("resposta do Gitea sem título ou estado de draft")
+	}
+	return state, nil
+}
+
+func giteaReadyTitle(title string) (string, error) {
+	original := title
+	for {
+		matched := false
+		for _, prefix := range []string{"WIP:", "[WIP]", "Draft:", "[Draft]"} {
+			if len(title) >= len(prefix) && strings.EqualFold(title[:len(prefix)], prefix) {
+				title = strings.TrimLeft(title[len(prefix):], " \t")
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			break
+		}
+	}
+	if title == original || strings.TrimSpace(title) == "" {
+		return "", i18n.Errorf("prefixo de draft do Gitea não reconhecido; altere o estado no servidor")
+	}
+	return title, nil
+}
+
+// Gitea derives draft from the title. Fetch the current title before changing
+// its prefix so a cached item cannot overwrite a newer title.
+func (g *gitea) SetDraft(ctx context.Context, pr *Item, draft bool) error {
+	endpoint := fmt.Sprintf("/repos/%s/pulls/%d", pr.Repo, pr.Number)
+	data, err := g.api(ctx, "GET", endpoint)
+	if err != nil {
+		return err
+	}
+	state, err := decodeDraftState(data)
+	if err != nil || *state.Draft == draft {
+		return err
+	}
+	title := "WIP: " + state.Title
+	if !draft {
+		title, err = giteaReadyTitle(state.Title)
+		if err != nil {
+			return err
+		}
+	}
+	fields := []string{"-f", "title=" + title}
+	if state.ContentVersion != nil {
+		fields = append(fields, "-F", "content_version="+strconv.Itoa(*state.ContentVersion))
+	}
+	data, err = g.api(ctx, "PATCH", endpoint, fields...)
+	if err != nil {
+		return err
+	}
+	updated, err := decodeDraftState(data)
+	if err != nil {
+		return err
+	}
+	if *updated.Draft != draft {
+		return i18n.Errorf("o Gitea não aplicou o estado de draft solicitado; verifique os prefixos configurados no servidor")
+	}
+	return nil
+}
+
 // Checkout runs inside the clone so tea resolves the repository from its
 // remote, the same way gh and glab do.
 func (g *gitea) Checkout(ctx context.Context, pr *Item, dir string) error {

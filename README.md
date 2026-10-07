@@ -183,6 +183,10 @@ clone_roots = ["~/code", "~/work"]
   merge_method = "merge"
   auto_merge = true           # merge once the pipeline passes
   delete_branch = true        # delete the source branch after merging
+  comment_presets = [
+    { label = "Aprovado", body = "aprovado" },
+    { label = "Reprovado", body = "reprovado" },
+  ]
 
 [[repos]]
   instance = "work"
@@ -192,6 +196,12 @@ clone_roots = ["~/code", "~/work"]
   track_all = true            # include all open MRs, regardless of relation
   merge_method = "squash"     # optional; overrides the instance setting
 ```
+
+In the GUI, configure **Preset comments** inside each instance in **Settings**.
+Each preset has a button label and comment text (Markdown and multiple lines are
+supported). PR/MR details show the presets for that instance. Clicking a button
+opens a confirmation with the target and complete text; only **Confirm** sends
+the comment. Presets post ordinary comments and preserve any draft being edited.
 
 ### Interface language
 

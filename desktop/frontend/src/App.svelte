@@ -9,9 +9,30 @@
   import { api, demoMode } from './lib/api';
   import { applyTheme, preference, snapshotTheme } from './lib/theme';
   import type { View } from './lib/list';
-  import { filterItems, nextSelection, relativeAge } from './lib/list';
+  import {
+    filterItems,
+    groupByRepository,
+    nextSelection,
+    relativeAge,
+  } from './lib/list';
   import Splitter from './lib/Splitter.svelte';
   import type { main, provider, config, app } from '../wailsjs/go/models';
+  let fontScale = 1;
+  function changeFontScale(value: number) {
+    fontScale =
+      typeof value === 'number' && Number.isFinite(value)
+        ? Math.round(Math.max(0.5, Math.min(2, value)) * 10) / 10
+        : 1;
+    document.documentElement.style.setProperty(
+      '--font-scale',
+      String(fontScale),
+    );
+    try {
+      localStorage.setItem('pr-tracker-font-scale', String(fontScale));
+    } catch {
+      /* Font sizing remains usable when storage is disabled. */
+    }
+  }
   let view: View = {
     Language: language,
     RefreshSeconds: 300,
@@ -49,6 +70,7 @@
     confirmLabel = '';
   let confirmTarget = '',
     confirmWorktree = '';
+  let confirmUsesDraft = false;
   let draft = '',
     drafts: Record<string, string> = {};
   let settings: config.Config | null = null,
@@ -108,8 +130,18 @@
     [t('Menções'), 8],
   ] as const;
   $: tabs = kind === 0 ? prTabs : issueTabs;
-  $: visible = filterItems(view.Items, kind, relation, query, instance);
+  $: filtered = filterItems(view.Items, kind, relation, query, instance);
+  $: groups =
+    kind === 0
+      ? groupByRepository(filtered)
+      : [{ key: 'issues', repo: '', instance: '', items: filtered }];
+  $: visible = groups.flatMap((group) => group.items);
   $: item = view.Items.find((p) => p.Key === selected);
+  $: commentPresets =
+    item?.Kind === 0
+      ? ((view.Instances ?? []).find((inst) => inst.Name === item.Instance)
+          ?.CommentPresets ?? [])
+      : [];
   $: if (mounted && visible.length && !visible.some((p) => p.Key === selected))
     select(visible[0].Key, false);
   $: if (mounted && !visible.length && selected) {
@@ -233,6 +265,7 @@
     label: string,
     force = false,
     removeAfter = false,
+    body?: string,
   ) {
     if (!item || busy[item.Key]) return;
     if (item.Kind === 1 && action !== 'comment') {
@@ -244,10 +277,11 @@
     command = {
       Key: item.Key,
       Action: action,
-      Body: draft,
+      Body: body ?? draft,
       Force: force,
       RemoveAfter: removeAfter,
     } as main.Request;
+    confirmUsesDraft = body === undefined;
     mergeOptions = null;
     if (action === 'merge') {
       try {
@@ -263,6 +297,7 @@
   async function execute() {
     if (!command) return;
     const request = command;
+    const clearDraft = confirmUsesDraft;
     const target = view.Items.find((entry) => entry.Key === request.Key);
     confirmation.close();
     busy[request.Key] = true;
@@ -274,8 +309,10 @@
       notice = result.Message;
       error = result.Error;
       if (result.ReloadThread && selected === request.Key) {
-        draft = '';
-        delete drafts[request.Key];
+        if (clearDraft) {
+          draft = '';
+          delete drafts[request.Key];
+        }
         await select(request.Key);
       }
       if (result.Dirty) {
@@ -308,6 +345,7 @@
     try {
       settings = await api.settings();
       settings.Instances ??= [];
+      for (const inst of settings.Instances) inst.CommentPresets ??= [];
       settings.Repos ??= [];
       settings.ToolPaths ??= {};
       settings.DesktopTerminal ??= '';
@@ -372,6 +410,18 @@
   }
   let systemPalette: Awaited<ReturnType<typeof api.theme>>;
   function keydown(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      let next: number;
+      if (e.key === '-') next = fontScale - 0.1;
+      else if (e.key === '+' || e.key === '=') next = fontScale + 0.1;
+      else if (e.key === '0') next = 1;
+      else next = NaN;
+      if (Number.isFinite(next)) {
+        e.preventDefault();
+        changeFontScale(next);
+        return;
+      }
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       if (!confirmation.open && !settingsDialog.open) {
@@ -452,6 +502,13 @@
   }
   onMount(() => {
     mounted = true;
+    try {
+      changeFontScale(
+        JSON.parse(localStorage.getItem('pr-tracker-font-scale') ?? '1'),
+      );
+    } catch {
+      changeFontScale(1);
+    }
     try {
       const layout = JSON.parse(
         localStorage.getItem('pr-tracker-layout') ?? '{}',
@@ -585,8 +642,24 @@
       class="icon-button"
       title={t('Configurações')}
       aria-label={t('Configurações')}
-      onclick={openSettings}>⚙</button
+      onclick={openSettings}
     >
+      <svg
+        class="settings-icon"
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M18.66 9.84L21.38 10.51L21.38 13.49L18.66 14.16L18.24 15.18L19.69 17.58L17.58 19.69L15.18 18.24L14.16 18.66L13.49 21.38L10.51 21.38L9.84 18.66L8.82 18.24L6.42 19.69L4.31 17.58L5.76 15.18L5.34 14.16L2.62 13.49L2.62 10.51L5.34 9.84L5.76 8.82L4.31 6.42L6.42 4.31L8.82 5.76L9.84 5.34L10.51 2.62L13.49 2.62L14.16 5.34L15.18 5.76L17.58 4.31L19.69 6.42L18.24 8.82Z"
+        />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    </button>
   </header>
   <div class="notifications">
     {#if themeError}<div class="banner error" role="alert">
@@ -685,7 +758,9 @@
       </h1>
       <p>
         {instance || t('Todas as instâncias')} <span>·</span>
-        {t('mais recentes primeiro')}
+        {kind === 0
+          ? t('por repositório · mais recentes primeiro')
+          : t('mais recentes primeiro')}
       </p>
     </div>
     {#if demoMode}<div class="banner demo">
@@ -747,51 +822,77 @@
               : t('Configurar instâncias')}</button
           >
         </div>
-      {:else}{#each visible as row (row.Key)}
-          <button
-            id={`row-${row.Key}`}
-            class="item-row"
-            class:selected={selected === row.Key}
-            aria-pressed={selected === row.Key}
-            onclick={() => select(row.Key)}
+      {:else}{#each groups as group (group.key)}
+          <div
+            class="repository-group"
+            role="group"
+            aria-label={group.repo
+              ? `${group.repo} · ${group.instance}`
+              : t('Lista de itens')}
           >
-            <span class="item-main"
-              ><span class="repo-line"
-                ><span class="branch-icon" class:draft={row.Draft}
-                  >{row.Kind === 1 ? '◉' : row.Draft ? '▧' : '⑂'}</span
-                >{row.Repo}<span class="ref">{row.Ref}</span
-                >{#if row.Draft}<span class="pill">{t('Rascunho')}</span
-                  >{/if}</span
-              ><strong>{row.Title}</strong><span class="mobile-meta"
-                >{row.Author} <span>·</span>
-                {relativeAge(String(row.UpdatedAt), language)} <span>·</span>
-                {row.Comments}
-                {t('comentários')}</span
-              ></span
-            >
-            <span class="author"
-              ><span class="avatar">{row.Author.slice(0, 2).toUpperCase()}</span
-              >{row.Author}</span
-            >
-            <span
-              class="ci"
-              class:success={row.CI === 'success'}
-              class:failure={row.CI === 'failure'}
-              title={row.CI ? statusLabel(language, row.CI) : t('Sem checks')}
-              >{row.CI === 'success'
-                ? '✓'
-                : row.CI === 'failure'
-                  ? '×'
-                  : row.CI === 'pending'
-                    ? '◷'
-                    : '—'}</span
-            >
-            <span class="updated"
-              >{relativeAge(String(row.UpdatedAt), language)}<small
-                >◯ {row.Comments}</small
-              ></span
-            >
-          </button>
+            {#if kind === 0}
+              <header class="repository-heading">
+                <h2>
+                  {group.repo}<span class="repository-count"
+                    >{group.items.length}</span
+                  >
+                </h2>
+                <small>{group.instance}</small>
+              </header>
+            {/if}
+            {#each group.items as row (row.Key)}
+              <button
+                id={`row-${row.Key}`}
+                class="item-row"
+                class:selected={selected === row.Key}
+                aria-pressed={selected === row.Key}
+                aria-label={`${row.Repo} ${row.Ref}: ${row.Title}`}
+                onclick={() => select(row.Key)}
+              >
+                <span class="item-main"
+                  ><span class="repo-line"
+                    ><span class="branch-icon" class:draft={row.Draft}
+                      >{row.Kind === 1 ? '◉' : row.Draft ? '▧' : '⑂'}</span
+                    >{#if kind === 1}{row.Repo}{/if}<span class="ref"
+                      >{row.Ref}</span
+                    >{#if row.Draft}<span class="pill">{t('Rascunho')}</span
+                      >{/if}</span
+                  ><strong>{row.Title}</strong><span class="mobile-meta"
+                    >{row.Author} <span>·</span>
+                    {relativeAge(String(row.UpdatedAt), language)}
+                    <span>·</span>
+                    {row.Comments}
+                    {t('comentários')}</span
+                  ></span
+                >
+                <span class="author"
+                  ><span class="avatar"
+                    >{row.Author.slice(0, 2).toUpperCase()}</span
+                  >{row.Author}</span
+                >
+                <span
+                  class="ci"
+                  class:success={row.CI === 'success'}
+                  class:failure={row.CI === 'failure'}
+                  title={row.CI
+                    ? statusLabel(language, row.CI)
+                    : t('Sem checks')}
+                  >{row.CI === 'success'
+                    ? '✓'
+                    : row.CI === 'failure'
+                      ? '×'
+                      : row.CI === 'pending'
+                        ? '◷'
+                        : '—'}</span
+                >
+                <span class="updated"
+                  >{relativeAge(String(row.UpdatedAt), language)}<small
+                    >◯ {row.Comments}</small
+                  ></span
+                >
+              </button>
+            {/each}
+          </div>
         {/each}{/if}
     </div>
     <footer class="list-footer">
@@ -835,6 +936,20 @@
           {item.Ref}<span class="pill green"
             >{item.Draft ? t('Rascunho') : t('Aberto')}</span
           >
+          {#if item.Kind === 0 && ['github', 'gitlab', 'gitea'].includes(item.Provider)}
+            <button
+              class="draft-toggle"
+              disabled={!!busy[selected]}
+              onclick={() =>
+                ask(
+                  item.Draft ? 'mark_ready' : 'mark_draft',
+                  item.Draft ? t('Marcar como Ready') : t('Marcar como Draft'),
+                )}
+              >{item.Draft
+                ? t('Marcar como Ready')
+                : t('Marcar como Draft')}</button
+            >
+          {/if}
         </div>
         <h2 class="detail-title">{item.Title}</h2>
         <p class="detail-meta">{item.Repo} <span>·</span> {item.Author}</p>
@@ -860,6 +975,29 @@
             >{t('Conversa')} <span>{item.Comments}</span></button
           >
         </nav>
+        {#if commentPresets.length}
+          <section
+            class="comment-presets"
+            aria-label={t('Comentários predefinidos')}
+          >
+            <h3>{t('Comentários predefinidos')}</h3>
+            <div class="preset-buttons">
+              {#each commentPresets as preset}
+                <button
+                  disabled={!!busy[selected]}
+                  onclick={() =>
+                    ask(
+                      'comment',
+                      t('Enviar comentário'),
+                      false,
+                      false,
+                      preset.Body,
+                    )}>{preset.Label}</button
+                >
+              {/each}
+            </div>
+          </section>
+        {/if}
         {#if detailLoading}<p class="muted" role="status">
             {t('Carregando conversa…')}
           </p>{/if}
@@ -1222,7 +1360,48 @@
           ><input type="checkbox" bind:checked={inst.DeleteBranch} />{t(
             'Apagar branch de origem após merge',
           )}</label
-        ><button
+        >
+        <section
+          class="preset-editor"
+          aria-label={t('Comentários predefinidos')}
+        >
+          <h4>{t('Comentários predefinidos')}</h4>
+          <p class="muted">
+            {t(
+              'Botões de comentário nos PRs/MRs desta instância. O envio sempre exige confirmação.',
+            )}
+          </p>
+          {#each inst.CommentPresets ?? [] as preset, j}
+            <fieldset>
+              <legend>{t('Comentário')} {j + 1}</legend>
+              <label
+                >{t('Nome do botão')}<input bind:value={preset.Label} /></label
+              >
+              <label
+                >{t('Texto do comentário')}<textarea
+                  bind:value={preset.Body}
+                  rows="3"
+                  maxlength="65536"></textarea></label
+              >
+              <button
+                class="text-danger"
+                aria-label={`${t('Remover comentário')} ${j + 1}`}
+                onclick={() =>
+                  (inst.CommentPresets = inst.CommentPresets.filter(
+                    (_, n) => n !== j,
+                  ))}>{t('Remover comentário')}</button
+              >
+            </fieldset>
+          {/each}
+          <button
+            onclick={() =>
+              (inst.CommentPresets = [
+                ...(inst.CommentPresets ?? []),
+                { Label: '', Body: '' },
+              ])}>{t('Adicionar comentário predefinido')}</button
+          >
+        </section>
+        <button
           class="text-danger"
           onclick={() => {
             if (settings) {
@@ -1247,6 +1426,7 @@
               AutoMerge: false,
               DeleteBranch: false,
               Disabled: false,
+              CommentPresets: [],
             } as config.Instance,
           ];
       }}>{t('＋ Adicionar instância')}</button

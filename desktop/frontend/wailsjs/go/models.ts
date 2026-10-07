@@ -20,6 +20,10 @@ export namespace app {
 
 export namespace config {
 
+	export interface CommentPreset {
+	    Label: string;
+	    Body: string;
+	}
 	export interface Repo {
 	    Instance: string;
 	    Name: string;
@@ -36,6 +40,7 @@ export namespace config {
 	    MergeMethod: string;
 	    AutoMerge: boolean;
 	    DeleteBranch: boolean;
+	    CommentPresets: CommentPreset[];
 	}
 	export interface Config {
 	    Language: string;

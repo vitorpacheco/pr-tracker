@@ -156,6 +156,8 @@ type Client interface {
 	Merge(ctx context.Context, pr *Item, opts MergeOptions) error
 	// Close closes a PR without merging it. The source branch is kept.
 	Close(ctx context.Context, pr *Item) error
+	// SetDraft changes the PR's readiness for review.
+	SetDraft(ctx context.Context, pr *Item, draft bool) error
 	// Checkout switches the clone at dir to the PR branch.
 	Checkout(ctx context.Context, pr *Item, dir string) error
 	// HeadRef is the server-side ref that always points to the PR head,

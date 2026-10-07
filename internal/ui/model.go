@@ -1273,13 +1273,14 @@ func (m *Model) openInstanceForm(in *config.Instance) {
 	}
 	f.submit = func(f *form) error {
 		next := config.Instance{
-			Name:         f.get("Nome").value(),
-			Provider:     config.Provider(f.get("Provider").value()),
-			Host:         f.get("Host").value(),
-			MergeMethod:  f.get("Merge").value(),
-			AutoMerge:    f.get("Auto-merge").on,
-			DeleteBranch: f.get("Apagar branch").on,
-			Disabled:     f.get("Desativada").on,
+			Name:           f.get("Nome").value(),
+			Provider:       config.Provider(f.get("Provider").value()),
+			Host:           f.get("Host").value(),
+			MergeMethod:    f.get("Merge").value(),
+			AutoMerge:      f.get("Auto-merge").on,
+			DeleteBranch:   f.get("Apagar branch").on,
+			Disabled:       f.get("Desativada").on,
+			CommentPresets: slices.Clone(cur.CommentPresets),
 		}
 		backup := slices.Clone(m.cfg.Instances)
 		backupRepos := slices.Clone(m.cfg.Repos)
