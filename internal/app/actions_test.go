@@ -39,6 +39,10 @@ func (c *actionClient) SetDraft(_ context.Context, _ *provider.Item, draft bool)
 	}
 	return c.err
 }
+func (c *actionClient) UpdateBranch(context.Context, *provider.Item) error {
+	c.calls = append(c.calls, "update_branch")
+	return c.err
+}
 func (c *actionClient) AddComment(_ context.Context, _ *provider.Item, body string) error {
 	c.calls = append(c.calls, "comment")
 	c.body = body
@@ -190,8 +194,8 @@ func TestCommentAndDetailForIssue(t *testing.T) {
 	}
 }
 
-func TestDraftActionsRefreshOnlyAfterSuccess(t *testing.T) {
-	for _, action := range []Action{MarkReady, MarkDraft} {
+func TestReadinessAndBranchActionsRefreshOnlyAfterSuccess(t *testing.T) {
+	for _, action := range []Action{MarkReady, MarkDraft, UpdateBranch} {
 		for _, fail := range []bool{false, true} {
 			t.Run(string(action)+fmt.Sprint(fail), func(t *testing.T) {
 				a, client, item := actionFixture()
@@ -203,6 +207,9 @@ func TestDraftActionsRefreshOnlyAfterSuccess(t *testing.T) {
 				want := "ready"
 				if action == MarkDraft {
 					want = "draft"
+				}
+				if action == UpdateBranch {
+					want = "update_branch"
 				}
 				if len(client.calls) != 1 || client.calls[0] != want {
 					t.Fatalf("calls = %v", client.calls)
@@ -263,6 +270,57 @@ func TestWorktreePreparationAndCheckout(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestUpdateWorktreeWithOptionalPush(t *testing.T) {
+	for _, scenario := range []string{"local only", "push", "update failure", "push failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			a, _, item := actionFixture()
+			failure := errors.New("failure")
+			updated, pushed := false, false
+			a.createWorktree = func(context.Context, *config.Config, provider.Client, *provider.Item, string, string) (string, error) {
+				updated = true
+				if scenario == "update failure" {
+					return "", failure
+				}
+				return "/created", nil
+			}
+			a.pushWorktree = func(_ context.Context, dir string, pr *provider.Item) error {
+				if !updated || dir != "/created" || pr.Key() != item.Key() {
+					t.Fatal("push ran before update or used the wrong worktree")
+				}
+				pushed = true
+				if scenario == "push failure" {
+					return failure
+				}
+				return nil
+			}
+			out, err := a.Execute(t.Context(), Command{Action: UpdateWorktree, Item: item, Push: scenario != "local only"})
+			if !updated || pushed != (scenario == "push" || scenario == "push failure") {
+				t.Fatalf("updated %v, pushed %v", updated, pushed)
+			}
+			switch scenario {
+			case "update failure":
+				if !errors.Is(err, failure) || out.Message != "" || out.Refresh {
+					t.Fatalf("update failure = %+v, %v", out, err)
+				}
+			case "push failure":
+				if !errors.Is(err, failure) || out.Directory != "/created" || out.Message == "" || out.Refresh {
+					t.Fatalf("partial success = %+v, %v", out, err)
+				}
+			default:
+				if err != nil || out.Refresh != pushed || out.ReloadThread || out.Message == "" {
+					t.Fatalf("outcome = %+v, %v", out, err)
+				}
+			}
+		})
+	}
+	for _, action := range []Action{Comment, Checkout, PrepareTerminal, RemoveWorktree} {
+		a, c, item := actionFixture()
+		if _, err := a.Execute(t.Context(), Command{Action: action, Item: item, Push: true}); err == nil || len(c.calls) != 0 {
+			t.Fatalf("push accepted for %s: %v", action, err)
+		}
 	}
 }
 

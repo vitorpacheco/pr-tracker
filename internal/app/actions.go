@@ -23,6 +23,7 @@ const (
 	MarkDraft       Action = "mark_draft"
 	Checkout        Action = "checkout"
 	UpdateWorktree  Action = "update_worktree"
+	UpdateBranch    Action = "update_branch"
 	PrepareTerminal Action = "prepare_terminal"
 	PrepareDiff     Action = "prepare_diff"
 	RemoveWorktree  Action = "remove_worktree"
@@ -36,6 +37,7 @@ type Command struct {
 	Body        string
 	RemoveAfter bool
 	Force       bool
+	Push        bool
 }
 
 // Outcome can accompany an error: a remote action may succeed even when its
@@ -100,12 +102,15 @@ func (a *Application) Execute(ctx context.Context, command Command) (Outcome, er
 		return out, err
 	}
 	switch command.Action {
-	case Comment, Approve, Merge, Close, MarkReady, MarkDraft, Checkout, UpdateWorktree, PrepareTerminal, PrepareDiff, RemoveWorktree:
+	case Comment, Approve, Merge, Close, MarkReady, MarkDraft, Checkout, UpdateWorktree, UpdateBranch, PrepareTerminal, PrepareDiff, RemoveWorktree:
 	default:
 		return out, fmt.Errorf(a.t("ação desconhecida: %q"), command.Action)
 	}
 	if command.Force && command.Action != RemoveWorktree {
 		return out, errors.New(a.t("remoção forçada exige um comando separado"))
+	}
+	if command.Push && command.Action != UpdateWorktree {
+		return out, errors.New(a.t("push disponível apenas ao atualizar a branch"))
 	}
 	if command.RemoveAfter && command.Action != Approve && command.Action != Merge && command.Action != Close {
 		return out, errors.New(a.t("limpeza combinada exige aprovação, merge ou fechamento"))
@@ -150,6 +155,9 @@ func (a *Application) Execute(ctx context.Context, command Command) (Outcome, er
 		if command.Action == MarkDraft {
 			out.Message = item.Ref() + a.t(" marcado como Draft")
 		}
+	case UpdateBranch:
+		err = client.UpdateBranch(ctx, &item)
+		out.Message = a.t("atualização com a branch base solicitada em ") + item.Repo + item.Ref()
 	case Checkout:
 		clone, _, ok := a.resolveClone(ctx, &a.cfg, &item)
 		if !ok {
@@ -167,6 +175,13 @@ func (a *Application) Execute(ctx context.Context, command Command) (Outcome, er
 		out.Directory = dir
 		if command.Action == UpdateWorktree {
 			out.Message = a.t("worktree pronto: ") + dir
+			if command.Push {
+				if err := a.pushWorktree(ctx, dir, &item); err != nil {
+					return out, fmt.Errorf(a.t("branch local atualizada, mas o push falhou: %w"), err)
+				}
+				out.Message += a.t(" · push concluído")
+				out.Refresh = true
+			}
 		}
 		if command.Action == PrepareDiff {
 			out.Args, out.Note = a.diffCommand(ctx, dir, &item)

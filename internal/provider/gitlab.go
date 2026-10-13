@@ -571,6 +571,11 @@ func (g *gitlab) SetDraft(ctx context.Context, pr *Item, draft bool) error {
 	return err
 }
 
+func (g *gitlab) UpdateBranch(ctx context.Context, pr *Item) error {
+	_, err := run(ctx, "", g.env(), "glab", "mr", "rebase", strconv.Itoa(pr.Number), "-R", g.repoArg(pr))
+	return err
+}
+
 func (g *gitlab) Checkout(ctx context.Context, pr *Item, dir string) error {
 	_, err := run(ctx, dir, g.env(), "glab", "mr", "checkout", strconv.Itoa(pr.Number), "-R", g.repoArg(pr))
 	return err

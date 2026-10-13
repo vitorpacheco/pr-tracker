@@ -50,7 +50,7 @@ fragment pr on PullRequest {
   labels(first: 10) { nodes { name } }
   assignees(first: 10) { nodes { login } }
   headRefName baseRefName isCrossRepository
-  reviewDecision mergeable additions deletions changedFiles
+  reviewDecision mergeable mergeStateStatus viewerCanUpdateBranch additions deletions changedFiles
   author { login }
   repository { nameWithOwner url }
   latestReviews(first: 30) { nodes { state author { login } } }
@@ -79,7 +79,7 @@ fragment pr on PullRequest {
   labels(first: 10) { nodes { name } }
   assignees(first: 10) { nodes { login } }
   headRefName baseRefName isCrossRepository
-  reviewDecision mergeable additions deletions changedFiles
+  reviewDecision mergeable mergeStateStatus viewerCanUpdateBranch additions deletions changedFiles
   author { login }
   repository { nameWithOwner url }
   latestReviews(first: 30) { nodes { state author { login } } }
@@ -94,21 +94,23 @@ fragment pr on PullRequest {
 }`
 
 type ghPR struct {
-	Number            int       `json:"number"`
-	Title             string    `json:"title"`
-	URL               string    `json:"url"`
-	IsDraft           bool      `json:"isDraft"`
-	CreatedAt         time.Time `json:"createdAt"`
-	UpdatedAt         time.Time `json:"updatedAt"`
-	HeadRefName       string    `json:"headRefName"`
-	BaseRefName       string    `json:"baseRefName"`
-	IsCrossRepository bool      `json:"isCrossRepository"`
-	ReviewDecision    string    `json:"reviewDecision"`
-	Mergeable         string    `json:"mergeable"`
-	Additions         int       `json:"additions"`
-	Deletions         int       `json:"deletions"`
-	ChangedFiles      int       `json:"changedFiles"`
-	Comments          struct {
+	Number                int       `json:"number"`
+	Title                 string    `json:"title"`
+	URL                   string    `json:"url"`
+	IsDraft               bool      `json:"isDraft"`
+	CreatedAt             time.Time `json:"createdAt"`
+	UpdatedAt             time.Time `json:"updatedAt"`
+	HeadRefName           string    `json:"headRefName"`
+	BaseRefName           string    `json:"baseRefName"`
+	IsCrossRepository     bool      `json:"isCrossRepository"`
+	ReviewDecision        string    `json:"reviewDecision"`
+	Mergeable             string    `json:"mergeable"`
+	MergeStateStatus      string    `json:"mergeStateStatus"`
+	ViewerCanUpdateBranch bool      `json:"viewerCanUpdateBranch"`
+	Additions             int       `json:"additions"`
+	Deletions             int       `json:"deletions"`
+	ChangedFiles          int       `json:"changedFiles"`
+	Comments              struct {
 		TotalCount int `json:"totalCount"`
 	} `json:"comments"`
 	Labels struct {
@@ -283,25 +285,27 @@ func (g *github) List(ctx context.Context) ([]Item, error) {
 
 func (g *github) convert(n ghPR, me string) Item {
 	pr := Item{
-		Instance:     g.in.Name,
-		Provider:     config.GitHub,
-		Host:         g.in.Host,
-		Repo:         n.Repository.NameWithOwner,
-		RepoURL:      n.Repository.URL,
-		Number:       n.Number,
-		Title:        n.Title,
-		URL:          n.URL,
-		Draft:        n.IsDraft,
-		SourceBranch: n.HeadRefName,
-		TargetBranch: n.BaseRefName,
-		FromFork:     n.IsCrossRepository,
-		CreatedAt:    n.CreatedAt,
-		UpdatedAt:    n.UpdatedAt,
-		Additions:    n.Additions,
-		Deletions:    n.Deletions,
-		Files:        n.ChangedFiles,
-		Conflicts:    n.Mergeable == "CONFLICTING",
-		Comments:     n.Comments.TotalCount,
+		Instance:        g.in.Name,
+		Provider:        config.GitHub,
+		Host:            g.in.Host,
+		Repo:            n.Repository.NameWithOwner,
+		RepoURL:         n.Repository.URL,
+		Number:          n.Number,
+		Title:           n.Title,
+		URL:             n.URL,
+		Draft:           n.IsDraft,
+		SourceBranch:    n.HeadRefName,
+		TargetBranch:    n.BaseRefName,
+		FromFork:        n.IsCrossRepository,
+		BehindBase:      n.MergeStateStatus == "BEHIND" || n.ViewerCanUpdateBranch,
+		CanUpdateBranch: n.ViewerCanUpdateBranch,
+		CreatedAt:       n.CreatedAt,
+		UpdatedAt:       n.UpdatedAt,
+		Additions:       n.Additions,
+		Deletions:       n.Deletions,
+		Files:           n.ChangedFiles,
+		Conflicts:       n.Mergeable == "CONFLICTING",
+		Comments:        n.Comments.TotalCount,
 	}
 	if n.Author != nil {
 		pr.Author = n.Author.Login
@@ -504,6 +508,11 @@ func (g *github) SetDraft(ctx context.Context, pr *Item, draft bool) error {
 		args = append(args, "--undo")
 	}
 	_, err := run(ctx, "", g.env(), "gh", args...)
+	return err
+}
+
+func (g *github) UpdateBranch(ctx context.Context, pr *Item) error {
+	_, err := run(ctx, "", g.env(), "gh", "pr", "update-branch", strconv.Itoa(pr.Number), "-R", g.repoArg(pr))
 	return err
 }
 

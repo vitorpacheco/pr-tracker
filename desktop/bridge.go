@@ -37,6 +37,7 @@ type Request struct {
 	Body        string
 	RemoveAfter bool
 	Force       bool
+	Push        bool
 }
 type Result struct {
 	Message      string
@@ -106,7 +107,7 @@ func (b *Bridge) Detail(key string) (*provider.Thread, error) {
 }
 func (b *Bridge) Execute(request Request) Result {
 	b.wait()
-	out, err := b.session.Execute(context.Background(), request.Key, app.Command{Action: request.Action, Body: request.Body, RemoveAfter: request.RemoveAfter, Force: request.Force})
+	out, err := b.session.Execute(context.Background(), request.Key, app.Command{Action: request.Action, Body: request.Body, RemoveAfter: request.RemoveAfter, Force: request.Force, Push: request.Push})
 	result := Result{Message: out.Message, ReloadThread: out.ReloadThread}
 	if err == nil && (request.Action == app.PrepareTerminal || request.Action == app.PrepareDiff) {
 		if b.terminal == nil {

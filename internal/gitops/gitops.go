@@ -158,8 +158,22 @@ func CreateWorktree(ctx context.Context, cfg *config.Config, client provider.Cli
 		return "", err
 	}
 	if _, exists := WorktreeExists(cfg, pr); exists {
-		if dirty, _ := Git(ctx, wt, "status", "--porcelain"); dirty == "" {
-			_, _ = Git(ctx, wt, "merge", "--ff-only", head)
+		branch, err := Git(ctx, wt, "symbolic-ref", "--quiet", "--short", "HEAD")
+		if err != nil {
+			return "", err
+		}
+		if branch != LocalBranch(pr) {
+			return "", i18n.Errorf("o worktree está em outra branch; selecione %s antes de atualizar", LocalBranch(pr))
+		}
+		dirty, err := Git(ctx, wt, "status", "--porcelain")
+		if err != nil {
+			return "", err
+		}
+		if dirty != "" {
+			return "", ErrDirty
+		}
+		if _, err := Git(ctx, wt, "merge", "--ff-only", head); err != nil {
+			return "", err
 		}
 		return wt, nil
 	}
@@ -186,6 +200,26 @@ func CreateWorktree(ctx context.Context, cfg *config.Config, client provider.Cli
 
 // ErrDirty is returned when a worktree has local changes.
 var ErrDirty = i18n.Errorf("worktree tem alterações locais")
+
+// PushWorktree sends only HEAD to the PR source branch on its configured
+// upstream remote. An explicit refspec avoids push.default and push refspecs
+// sending the generated local branch name or other branches.
+func PushWorktree(ctx context.Context, wt string, pr *provider.Item) error {
+	branch, err := Git(ctx, wt, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil {
+		return err
+	}
+	if branch != LocalBranch(pr) {
+		return i18n.Errorf("o worktree está em outra branch; selecione %s antes de atualizar", LocalBranch(pr))
+	}
+	remote, remoteErr := Git(ctx, wt, "config", "--get", "branch."+branch+".remote")
+	ref, refErr := Git(ctx, wt, "config", "--get", "branch."+branch+".merge")
+	if remoteErr != nil || refErr != nil || remote == "" || remote == "." || pr.SourceBranch == "" || ref != "refs/heads/"+pr.SourceBranch {
+		return i18n.Errorf("configure o upstream do worktree para a branch de origem %q antes de fazer push", pr.SourceBranch)
+	}
+	_, err = Git(ctx, wt, "push", "--", remote, "HEAD:"+ref)
+	return err
+}
 
 // RemoveWorktree removes the PR worktree and its local branch.
 func RemoveWorktree(ctx context.Context, cfg *config.Config, pr *provider.Item, force bool) error {

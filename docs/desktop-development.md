@@ -50,6 +50,12 @@ XDG_CACHE_HOME="$PWD/.cache/desktop-smoke/cache" \
 
 - Cache antes do refresh remoto, erros por instância e preservação dos dados
   anteriores quando o provider está indisponível.
+- Indicadores de atividade na carga inicial, sincronização, conversa, ações
+  por PR/MR, preparação do merge, abertura das configurações, gravação,
+  diagnóstico, exportação e seletores de arquivos/pastas. Spinners e barras
+  indeterminadas acompanham as operações reais, com texto acessível e respeito
+  à preferência por reduzir animações. Os itens continuam visíveis durante a
+  sincronização, e o estado ocupado termina também em caso de erro.
 - PRs e issues, busca por título/repositório/autor/referência, filtros por relação
   e instância, contagens e seleção preservada durante refresh e resize.
 - PRs agrupados por repositório, com instância e contagem no cabeçalho de cada
@@ -76,6 +82,27 @@ XDG_CACHE_HOME="$PWD/.cache/desktop-smoke/cache" \
   individuais ausentes no provider.
 - Rascunhos locais por item, revisão antes do envio, aprovação, merge,
   fechamento, checkout e ciclo de vida dos worktrees.
+- Botão **Atualizar branch local** ao lado das branches do PR/MR, disponível após
+  criar o worktree. Com confirmação, busca os novos commits da branch de origem
+  e atualiza a branch local somente por fast-forward.
+  Alterações locais, histórico divergente, outra branch selecionada
+  ou falhas de Git são informados sem descartar trabalho nem oferecer remoção.
+  A confirmação inclui **Fazer push após atualizar a branch**, desmarcado por
+  padrão. O envio ocorre somente após a atualização local, para a branch de
+  origem no remoto configurado como upstream do worktree, sem force push.
+  Forks exigem configurar esse upstream para o remoto do fork. Se o push falhar,
+  a interface informa que a atualização local foi concluída e preserva seus commits.
+- Botão **Atualizar com branch base**, com confirmação da direção base → origem,
+  independente de clone/worktree. Publica a atualização no servidor: GitHub usa
+  [`gh pr update-branch`](https://cli.github.com/manual/gh_pr_update-branch),
+  Gitea usa [update com style=merge](https://docs.gitea.com/api/operations/repo-update-pull-request/)
+  e GitLab usa [`glab mr rebase`](https://docs.gitlab.com/cli/mr/rebase/).
+  No GitHub, o estado desatualizado e a permissão de atualizar vêm dos campos
+  `mergeStateStatus` e `viewerCanUpdateBranch`; a ação fica desabilitada quando
+  o servidor não permite a atualização. GitLab/Gitea verificam a disponibilidade
+  durante a solicitação. Conflitos informados desabilitam o botão.
+  Solicitações assíncronas podem continuar no servidor após o comando terminar;
+  a lista é sincronizada após a solicitação e nas atualizações seguintes.
 - Botão **Marcar como Ready** / **Marcar como Draft** junto ao estado do PR/MR,
   com confirmação e atualização da lista após a alteração. GitHub usa
   [`gh pr ready` / `--undo`](https://cli.github.com/manual/gh_pr_ready) e GitLab

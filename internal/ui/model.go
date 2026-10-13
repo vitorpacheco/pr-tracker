@@ -1321,7 +1321,7 @@ func actionResult(item provider.Item, action string, out app.Outcome, err error)
 		return needPathMsg{pr: item, action: action}
 	}
 	msg := actionDoneMsg{key: item.Key(), ok: out.Message, err: err, refresh: out.Refresh, reloadThread: out.ReloadThread}
-	if errors.Is(err, app.ErrDirtyWorktree) {
+	if errors.Is(err, app.ErrDirtyWorktree) && (action == "x" || action == "A" || action == "M" || action == "C") {
 		msg.err, msg.dirty = nil, &item
 	}
 	return msg

@@ -730,6 +730,11 @@ func (g *gitea) Merge(ctx context.Context, pr *Item, opts MergeOptions) error {
 	return err
 }
 
+func (g *gitea) UpdateBranch(ctx context.Context, pr *Item) error {
+	_, err := g.api(ctx, "POST", fmt.Sprintf("/repos/%s/pulls/%d/update?style=merge", pr.Repo, pr.Number))
+	return err
+}
+
 // Close closes the pull request and leaves the source branch alone.
 func (g *gitea) Close(ctx context.Context, pr *Item) error {
 	login, err := g.resolve(ctx)

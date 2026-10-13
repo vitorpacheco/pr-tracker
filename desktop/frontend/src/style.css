@@ -714,11 +714,24 @@ code {
 }
 .branches {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 10px 0;
   color: var(--muted);
   font-size: calc(10px * var(--font-scale));
+}
+.branch-update {
+  margin-left: auto;
+  font-size: calc(11px * var(--font-scale));
+}
+.push-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.push-option input {
+  width: auto;
 }
 .branches code {
   overflow: hidden;
@@ -1463,6 +1476,20 @@ legend {
 }
 .notifications .banner {
   margin: 8px 16px;
+}
+.notifications > .activity {
+  margin: 0 16px;
+}
+.branch-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.branch-sync button {
+  margin-left: auto;
+  font-size: calc(11px * var(--font-scale));
 }
 @media (min-width: 1100px) {
   .item-row {

@@ -156,6 +156,13 @@ func TestActionOutcomePreservesPartialSuccessAndDirtyConfirmation(t *testing.T) 
 	}
 }
 
+func TestDirtyWorktreeUpdateReportsErrorWithoutRemoval(t *testing.T) {
+	msg := actionResult(provider.Item{}, "w", app.Outcome{}, app.ErrDirtyWorktree).(actionDoneMsg)
+	if !errors.Is(msg.err, app.ErrDirtyWorktree) || msg.dirty != nil {
+		t.Fatalf("update prompted removal instead of reporting error: %+v", msg)
+	}
+}
+
 func TestActionOutcomeRequestsCloneAndPreservesCleanupError(t *testing.T) {
 	item := provider.Item{Instance: "work", Repo: "org/repo", Number: 7}
 	missing := actionResult(item, "d", app.Outcome{}, app.ErrCloneRequired).(needPathMsg)

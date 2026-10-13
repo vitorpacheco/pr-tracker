@@ -210,6 +210,25 @@ func TestDirtyCleanupRemainsPossibleAfterClosedItemDisappears(t *testing.T) {
 	}
 }
 
+func TestDirtyUpdateDoesNotScheduleCleanup(t *testing.T) {
+	a, _, item := actionFixture()
+	s := NewSession(&a.cfg, nil)
+	s.application = a
+	s.loaded = true
+	s.state.Items = []provider.Item{item}
+	defer s.Close()
+	a.createWorktree = func(context.Context, *config.Config, provider.Client, *provider.Item, string, string) (string, error) {
+		return "", ErrDirtyWorktree
+	}
+	out, err := s.Execute(t.Context(), item.Key(), Command{Action: UpdateWorktree})
+	if !errors.Is(err, ErrDirtyWorktree) || out.Message != "" || out.Directory != "" || out.Refresh || out.ReloadThread {
+		t.Fatalf("update = %+v, %v", out, err)
+	}
+	if len(s.cleanup) != 0 {
+		t.Fatal("failed update scheduled worktree cleanup")
+	}
+}
+
 func TestSaveSettingsWriteFailureLeavesLiveConfigUnchanged(t *testing.T) {
 	parent := filepath.Join(t.TempDir(), "not-a-directory")
 	if err := os.WriteFile(parent, []byte("keep"), 0600); err != nil {

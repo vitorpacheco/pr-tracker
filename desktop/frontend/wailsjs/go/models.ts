@@ -74,6 +74,7 @@ export namespace main {
 	    Body: string;
 	    RemoveAfter: boolean;
 	    Force: boolean;
+	    Push: boolean;
 	}
 	export interface View {
 	    Language: string;
@@ -128,6 +129,8 @@ export namespace provider {
 	    SourceBranch: string;
 	    TargetBranch: string;
 	    FromFork: boolean;
+	    BehindBase: boolean;
+	    CanUpdateBranch: boolean;
 	    // Go type: time
 	    CreatedAt: any;
 	    // Go type: time

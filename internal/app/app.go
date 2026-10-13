@@ -30,11 +30,12 @@ type Application struct {
 	resolveClone   func(context.Context, *config.Config, *provider.Item) (string, string, bool)
 	worktreeExists func(*config.Config, *provider.Item) (string, bool)
 	createWorktree func(context.Context, *config.Config, provider.Client, *provider.Item, string, string) (string, error)
+	pushWorktree   func(context.Context, string, *provider.Item) error
 	removeWorktree func(context.Context, *config.Config, *provider.Item, bool) error
 }
 
 func New(cfg *config.Config, store *cache.Store) *Application {
-	a := &Application{cfg: cloneConfig(*cfg), client: provider.New, resolveClone: gitops.ResolveClone, worktreeExists: gitops.WorktreeExists, createWorktree: gitops.CreateWorktree, removeWorktree: gitops.RemoveWorktree}
+	a := &Application{cfg: cloneConfig(*cfg), client: provider.New, resolveClone: gitops.ResolveClone, worktreeExists: gitops.WorktreeExists, createWorktree: gitops.CreateWorktree, pushWorktree: gitops.PushWorktree, removeWorktree: gitops.RemoveWorktree}
 	if store != nil {
 		a.store = store
 	}

@@ -162,6 +162,7 @@ test('preset confirmation previews exact body, cancel sends nothing, and send pr
       Body: 'aprovado\n\n**Testes verificados.**',
       Force: false,
       RemoveAfter: false,
+      Push: false,
     },
   ]);
   await expect(page.locator('#comment')).toHaveValue(

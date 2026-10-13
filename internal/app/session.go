@@ -359,7 +359,7 @@ func (s *Session) Execute(ctx context.Context, key string, command Command) (Out
 	command.Item = item
 	out, err := a.Execute(work, command)
 	s.mu.Lock()
-	if errors.Is(err, ErrDirtyWorktree) {
+	if errors.Is(err, ErrDirtyWorktree) && (command.Action == RemoveWorktree || command.RemoveAfter) {
 		s.cleanup[key] = item
 	}
 	if command.Action == RemoveWorktree && err == nil {

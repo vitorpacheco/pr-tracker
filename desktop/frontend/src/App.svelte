@@ -16,6 +16,7 @@
     relativeAge,
   } from './lib/list';
   import Splitter from './lib/Splitter.svelte';
+  import Activity from './lib/Activity.svelte';
   import type { main, provider, config, app } from '../wailsjs/go/models';
   let fontScale = 1;
   function changeFontScale(value: number) {
@@ -58,7 +59,22 @@
     detailLoading = false;
   let thread: provider.Thread | null = null,
     detailTab = 'details';
-  let busy: Record<string, boolean> = {};
+  let busy: Record<string, string> = {};
+  let pending: Record<string, string> = {};
+
+  async function activity<T>(
+    key: string,
+    label: string,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    pending[key] = label;
+    try {
+      return await work();
+    } finally {
+      delete pending[key];
+      pending = { ...pending };
+    }
+  }
   let search: HTMLInputElement;
   let list: HTMLElement;
   let palette: HTMLDialogElement;
@@ -69,13 +85,19 @@
     command: main.Request | null = null,
     confirmLabel = '';
   let confirmTarget = '',
-    confirmWorktree = '';
+    confirmWorktree = '',
+    confirmSource = '',
+    confirmBase = '',
+    confirmProvider = '';
   let confirmUsesDraft = false;
   let draft = '',
     drafts: Record<string, string> = {};
   let settings: config.Config | null = null,
     diagnostics: app.Diagnostics | null = null,
     settingsBusy = false;
+  $: settingsBusy = Object.keys(pending).some((key) =>
+    key.startsWith('settings-'),
+  );
   let autoTimer: ReturnType<typeof setTimeout>;
   let theme = 'system',
     mounted = false,
@@ -143,13 +165,18 @@
           ?.CommentPresets ?? [])
       : [];
   $: if (mounted && visible.length && !visible.some((p) => p.Key === selected))
-    select(visible[0].Key, false);
+    // Select after this update so the inspector renders while Detail is pending.
+    void tick().then(() => {
+      if (mounted && visible.length && !visible.some((p) => p.Key === selected))
+        void select(visible[0].Key, false);
+    });
   $: if (mounted && !visible.length && selected) {
     drafts[selected] = draft;
     selected = '';
     thread = null;
     detailOpen = false;
     detailGeneration++;
+    detailLoading = false;
   }
   $: commands = [
     { label: t('Atualizar agora'), key: 'r', run: () => refresh() },
@@ -216,7 +243,7 @@
       );
   }
   async function refresh() {
-    if (refreshing) return;
+    if (refreshing || loading) return;
     refreshing = true;
     error = '';
     try {
@@ -253,9 +280,12 @@
     detailOpen = false;
   }
   async function openBrowser() {
-    if (!item) return;
+    if (!item || pending['browser']) return;
+    const key = item.Key;
     try {
-      await api.openItem(item.Key);
+      await activity('browser', t('Abrindo navegador…'), () =>
+        api.openItem(key),
+      );
     } catch (e) {
       error = textError(e);
     }
@@ -267,25 +297,34 @@
     removeAfter = false,
     body?: string,
   ) {
-    if (!item || busy[item.Key]) return;
+    if (!item || busy[item.Key] || pending['merge-options']) return;
     if (item.Kind === 1 && action !== 'comment') {
       notice = t('Ação disponível apenas para pull/merge requests.');
       return;
     }
     confirmTarget = `${item.Repo} ${item.Ref}`;
     confirmWorktree = item.Worktree;
+    confirmSource = item.SourceBranch;
+    confirmBase = item.TargetBranch;
+    confirmProvider = item.Provider;
     command = {
       Key: item.Key,
       Action: action,
       Body: body ?? draft,
       Force: force,
       RemoveAfter: removeAfter,
+      Push: false,
     } as main.Request;
     confirmUsesDraft = body === undefined;
     mergeOptions = null;
     if (action === 'merge') {
       try {
-        mergeOptions = await api.mergeOptions(item.Key);
+        const key = item.Key;
+        mergeOptions = await activity(
+          'merge-options',
+          t('Carregando opções de merge…'),
+          () => api.mergeOptions(key),
+        );
       } catch (e) {
         error = textError(e);
         return;
@@ -300,7 +339,24 @@
     const clearDraft = confirmUsesDraft;
     const target = view.Items.find((entry) => entry.Key === request.Key);
     confirmation.close();
-    busy[request.Key] = true;
+    const labels: Record<string, string> = {
+      comment: t('Enviando comentário…'),
+      approve: t('Aprovando PR/MR…'),
+      merge: t('Fazendo merge…'),
+      close: t('Fechando PR/MR…'),
+      mark_ready: t('Marcando como Ready…'),
+      mark_draft: t('Marcando como Draft…'),
+      checkout: t('Trocando branch…'),
+      update_worktree: request.Push
+        ? t('Atualizando branch e fazendo push…')
+        : t('Atualizando worktree…'),
+      update_branch: t('Atualizando branch com a base no servidor…'),
+      prepare_terminal: t('Preparando terminal…'),
+      prepare_diff: t('Preparando diff…'),
+      remove_worktree: t('Removendo worktree…'),
+    };
+    busy[request.Key] =
+      `${target?.Repo ?? ''} ${target?.Ref ?? ''} · ${labels[request.Action] || t('Executando ação…')}`;
     error = '';
     notice = '';
     try {
@@ -315,7 +371,10 @@
         }
         await select(request.Key);
       }
-      if (result.Dirty) {
+      if (
+        result.Dirty &&
+        (request.Action === 'remove_worktree' || request.RemoveAfter)
+      ) {
         confirmTarget = target ? `${target.Repo} ${target.Ref}` : request.Key;
         confirmWorktree = target?.Worktree ?? '';
         command = {
@@ -342,8 +401,13 @@
     }
   }
   async function openSettings() {
+    if (pending['open-settings'] || settingsBusy) return;
     try {
-      settings = await api.settings();
+      settings = await activity(
+        'open-settings',
+        t('Carregando configurações…'),
+        () => api.settings(),
+      );
       settings.Instances ??= [];
       for (const inst of settings.Instances) inst.CommentPresets ??= [];
       settings.Repos ??= [];
@@ -357,32 +421,46 @@
     }
   }
   async function saveSettings() {
-    if (!settings) return;
-    settingsBusy = true;
+    if (!settings || settingsBusy) return;
     try {
-      setView(await api.saveSettings(settings));
-      systemPalette = await api.theme();
+      await activity(
+        'settings-save',
+        t('Salvando configurações e sincronizando…'),
+        async () => {
+          setView(await api.saveSettings(settings!));
+          systemPalette = await api.theme();
+        },
+      );
       applyTheme(document.documentElement, preference(theme), systemPalette);
       settingsDialog.close();
       notice = translator(language)('Configurações salvas.');
     } catch (e) {
       error = textError(e);
-    } finally {
-      settingsBusy = false;
     }
   }
   async function pickThemeFile() {
+    if (settingsBusy) return;
     try {
-      const path = await api.pickTheme();
+      const path = await activity(
+        'settings-theme',
+        t('Selecionando arquivo de cores…'),
+        () => api.pickTheme(),
+      );
       if (path && settings) settings.ThemeFile = path;
     } catch (e) {
       error = textError(e);
     }
   }
   async function exportColors() {
+    if (settingsBusy) return;
     try {
-      const path = await api.exportTheme(
-        snapshotTheme(document.documentElement, systemPalette),
+      const path = await activity(
+        'settings-export',
+        t('Exportando esquema de cores…'),
+        () =>
+          api.exportTheme(
+            snapshotTheme(document.documentElement, systemPalette),
+          ),
       );
       if (path) notice = t('Esquema de cores exportado') + ': ' + path;
     } catch (e) {
@@ -390,13 +468,39 @@
     }
   }
   async function diagnose() {
-    settingsBusy = true;
+    if (settingsBusy) return;
     try {
-      diagnostics = await api.diagnose();
+      diagnostics = await activity(
+        'settings-diagnose',
+        t('Verificando ferramentas e autenticação…'),
+        () => api.diagnose(),
+      );
     } catch (e) {
       error = textError(e);
-    } finally {
-      settingsBusy = false;
+    }
+  }
+  async function openFolder() {
+    if (!item || pending['folder']) return;
+    const key = item.Key;
+    try {
+      await activity('folder', t('Abrindo pasta local…'), () =>
+        api.openFolder(key),
+      );
+    } catch (e) {
+      error = textError(e);
+    }
+  }
+  async function pickClone(repo: config.Repo) {
+    if (settingsBusy) return;
+    try {
+      const path = await activity(
+        'settings-folder',
+        t('Selecionando pasta do clone…'),
+        () => api.pickFolder(),
+      );
+      if (path) repo.Path = path;
+    } catch (e) {
+      error = textError(e);
     }
   }
   function changeTheme(value: string) {
@@ -632,16 +736,21 @@
     >
     <button
       class="icon-button"
-      class:spinning={refreshing}
-      disabled={refreshing}
+      disabled={refreshing || loading}
       title={t('Atualizar (r)')}
       aria-label={t('Atualizar')}
-      onclick={refresh}>↻</button
+      onclick={refresh}
+      >{#if refreshing || loading}<Activity
+          compact
+          label={t('Sincronizando itens…')}
+        />{:else}↻{/if}</button
     >
     <button
       class="icon-button"
       title={t('Configurações')}
       aria-label={t('Configurações')}
+      disabled={!!pending['open-settings'] || settingsBusy}
+      class:spinning={!!pending['open-settings']}
       onclick={openSettings}
     >
       <svg
@@ -662,6 +771,18 @@
     </button>
   </header>
   <div class="notifications">
+    {#if loading || refreshing}<Activity
+        progress
+        label={loading ? t('Carregando sua fila') : t('Sincronizando itens…')}
+      />{/if}
+    {#each Object.entries(pending) as [key, label] (key)}<Activity
+        {label}
+        progress
+      />{/each}
+    {#each Object.entries(busy) as [key, label] (key)}<Activity
+        {label}
+        progress
+      />{/each}
     {#if themeError}<div class="banner error" role="alert">
         {themeError}
       </div>{/if}
@@ -793,9 +914,15 @@
         >CI</span
       ><span>{t('ATUALIZADO ↓')}</span>
     </div>
-    <div class="rows" aria-label={t('Lista de itens')}>
+    <div
+      class="rows"
+      aria-label={t('Lista de itens')}
+      aria-busy={loading || refreshing}
+    >
       {#if loading}<div class="empty">
-          <div class="empty-symbol">↻</div>
+          <div class="empty-symbol">
+            <Activity compact label={t('Carregando sua fila')} />
+          </div>
           <h2>{t('Carregando sua fila')}</h2>
           <p>{t('Buscando primeiro os dados do cache local.')}</p>
         </div>
@@ -846,6 +973,7 @@
                 class="item-row"
                 class:selected={selected === row.Key}
                 aria-pressed={selected === row.Key}
+                aria-busy={!!busy[row.Key]}
                 aria-label={`${row.Repo} ${row.Ref}: ${row.Title}`}
                 onclick={() => select(row.Key)}
               >
@@ -855,7 +983,11 @@
                       >{row.Kind === 1 ? '◉' : row.Draft ? '▧' : '⑂'}</span
                     >{#if kind === 1}{row.Repo}{/if}<span class="ref"
                       >{row.Ref}</span
-                    >{#if row.Draft}<span class="pill">{t('Rascunho')}</span
+                    >{#if busy[row.Key]}<Activity
+                        compact
+                        label={busy[row.Key]}
+                      />{/if}{#if row.Draft}<span class="pill"
+                        >{t('Rascunho')}</span
                       >{/if}</span
                   ><strong>{row.Title}</strong><span class="mobile-meta"
                     >{row.Author} <span>·</span>
@@ -957,7 +1089,45 @@
             <code>{item.SourceBranch || '—'}</code><span>→</span><code
               >{item.TargetBranch || '—'}</code
             >
+            <button
+              class="branch-update"
+              disabled={!!busy[selected] || !item.Worktree}
+              title={item.Worktree
+                ? t(
+                    'Buscar novos commits da branch de origem e atualizar o worktree local',
+                  )
+                : t('Crie um worktree para atualizar a branch local')}
+              onclick={() =>
+                ask('update_worktree', t('Atualizar branch local'))}
+              >{t('Atualizar branch local')}</button
+            >
           </div>{/if}
+        {#if item.Kind === 0 && ['github', 'gitlab', 'gitea'].includes(item.Provider)}
+          <div class="branch-sync">
+            {#if item.BehindBase}<span class="pill"
+                >{t('Branch desatualizada')}</span
+              >{/if}
+            <button
+              class="secondary"
+              disabled={!!busy[selected] ||
+                !!pending['merge-options'] ||
+                item.Conflicts ||
+                (item.Provider === 'github' && !item.CanUpdateBranch)}
+              title={item.Conflicts
+                ? t('Resolva os conflitos antes de atualizar a branch')
+                : item.Provider === 'github' && !item.CanUpdateBranch
+                  ? t(
+                      'Branch atualizada ou sem permissão para atualizar no GitHub',
+                    )
+                  : t(
+                      'Incorporar a branch base na origem do PR/MR no servidor',
+                    )}
+              onclick={() =>
+                ask('update_branch', t('Atualizar com branch base'))}
+              >{t('Atualizar com branch base')}</button
+            >
+          </div>
+        {/if}
         <div class="labels">
           {#each item.Labels ?? [] as label}<span>{label}</span>{/each}
         </div>
@@ -998,9 +1168,10 @@
             </div>
           </section>
         {/if}
-        {#if detailLoading}<p class="muted" role="status">
-            {t('Carregando conversa…')}
-          </p>{/if}
+        {#if detailLoading}<Activity
+            label={t('Carregando conversa…')}
+            progress
+          />{/if}
         {#if detailError}<div class="banner error">
             {detailError}<button onclick={() => select(selected)}
               >{t('Tentar novamente')}</button
@@ -1133,15 +1304,11 @@
         <details class="more">
           <summary>{t('Mais ações')}</summary>
           <div>
-            <button onclick={openBrowser}>{t('Abrir no navegador')}</button
+            <button disabled={!!pending['browser']} onclick={openBrowser}
+              >{t('Abrir no navegador')}</button
             ><button
-              disabled={!item.Clone && !item.Worktree}
-              onclick={() => {
-                if (item)
-                  void api
-                    .openFolder(item.Key)
-                    .catch((e) => (error = textError(e)));
-              }}>{t('Abrir pasta local')}</button
+              disabled={(!item.Clone && !item.Worktree) || !!pending['folder']}
+              onclick={openFolder}>{t('Abrir pasta local')}</button
             >{#if item.Kind === 0}<button
                 disabled={!!busy[selected]}
                 onclick={() =>
@@ -1235,7 +1402,30 @@
       {t(
         'As alterações não commitadas serão perdidas. Esta operação não pode ser desfeita.',
       )}
-    </div>{/if}{#if command?.Action === 'comment'}<pre
+    </div>{/if}{#if command?.Action === 'update_branch'}<p class="muted">
+      {confirmBase} → {confirmSource}<br />
+      {confirmProvider === 'gitlab'
+        ? t(
+            'Faz rebase da branch de origem sobre a branch base no servidor e publica a atualização.',
+          )
+        : t(
+            'Incorpora os commits da branch base na branch de origem por merge no servidor e publica a atualização.',
+          )}
+    </p>{/if}{#if command?.Action === 'update_worktree'}<p class="muted">
+      {t(
+        'Busca os novos commits da branch de origem do PR/MR e atualiza o worktree local sem criar commits de merge. Alterações locais ou histórico divergente impedem a atualização.',
+      )}
+    </p>
+    <label class="push-option">
+      <input type="checkbox" bind:checked={command.Push} />
+      {t('Fazer push após atualizar a branch')}
+    </label>
+    <p class="muted">
+      {t(
+        'Envia para a branch de origem no remoto configurado como upstream do worktree, sem force push.',
+      )}
+    </p>
+  {/if}{#if command?.Action === 'comment'}<pre
       class="comment-preview">{command.Body}</pre>{/if}{#if command?.Action === 'merge'}<p
     >
       {t('Método:')} <strong>{mergeOptions?.Method}</strong><br />Auto-merge: {mergeOptions?.Auto
@@ -1265,6 +1455,10 @@
   </form>
   <div class="eyebrow">{t('PREFERÊNCIAS')}</div>
   <h2 id="settings-title">{t('Configurações')}</h2>
+  {#each Object.entries(pending).filter( ([key]) => key.startsWith('settings-') ) as [key, label] (key)}<Activity
+      {label}
+      progress
+    />{/each}
   {#if error}<div class="banner error" role="alert">{error}</div>{/if}<label
     >{t('Tema')}<select
       value={theme}
@@ -1285,8 +1479,12 @@
       {t('Vazio segue o tema do sistema; caminho relativo à configuração')}
     </p>
     <div class="actions">
-      <button onclick={pickThemeFile}>{t('Selecionar arquivo')}</button>
-      <button onclick={exportColors}>{t('Exportar esquema de cores')}</button>
+      <button disabled={settingsBusy} onclick={pickThemeFile}
+        >{t('Selecionar arquivo')}</button
+      >
+      <button disabled={settingsBusy} onclick={exportColors}
+        >{t('Exportar esquema de cores')}</button
+      >
     </div>
     <label
       >{t('Idioma')}<select bind:value={settings.Language}
@@ -1449,15 +1647,8 @@
             >{t('Pasta do clone')}<input
               bind:value={repo.Path}
               placeholder="/home/…"
-            /><button
-              onclick={async () => {
-                try {
-                  const path = await api.pickFolder();
-                  if (path) repo.Path = path;
-                } catch (e) {
-                  error = textError(e);
-                }
-              }}>{t('Selecionar pasta…')}</button
+            /><button disabled={settingsBusy} onclick={() => pickClone(repo)}
+              >{t('Selecionar pasta…')}</button
             ></label
           ><label
             >Remote<input
@@ -1495,7 +1686,9 @@
     >
     <h3>{t('Ferramentas e autenticação')}</h3>
     <button disabled={settingsBusy} onclick={diagnose}
-      >{settingsBusy ? t('Verificando…') : t('Executar diagnóstico')}</button
+      >{pending['settings-diagnose']
+        ? t('Verificando…')
+        : t('Executar diagnóstico')}</button
     >{#if diagnostics}{#each diagnostics.Tools as tool}<p class="diagnostic">
           <span class:success={!!tool.Path} class:failure={!tool.Path}
             >{tool.Path ? '✓' : '×'}</span
@@ -1510,7 +1703,9 @@
     <div class="dialog-actions">
       <button onclick={() => settingsDialog.close()}>{t('Cancelar')}</button
       ><button class="primary" disabled={settingsBusy} onclick={saveSettings}
-        >{settingsBusy ? t('Salvando…') : t('Salvar configurações')}</button
+        >{pending['settings-save']
+          ? t('Salvando…')
+          : t('Salvar configurações')}</button
       >
     </div>{/if}
 </dialog>

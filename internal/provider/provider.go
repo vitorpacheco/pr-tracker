@@ -75,9 +75,11 @@ type Item struct {
 	Author  string
 	Draft   bool
 
-	SourceBranch string
-	TargetBranch string
-	FromFork     bool
+	SourceBranch    string
+	TargetBranch    string
+	FromFork        bool
+	BehindBase      bool // Reported by the server; false can also mean unknown.
+	CanUpdateBranch bool // GitHub reports whether the viewer can update a stale head.
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -158,6 +160,8 @@ type Client interface {
 	Close(ctx context.Context, pr *Item) error
 	// SetDraft changes the PR's readiness for review.
 	SetDraft(ctx context.Context, pr *Item, draft bool) error
+	// UpdateBranch incorporates the target branch into the source branch on the server.
+	UpdateBranch(ctx context.Context, pr *Item) error
 	// Checkout switches the clone at dir to the PR branch.
 	Checkout(ctx context.Context, pr *Item, dir string) error
 	// HeadRef is the server-side ref that always points to the PR head,

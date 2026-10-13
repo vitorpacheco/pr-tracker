@@ -82,6 +82,8 @@ export const items = rows.map((r, i) => ({
   SourceBranch: 'feature/token-auth',
   TargetBranch: 'main',
   FromFork: false,
+  BehindBase: i === 0,
+  CanUpdateBranch: i === 0,
   CreatedAt: new Date(Date.now() - 86400000).toISOString(),
   UpdatedAt: new Date(Date.now() - (i + 1) * 720000).toISOString(),
   Additions: 328,
