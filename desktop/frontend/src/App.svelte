@@ -988,6 +988,11 @@
                         label={busy[row.Key]}
                       />{/if}{#if row.Draft}<span class="pill"
                         >{t('Rascunho')}</span
+                      >{/if}{#if row.Conflicts}<span
+                        class="pill red"
+                        title={t(
+                          'Conflitos precisam ser resolvidos antes do merge.',
+                        )}>{t('Conflitos')}</span
                       >{/if}</span
                   ><strong>{row.Title}</strong><span class="mobile-meta"
                     >{row.Author} <span>·</span>
@@ -1104,6 +1109,11 @@
           </div>{/if}
         {#if item.Kind === 0 && ['github', 'gitlab', 'gitea'].includes(item.Provider)}
           <div class="branch-sync">
+            {#if item.Conflicts}<span
+                class="pill red"
+                title={t('Conflitos precisam ser resolvidos antes do merge.')}
+                >{t('Conflitos')}</span
+              >{/if}
             {#if item.BehindBase}<span class="pill"
                 >{t('Branch desatualizada')}</span
               >{/if}

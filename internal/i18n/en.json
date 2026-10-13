@@ -325,6 +325,7 @@
   "Alterações solicitadas": "Changes requested",
   "Aguardando revisão": "Awaiting review",
   "Nenhuma aprovação informada": "No approvals reported",
+  "Conflitos": "Conflicts",
   "Conflitos precisam ser resolvidos antes do merge.": "Conflicts must be resolved before merging.",
   "Arquivos alterados": "Changed files",
   "Nenhum worktree local": "No local worktree",

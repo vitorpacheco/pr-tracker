@@ -638,6 +638,11 @@ code {
   border-color: var(--success-border);
   background: var(--success-background);
 }
+.pill.red {
+  color: var(--red);
+  border-color: var(--error-border);
+  background: var(--error-background);
+}
 .list-footer {
   display: flex;
   justify-content: space-between;
@@ -1541,6 +1546,11 @@ legend {
 :root[data-system-theme='omarchy'] .pill.green {
   border-color: var(--green);
   background: color-mix(in srgb, var(--green) 10%, var(--bg));
+}
+:root[data-system-theme='omarchy'] .pill.red {
+  color: var(--red);
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, var(--bg));
 }
 :root[data-system-theme='omarchy'] .banner.error {
   border-color: var(--red);

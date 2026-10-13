@@ -92,7 +92,7 @@ export const items = rows.map((r, i) => ({
   Review: i === 0 ? 'approved' : 'review_required',
   ApprovedBy: i === 0 ? ['jcarvalho', 'anacosta'] : [],
   ApprovedByMe: false,
-  Conflicts: false,
+  Conflicts: i === 1,
   CI: String(r[4]),
   Checks: [
     { Name: 'build', State: 'success', URL: '' },
