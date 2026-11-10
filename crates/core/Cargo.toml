@@ -14,7 +14,7 @@ rusqlite = { version = "0.41", features = ["bundled"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
-toml = "0.9"
+toml = "1.2"
 which = "8"
 
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
