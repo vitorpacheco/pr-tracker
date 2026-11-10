@@ -28,13 +28,19 @@ impl Ctx {
 
     /// Supplies per-application overrides without changing the process PATH.
     pub fn with_paths(&self, paths: &BTreeMap<String, String>) -> Self {
-        Self { paths: Arc::new(paths.clone()), ..self.clone() }
+        Self {
+            paths: Arc::new(paths.clone()),
+            ..self.clone()
+        }
     }
 
     /// Never extends a deadline the context already has.
     pub fn with_timeout(&self, timeout: Duration) -> Self {
         let deadline = Instant::now() + timeout;
-        Self { deadline: Some(self.deadline.map_or(deadline, |own| own.min(deadline))), ..self.clone() }
+        Self {
+            deadline: Some(self.deadline.map_or(deadline, |own| own.min(deadline))),
+            ..self.clone()
+        }
     }
 
     pub fn with_cancel(&self, flag: Arc<AtomicBool>) -> Self {
@@ -47,7 +53,10 @@ impl Ctx {
         if self.cancel.iter().any(|flag| flag.load(Ordering::SeqCst)) {
             return Some(Error::Canceled);
         }
-        if self.deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        if self
+            .deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
             return Some(Error::DeadlineExceeded);
         }
         None
@@ -126,8 +135,18 @@ pub fn output(ctx: &Ctx, cmd: &mut Command) -> Result<Output> {
             buffer
         })
     };
-    let stdout = drain(child.stdout.take().map(|pipe| Box::new(pipe) as Box<dyn Read + Send>));
-    let stderr = drain(child.stderr.take().map(|pipe| Box::new(pipe) as Box<dyn Read + Send>));
+    let stdout = drain(
+        child
+            .stdout
+            .take()
+            .map(|pipe| Box::new(pipe) as Box<dyn Read + Send>),
+    );
+    let stderr = drain(
+        child
+            .stderr
+            .take()
+            .map(|pipe| Box::new(pipe) as Box<dyn Read + Send>),
+    );
     let mut wait = Duration::from_millis(2);
     let status = loop {
         if let Some(status) = child.try_wait()? {
@@ -141,7 +160,11 @@ pub fn output(ctx: &Ctx, cmd: &mut Command) -> Result<Output> {
         std::thread::sleep(wait);
         wait = (wait * 2).min(Duration::from_millis(40));
     };
-    Ok(Output { status, stdout: stdout.join().unwrap_or_default(), stderr: stderr.join().unwrap_or_default() })
+    Ok(Output {
+        status,
+        stdout: stdout.join().unwrap_or_default(),
+        stderr: stderr.join().unwrap_or_default(),
+    })
 }
 
 #[cfg(test)]
@@ -151,27 +174,41 @@ mod tests {
     #[test]
     fn explicit_path_overrides_path_and_does_not_fall_back() {
         let executable = std::env::current_exe().unwrap();
-        let mut paths = BTreeMap::from([("gh".to_string(), executable.to_string_lossy().into_owned())]);
+        let mut paths =
+            BTreeMap::from([("gh".to_string(), executable.to_string_lossy().into_owned())]);
         let found = lookup(&Ctx::background().with_paths(&paths), "gh").unwrap();
         assert_eq!(found, executable);
-        paths.insert("gh".to_string(), "/nonexistent/pr-tracker-test-cli".to_string());
-        assert!(lookup(&Ctx::background().with_paths(&paths), "gh").is_err(), "invalid explicit path silently fell back");
+        paths.insert(
+            "gh".to_string(),
+            "/nonexistent/pr-tracker-test-cli".to_string(),
+        );
+        assert!(
+            lookup(&Ctx::background().with_paths(&paths), "gh").is_err(),
+            "invalid explicit path silently fell back"
+        );
     }
 
     #[test]
     fn child_environment_does_not_mutate_process() {
         let before = std::env::var_os("PATH");
         let executable = std::env::current_exe().unwrap();
-        let paths = BTreeMap::from([("git".to_string(), executable.to_string_lossy().into_owned())]);
+        let paths =
+            BTreeMap::from([("git".to_string(), executable.to_string_lossy().into_owned())]);
         let path = child_path(&Ctx::background().with_paths(&paths));
         let first = std::env::split_paths(&path).next().unwrap();
         assert_eq!(first, executable.parent().unwrap());
-        assert_eq!(std::env::var_os("PATH"), before, "child PATH was not isolated");
+        assert_eq!(
+            std::env::var_os("PATH"),
+            before,
+            "child PATH was not isolated"
+        );
     }
 
     #[test]
     fn deadline_kills_a_running_command() {
-        let Ok(sleep) = which::which("sleep") else { return };
+        let Ok(sleep) = which::which("sleep") else {
+            return;
+        };
         let ctx = Ctx::background().with_timeout(Duration::from_millis(50));
         let started = Instant::now();
         let err = output(&ctx, command(&ctx, &sleep).arg("5")).unwrap_err();
@@ -182,7 +219,9 @@ mod tests {
     #[test]
     fn cancellation_is_reported_before_the_deadline() {
         let flag = Arc::new(AtomicBool::new(false));
-        let ctx = Ctx::background().with_cancel(flag.clone()).with_timeout(Duration::from_secs(60));
+        let ctx = Ctx::background()
+            .with_cancel(flag.clone())
+            .with_timeout(Duration::from_secs(60));
         assert!(ctx.check().is_ok());
         flag.store(true, Ordering::SeqCst);
         assert_eq!(ctx.err(), Some(Error::Canceled));

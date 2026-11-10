@@ -8,9 +8,23 @@ use rune::TextEdit;
 pub const TOOLS: [&str; 5] = ["git", "gh", "glab", "tea", "hunk"];
 /// Providers with an integration, offered when adding an instance.
 pub const PROVIDERS: [Provider; 3] = [Provider::GitHub, Provider::GitLab, Provider::Gitea];
-pub const LANGUAGES: [(&str, &str); 3] = [("system", "Sistema"), ("en", "English"), ("pt", "Português")];
-pub const MERGE_METHODS: [(&str, &str); 4] = [("", "Padrão (merge)"), ("merge", "Merge"), ("squash", "Squash"), ("rebase", "Rebase")];
-pub const TERMINALS: [(&str, &str); 4] = [("auto", "Automático"), ("herdr", "herdr"), ("tmux", "tmux"), ("inline", "Janela de terminal")];
+pub const LANGUAGES: [(&str, &str); 3] = [
+    ("system", "Sistema"),
+    ("en", "English"),
+    ("pt", "Português"),
+];
+pub const MERGE_METHODS: [(&str, &str); 4] = [
+    ("", "Padrão (merge)"),
+    ("merge", "Merge"),
+    ("squash", "Squash"),
+    ("rebase", "Rebase"),
+];
+pub const TERMINALS: [(&str, &str); 4] = [
+    ("auto", "Automático"),
+    ("herdr", "herdr"),
+    ("tmux", "tmux"),
+    ("inline", "Janela de terminal"),
+];
 pub const DIFF_TOOLS: [(&str, &str); 2] = [("hunk", "hunk"), ("none", "git diff")];
 
 /// Names one text field of the form, so a handler can find it again.
@@ -83,13 +97,20 @@ impl SettingsForm {
             base: cfg.clone(),
             next_id: 1,
             theme_file: TextEdit::new(cfg.theme_file.clone()),
-            language: if cfg.language.is_empty() { "system".into() } else { cfg.language.clone() },
+            language: if cfg.language.is_empty() {
+                "system".into()
+            } else {
+                cfg.language.clone()
+            },
             refresh_interval: TextEdit::new(cfg.refresh_interval.clone()),
             worktree_dir: TextEdit::new(cfg.worktree_dir.clone()),
             desktop_terminal: TextEdit::new(cfg.desktop_terminal.clone()),
             terminal: cfg.terminal.clone(),
             diff_tool: cfg.diff_tool.clone(),
-            tools: TOOLS.iter().map(|tool| TextEdit::new(cfg.tool_paths.get(*tool).cloned().unwrap_or_default())).collect(),
+            tools: TOOLS
+                .iter()
+                .map(|tool| TextEdit::new(cfg.tool_paths.get(*tool).cloned().unwrap_or_default()))
+                .collect(),
             instances: Vec::new(),
             repos: Vec::new(),
             open_select: None,
@@ -99,7 +120,11 @@ impl SettingsForm {
             let presets = instance
                 .comment_presets
                 .iter()
-                .map(|preset| PresetForm { id: form.id(), label: TextEdit::new(preset.label.clone()), body: TextEdit::new(preset.body.clone()) })
+                .map(|preset| PresetForm {
+                    id: form.id(),
+                    label: TextEdit::new(preset.label.clone()),
+                    body: TextEdit::new(preset.body.clone()),
+                })
                 .collect();
             form.instances.push(InstanceForm {
                 id,
@@ -116,7 +141,11 @@ impl SettingsForm {
         for repo in &cfg.repos {
             // A mapping whose instance is gone keeps pointing at nothing and is
             // reported when saving, as the file itself would be.
-            let instance = cfg.instances.iter().position(|instance| instance.name == repo.instance).map_or(0, |index| form.instances[index].id);
+            let instance = cfg
+                .instances
+                .iter()
+                .position(|instance| instance.name == repo.instance)
+                .map_or(0, |index| form.instances[index].id);
             let id = form.id();
             form.repos.push(RepoForm {
                 id,
@@ -153,8 +182,12 @@ impl SettingsForm {
             Field::Tool(index) => self.tools.get_mut(index),
             Field::InstanceName(id) => self.instance_mut(id).map(|instance| &mut instance.name),
             Field::InstanceHost(id) => self.instance_mut(id).map(|instance| &mut instance.host),
-            Field::PresetLabel(instance, id) => self.preset_mut(instance, id).map(|preset| &mut preset.label),
-            Field::PresetBody(instance, id) => self.preset_mut(instance, id).map(|preset| &mut preset.body),
+            Field::PresetLabel(instance, id) => self
+                .preset_mut(instance, id)
+                .map(|preset| &mut preset.label),
+            Field::PresetBody(instance, id) => {
+                self.preset_mut(instance, id).map(|preset| &mut preset.body)
+            }
             Field::RepoName(id) => self.repo_mut(id).map(|repo| &mut repo.name),
             Field::RepoPath(id) => self.repo_mut(id).map(|repo| &mut repo.path),
             Field::RepoRemote(id) => self.repo_mut(id).map(|repo| &mut repo.remote),
@@ -162,7 +195,10 @@ impl SettingsForm {
     }
 
     fn preset_mut(&mut self, instance: u64, id: u64) -> Option<&mut PresetForm> {
-        self.instance_mut(instance)?.presets.iter_mut().find(|preset| preset.id == id)
+        self.instance_mut(instance)?
+            .presets
+            .iter_mut()
+            .find(|preset| preset.id == id)
     }
 
     pub fn add_instance(&mut self) {
@@ -189,7 +225,11 @@ impl SettingsForm {
     pub fn add_preset(&mut self, instance: u64) {
         let id = self.id();
         if let Some(instance) = self.instance_mut(instance) {
-            instance.presets.push(PresetForm { id, label: TextEdit::new(""), body: TextEdit::new("") });
+            instance.presets.push(PresetForm {
+                id,
+                label: TextEdit::new(""),
+                body: TextEdit::new(""),
+            });
         }
     }
 
@@ -219,7 +259,11 @@ impl SettingsForm {
     /// The name an instance will be saved under, as shown in the repository
     /// instance picker.
     pub fn instance_label(&self, id: u64) -> String {
-        self.instances.iter().find(|instance| instance.id == id).map(|instance| instance.name.text.trim().to_string()).unwrap_or_default()
+        self.instances
+            .iter()
+            .find(|instance| instance.id == id)
+            .map(|instance| instance.name.text.trim().to_string())
+            .unwrap_or_default()
     }
 
     /// The configuration this form describes. Fields the dialog does not show
@@ -253,7 +297,10 @@ impl SettingsForm {
                 comment_presets: instance
                     .presets
                     .iter()
-                    .map(|preset| CommentPreset { label: preset.label.text.clone(), body: preset.body.text.clone() })
+                    .map(|preset| CommentPreset {
+                        label: preset.label.text.clone(),
+                        body: preset.body.text.clone(),
+                    })
                     .collect(),
             })
             .collect();
@@ -285,10 +332,19 @@ mod tests {
             name: "work".into(),
             provider: Provider::GitLab,
             host: "git.corp".into(),
-            comment_presets: vec![CommentPreset { label: "Ok".into(), body: "aprovado".into() }],
+            comment_presets: vec![CommentPreset {
+                label: "Ok".into(),
+                body: "aprovado".into(),
+            }],
             ..Instance::default()
         }];
-        cfg.repos = vec![Repo { instance: "work".into(), name: "g/p".into(), path: "~/p".into(), track_all: true, ..Repo::default() }];
+        cfg.repos = vec![Repo {
+            instance: "work".into(),
+            name: "g/p".into(),
+            path: "~/p".into(),
+            track_all: true,
+            ..Repo::default()
+        }];
         cfg
     }
 
@@ -302,11 +358,22 @@ mod tests {
     fn renaming_an_instance_carries_its_repositories() {
         let mut form = SettingsForm::new(&sample());
         let id = form.instances[0].id;
-        form.edit(Field::InstanceName(id)).unwrap().replace_text("job");
+        form.edit(Field::InstanceName(id))
+            .unwrap()
+            .replace_text("job");
         let cfg = form.to_config();
-        assert_eq!((cfg.instances[0].name.as_str(), cfg.repos[0].instance.as_str()), ("job", "job"));
+        assert_eq!(
+            (
+                cfg.instances[0].name.as_str(),
+                cfg.repos[0].instance.as_str()
+            ),
+            ("job", "job")
+        );
         form.remove_instance(id);
-        assert!(form.to_config().repos.is_empty(), "repositories outlived their instance");
+        assert!(
+            form.to_config().repos.is_empty(),
+            "repositories outlived their instance"
+        );
     }
 
     #[test]
@@ -316,16 +383,26 @@ mod tests {
         let added = form.instances[1].id;
         form.add_preset(added);
         let preset = form.instances[1].presets[0].id;
-        form.edit(Field::PresetLabel(added, preset)).unwrap().replace_text("Revisar");
+        form.edit(Field::PresetLabel(added, preset))
+            .unwrap()
+            .replace_text("Revisar");
         form.add_repo();
         let repo = form.repos[1].id;
-        form.edit(Field::RepoName(repo)).unwrap().replace_text(" org/new ");
+        form.edit(Field::RepoName(repo))
+            .unwrap()
+            .replace_text(" org/new ");
         let cfg = form.to_config();
         assert_eq!(cfg.instances[1].comment_presets[0].label, "Revisar");
-        assert_eq!((cfg.repos[1].name.as_str(), cfg.repos[1].instance.as_str()), ("org/new", "work"));
+        assert_eq!(
+            (cfg.repos[1].name.as_str(), cfg.repos[1].instance.as_str()),
+            ("org/new", "work")
+        );
         form.remove_preset(added, preset);
         form.remove_repo(repo);
-        assert!(form.edit(Field::PresetLabel(added, preset)).is_none() && form.edit(Field::RepoName(repo)).is_none());
+        assert!(
+            form.edit(Field::PresetLabel(added, preset)).is_none()
+                && form.edit(Field::RepoName(repo)).is_none()
+        );
         assert!(form.edit(Field::Tool(1)).is_some() && form.edit(Field::Tool(9)).is_none());
     }
 
@@ -333,7 +410,12 @@ mod tests {
     fn blank_tool_paths_are_not_saved() {
         let mut form = SettingsForm::new(&sample());
         form.edit(Field::Tool(1)).unwrap().replace_text("  ");
-        form.edit(Field::Tool(0)).unwrap().replace_text("/usr/bin/git");
-        assert_eq!(form.to_config().tool_paths, BTreeMap::from([("git".to_string(), "/usr/bin/git".to_string())]));
+        form.edit(Field::Tool(0))
+            .unwrap()
+            .replace_text("/usr/bin/git");
+        assert_eq!(
+            form.to_config().tool_paths,
+            BTreeMap::from([("git".to_string(), "/usr/bin/git".to_string())])
+        );
     }
 }

@@ -155,7 +155,10 @@ impl Item {
     /// Identifies an item across instances. GitLab numbers issues and merge
     /// requests independently, so the kind is part of the key.
     pub fn key(&self) -> String {
-        format!("{}|{}|{}#{}", self.instance, self.repo, self.kind as u8, self.number)
+        format!(
+            "{}|{}|{}#{}",
+            self.instance, self.repo, self.kind as u8, self.number
+        )
     }
 
     /// The display reference ("#12" or "!12").
@@ -229,9 +232,15 @@ pub const ERR_NOT_SUPPORTED: &str = "provider ainda não suportado";
 /// Where to get a CLI. The text is a catalog key.
 pub fn install_hint(tool: &str) -> &str {
     match tool {
-        "gh" => "https://cli.github.com (ex.: brew install gh, pacman -S github-cli, winget install GitHub.cli)",
-        "glab" => "https://gitlab.com/gitlab-org/cli (ex.: brew install glab, pacman -S glab, winget install glab.glab)",
-        "tea" => "https://gitea.com/gitea/tea (ex.: brew install tea, ou um binário das releases); precisa da 0.14 ou mais nova",
+        "gh" => {
+            "https://cli.github.com (ex.: brew install gh, pacman -S github-cli, winget install GitHub.cli)"
+        }
+        "glab" => {
+            "https://gitlab.com/gitlab-org/cli (ex.: brew install glab, pacman -S glab, winget install glab.glab)"
+        }
+        "tea" => {
+            "https://gitea.com/gitea/tea (ex.: brew install tea, ou um binário das releases); precisa da 0.14 ou mais nova"
+        }
         "bkt" => "https://github.com/avivsinai/bitbucket-cli (integração ainda não implementada)",
         "hunk" => "https://github.com/modem-dev/hunk",
         other => other,
@@ -245,7 +254,11 @@ pub fn tool_available(tool: &str) -> bool {
 
 /// The repositories of `instance` that track every open pull/merge request.
 fn tracked(instance: &Instance, repos: &[Repo]) -> Vec<String> {
-    repos.iter().filter(|repo| repo.instance == instance.name && repo.track_all).map(|repo| repo.name.clone()).collect()
+    repos
+        .iter()
+        .filter(|repo| repo.instance == instance.name && repo.track_all)
+        .map(|repo| repo.name.clone())
+        .collect()
 }
 
 /// A provider client. Repository settings are optional, so callers that only
@@ -256,17 +269,26 @@ pub fn new(instance: &Instance, repos: &[Repo]) -> Arc<dyn Client> {
         Provider::GitHub => Arc::new(github::GitHub::new(instance.clone(), tracked)),
         Provider::GitLab => Arc::new(gitlab::GitLab::new(instance.clone(), tracked)),
         Provider::Gitea => Arc::new(gitea::Gitea::new(instance.clone(), tracked)),
-        Provider::Bitbucket | Provider::Unknown => Arc::new(bitbucket::Bitbucket::new(instance.clone())),
+        Provider::Bitbucket | Provider::Unknown => {
+            Arc::new(bitbucket::Bitbucket::new(instance.clone()))
+        }
     }
 }
 
 /// Runs a CLI and returns its stdout; stderr is folded into the error.
-fn run(ctx: &Ctx, dir: Option<&Path>, env: &[(&str, &str)], name: &str, args: &[&str]) -> Result<Vec<u8>> {
+fn run(
+    ctx: &Ctx,
+    dir: Option<&Path>,
+    env: &[(&str, &str)],
+    name: &str,
+    args: &[&str],
+) -> Result<Vec<u8>> {
     let path = toolchain::lookup(ctx, name)?;
     let mut cmd = toolchain::command(ctx, &path);
     cmd.args(args).envs(env.iter().copied());
     // Never let a CLI block on an interactive prompt.
-    cmd.env("GH_PROMPT_DISABLED", "1").env("GLAB_NO_PROMPT", "1");
+    cmd.env("GH_PROMPT_DISABLED", "1")
+        .env("GLAB_NO_PROMPT", "1");
     if let Some(dir) = dir {
         cmd.current_dir(dir);
     }
@@ -281,7 +303,10 @@ fn run(ctx: &Ctx, dir: Option<&Path>, env: &[(&str, &str)], name: &str, args: &[
     if message.is_empty() {
         message = output.status.to_string();
     }
-    Err(Error::external(format!("{name} {}: {message}", first_arg(args))))
+    Err(Error::external(format!(
+        "{name} {}: {message}",
+        first_arg(args)
+    )))
 }
 
 fn first_arg(args: &[&str]) -> String {
@@ -323,7 +348,10 @@ impl Accumulator {
     }
 
     fn list(mut self) -> Vec<Item> {
-        self.order.iter().filter_map(|key| self.by_key.remove(key)).collect()
+        self.order
+            .iter()
+            .filter_map(|key| self.by_key.remove(key))
+            .collect()
     }
 }
 
@@ -334,40 +362,97 @@ mod tests {
     #[test]
     fn accumulator_merges_relations() {
         let mut acc = Accumulator::default();
-        let pr = Item { instance: "gh".into(), repo: "o/r".into(), number: 1, ..Item::default() };
+        let pr = Item {
+            instance: "gh".into(),
+            repo: "o/r".into(),
+            number: 1,
+            ..Item::default()
+        };
         acc.add(pr.clone(), Relation::REVIEW_REQUESTED);
         acc.add(pr, Relation::ASSIGNED);
-        acc.add(Item { instance: "gh".into(), repo: "o/r".into(), number: 2, ..Item::default() }, Relation::AUTHORED);
-        acc.add(Item { instance: "gh".into(), repo: "o/r".into(), number: 3, ..Item::default() }, Relation::NONE);
+        acc.add(
+            Item {
+                instance: "gh".into(),
+                repo: "o/r".into(),
+                number: 2,
+                ..Item::default()
+            },
+            Relation::AUTHORED,
+        );
+        acc.add(
+            Item {
+                instance: "gh".into(),
+                repo: "o/r".into(),
+                number: 3,
+                ..Item::default()
+            },
+            Relation::NONE,
+        );
         let got = acc.list();
         assert_eq!(got.len(), 3);
-        assert_eq!(got[0].relations, Relation::REVIEW_REQUESTED | Relation::ASSIGNED);
+        assert_eq!(
+            got[0].relations,
+            Relation::REVIEW_REQUESTED | Relation::ASSIGNED
+        );
         assert_eq!(got[1].relations, Relation::AUTHORED);
         assert_eq!(got[2].relations, Relation::NONE);
     }
 
     #[test]
     fn tracked_repos_are_scoped_to_the_instance() {
-        let instance = Instance { name: "work".into(), provider: Provider::GitLab, host: "gitlab.example.com".into(), ..Instance::default() };
-        let repo = |instance: &str, name: &str, track_all| Repo { instance: instance.into(), name: name.into(), track_all, ..Repo::default() };
-        let repos = [repo("work", "group/all", true), repo("work", "group/related-only", false), repo("other", "group/other", true)];
+        let instance = Instance {
+            name: "work".into(),
+            provider: Provider::GitLab,
+            host: "gitlab.example.com".into(),
+            ..Instance::default()
+        };
+        let repo = |instance: &str, name: &str, track_all| Repo {
+            instance: instance.into(),
+            name: name.into(),
+            track_all,
+            ..Repo::default()
+        };
+        let repos = [
+            repo("work", "group/all", true),
+            repo("work", "group/related-only", false),
+            repo("other", "group/other", true),
+        ];
         assert_eq!(tracked(&instance, &repos), ["group/all"]);
     }
 
     #[test]
     fn missing_tool_is_reported_with_an_install_hint() {
-        let paths = std::collections::BTreeMap::from([("gh".to_string(), "/nonexistent/pr-tracker-test-cli".to_string())]);
+        let paths = std::collections::BTreeMap::from([(
+            "gh".to_string(),
+            "/nonexistent/pr-tracker-test-cli".to_string(),
+        )]);
         let ctx = Ctx::background().with_paths(&paths);
         let err = run(&ctx, None, &[], "gh", &["auth", "status"]).unwrap_err();
         assert!(err.is_missing_tool());
-        assert!(err.text("en").contains("https://cli.github.com"), "{}", err.text("en"));
+        assert!(
+            err.text("en").contains("https://cli.github.com"),
+            "{}",
+            err.text("en")
+        );
     }
 
     #[test]
     fn keys_and_references_distinguish_kinds_and_providers() {
-        let mut item = Item { instance: "work".into(), repo: "g/p".into(), number: 12, provider: Provider::GitLab, ..Item::default() };
-        assert_eq!((item.key().as_str(), item.reference().as_str()), ("work|g/p|0#12", "!12"));
+        let mut item = Item {
+            instance: "work".into(),
+            repo: "g/p".into(),
+            number: 12,
+            provider: Provider::GitLab,
+            ..Item::default()
+        };
+        assert_eq!(
+            (item.key().as_str(), item.reference().as_str()),
+            ("work|g/p|0#12", "!12")
+        );
         item.kind = Kind::Issue;
-        assert_eq!((item.key().as_str(), item.reference().as_str()), ("work|g/p|1#12", "#12"));
+        assert_eq!(
+            (item.key().as_str(), item.reference().as_str()),
+            ("work|g/p|1#12", "#12")
+        );
     }
 }

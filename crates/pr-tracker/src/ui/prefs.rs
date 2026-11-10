@@ -40,13 +40,18 @@ pub fn path() -> Option<PathBuf> {
 impl Prefs {
     /// Missing or unreadable preferences fall back to the defaults.
     pub fn load() -> Prefs {
-        path().and_then(|path| std::fs::read(path).ok()).and_then(|data| serde_json::from_slice(&data).ok()).unwrap_or_default()
+        path()
+            .and_then(|path| std::fs::read(path).ok())
+            .and_then(|data| serde_json::from_slice(&data).ok())
+            .unwrap_or_default()
     }
 
     /// Preferences are a convenience: a failed write is not worth interrupting for.
     pub fn save(&self) {
         let Some(path) = path() else { return };
-        let Ok(data) = serde_json::to_vec_pretty(self) else { return };
+        let Ok(data) = serde_json::to_vec_pretty(self) else {
+            return;
+        };
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
@@ -64,8 +69,17 @@ mod tests {
 
     #[test]
     fn unknown_and_missing_fields_keep_defaults() {
-        let prefs: Prefs = serde_json::from_str(r#"{"theme":"dark","future":1,"drafts":{"a|b|0#1":"oi"}}"#).unwrap();
-        assert_eq!((prefs.theme.as_str(), prefs.sidebar_width, prefs.drafts.len()), ("dark", 220.0, 1));
+        let prefs: Prefs =
+            serde_json::from_str(r#"{"theme":"dark","future":1,"drafts":{"a|b|0#1":"oi"}}"#)
+                .unwrap();
+        assert_eq!(
+            (
+                prefs.theme.as_str(),
+                prefs.sidebar_width,
+                prefs.drafts.len()
+            ),
+            ("dark", 220.0, 1)
+        );
         let again: Prefs = serde_json::from_slice(&serde_json::to_vec(&prefs).unwrap()).unwrap();
         assert_eq!(again, prefs);
     }

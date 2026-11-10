@@ -1,14 +1,9 @@
 version: 2
 updates:
-  - package-ecosystem: gomod
+  - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
-    groups:
-      charm:
-        patterns: ['charm.land/*', 'github.com/charmbracelet/*']
-      golang-x:
-        patterns: ['golang.org/x/*']
   - package-ecosystem: github-actions
     directory: /
     schedule:

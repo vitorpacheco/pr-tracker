@@ -6,7 +6,9 @@ use std::sync::OnceLock;
 
 fn english() -> &'static HashMap<String, String> {
     static CATALOG: OnceLock<HashMap<String, String>> = OnceLock::new();
-    CATALOG.get_or_init(|| serde_json::from_str(include_str!("i18n/en.json")).expect("en.json is a string map"))
+    CATALOG.get_or_init(|| {
+        serde_json::from_str(include_str!("i18n/en.json")).expect("en.json is a string map")
+    })
 }
 
 /// Reports whether a persisted preference is valid. Empty values keep
@@ -18,7 +20,10 @@ pub fn supported(preference: &str) -> bool {
 /// Reduces OS locale identifiers (pt_BR.UTF-8, pt-PT) to a supported language.
 pub fn match_locale(locale: &str) -> &'static str {
     let locale = locale.trim().to_lowercase();
-    match locale.split(['_', '-', '.', '@']).find(|part| !part.is_empty()) {
+    match locale
+        .split(['_', '-', '.', '@'])
+        .find(|part| !part.is_empty())
+    {
         Some("pt") => "pt",
         _ => "en",
     }
@@ -60,7 +65,10 @@ pub fn text(language: &str, message: &str) -> String {
     if language == "pt" {
         return message.to_string();
     }
-    english().get(message).cloned().unwrap_or_else(|| message.to_string())
+    english()
+        .get(message)
+        .cloned()
+        .unwrap_or_else(|| message.to_string())
 }
 
 /// GNU message preferences override a non-C POSIX locale. Unsupported entries
@@ -131,17 +139,30 @@ pub(crate) mod tests {
             set_env("LC_ALL", all);
             set_env("LC_MESSAGES", messages);
             set_env("LANG", lang);
-            assert_eq!(resolve(preference), want, "{preference:?} {all:?} {messages:?} {lang:?}");
+            assert_eq!(
+                resolve(preference),
+                want,
+                "{preference:?} {all:?} {messages:?} {lang:?}"
+            );
         }
     }
 
     #[test]
     fn catalog_preserves_formatting() {
         let verbs = regex::Regex::new(r"%[-+ #0-9.]*[a-zA-Z]").unwrap();
-        let found = |text: &str| verbs.find_iter(text).map(|m| m.as_str().to_string()).collect::<Vec<_>>();
+        let found = |text: &str| {
+            verbs
+                .find_iter(text)
+                .map(|m| m.as_str().to_string())
+                .collect::<Vec<_>>()
+        };
         for (source, translated) in english() {
             assert!(!translated.is_empty(), "empty translation for {source:?}");
-            assert_eq!(found(source), found(translated), "format verbs differ: {source:?} => {translated:?}");
+            assert_eq!(
+                found(source),
+                found(translated),
+                "format verbs differ: {source:?} => {translated:?}"
+            );
         }
         assert_eq!(text("pt", "Configurações"), "Configurações");
         assert_eq!(text("en", "Configurações"), "Settings");
@@ -162,14 +183,35 @@ pub(crate) mod tests {
     #[test]
     fn localized_errors_preserve_identity_and_arguments() {
         let sentinel = msg!("aplicação encerrada");
-        let err = msg!("resposta inválida do gh para %s: %w", "org/Configurações", Error::external("upstream failure"));
-        assert_eq!(err.text("en"), "invalid gh response for org/Configurações: upstream failure");
+        let err = msg!(
+            "resposta inválida do gh para %s: %w",
+            "org/Configurações",
+            Error::external("upstream failure")
+        );
+        assert_eq!(
+            err.text("en"),
+            "invalid gh response for org/Configurações: upstream failure"
+        );
         assert_eq!(err.text("pt"), err.to_string());
         let wrapped = msg!("lendo %s: %w", "x", sentinel.clone());
         assert!(wrapped.is("aplicação encerrada"), "wrapped sentinel lost");
         let external = Error::external("configurações salvas");
-        assert_eq!(external.text("en"), "configurações salvas", "external output changed");
-        let nested = msg!("tea api %s: %w", "/repos", msg!("resposta inválida do tea: %w", Error::external("upstream failure")));
-        assert_eq!(nested.text("en"), "tea api /repos: invalid tea response: upstream failure");
+        assert_eq!(
+            external.text("en"),
+            "configurações salvas",
+            "external output changed"
+        );
+        let nested = msg!(
+            "tea api %s: %w",
+            "/repos",
+            msg!(
+                "resposta inválida do tea: %w",
+                Error::external("upstream failure")
+            )
+        );
+        assert_eq!(
+            nested.text("en"),
+            "tea api /repos: invalid tea response: upstream failure"
+        );
     }
 }

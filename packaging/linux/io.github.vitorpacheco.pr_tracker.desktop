@@ -2,7 +2,7 @@
 Type=Application
 Name=pr-tracker
 Comment=Pull requests, issues e worktrees em um lugar
-Exec=pr-tracker-desktop
+Exec=pr-tracker
 Icon=io.github.vitorpacheco.pr_tracker
 Terminal=false
 Categories=Development;

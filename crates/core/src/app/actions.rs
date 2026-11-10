@@ -38,7 +38,14 @@ pub struct Command {
 
 impl Command {
     pub fn new(action: Action) -> Self {
-        Command { action, item: Item::default(), body: String::new(), remove_after: false, force: false, push: false }
+        Command {
+            action,
+            item: Item::default(),
+            body: String::new(),
+            remove_after: false,
+            force: false,
+            push: false,
+        }
     }
 }
 
@@ -58,7 +65,10 @@ pub struct Outcome {
 
 impl Outcome {
     fn failed(error: Error) -> Self {
-        Outcome { error: Some(error), ..Outcome::default() }
+        Outcome {
+            error: Some(error),
+            ..Outcome::default()
+        }
     }
 
     fn fail(mut self, error: Error) -> Self {
@@ -74,11 +84,17 @@ pub const ERR_DIRTY_WORKTREE: &str = gitops::ERR_DIRTY;
 
 impl Application {
     fn item_client(&self, item: &Item) -> Result<Arc<dyn Client>> {
-        let Some(instance) = self.cfg.instance(&item.instance).filter(|instance| !instance.disabled) else {
+        let Some(instance) = self
+            .cfg
+            .instance(&item.instance)
+            .filter(|instance| !instance.disabled)
+        else {
             return Err(msg!("instância indisponível: %s", &item.instance));
         };
         if item.provider != instance.provider || item.host != instance.host {
-            return Err(msg!("a instância mudou; atualize o item antes de continuar"));
+            return Err(msg!(
+                "a instância mudou; atualize o item antes de continuar"
+            ));
         }
         Ok(self.client(instance))
     }
@@ -91,7 +107,10 @@ impl Application {
     }
 
     pub fn merge_options(&self, item: &Item) -> MergeOptions {
-        let mut options = MergeOptions { method: "merge".into(), ..MergeOptions::default() };
+        let mut options = MergeOptions {
+            method: "merge".into(),
+            ..MergeOptions::default()
+        };
         if let Some(instance) = self.cfg.instance(&item.instance) {
             if !instance.merge_method.is_empty() {
                 options.method = instance.merge_method.clone();
@@ -99,7 +118,11 @@ impl Application {
             options.auto = instance.auto_merge;
             options.delete_branch = instance.delete_branch;
         }
-        if let Some(repo) = self.cfg.repo(&item.instance, &item.repo).filter(|repo| !repo.merge_method.is_empty()) {
+        if let Some(repo) = self
+            .cfg
+            .repo(&item.instance, &item.repo)
+            .filter(|repo| !repo.merge_method.is_empty())
+        {
             options.method = repo.merge_method.clone();
         }
         options
@@ -117,8 +140,12 @@ impl Application {
         if command.push && action != Action::UpdateWorktree {
             return Outcome::failed(msg!("push disponível apenas ao atualizar a branch"));
         }
-        if command.remove_after && !matches!(action, Action::Approve | Action::Merge | Action::Close) {
-            return Outcome::failed(msg!("limpeza combinada exige aprovação, merge ou fechamento"));
+        if command.remove_after
+            && !matches!(action, Action::Approve | Action::Merge | Action::Close)
+        {
+            return Outcome::failed(msg!(
+                "limpeza combinada exige aprovação, merge ou fechamento"
+            ));
         }
         let item = &command.item;
         if item.is_issue() && action != Action::Comment {
@@ -163,11 +190,18 @@ impl Application {
             }
             Action::MarkReady | Action::MarkDraft => {
                 let draft = action == Action::MarkDraft;
-                out.message = reference.clone() + &self.t(if draft { " marcado como Draft" } else { " marcado como Ready" });
+                out.message = reference.clone()
+                    + &self.t(if draft {
+                        " marcado como Draft"
+                    } else {
+                        " marcado como Ready"
+                    });
                 client.set_draft(ctx, item, draft)
             }
             Action::UpdateBranch => {
-                out.message = self.t("atualização com a branch base solicitada em ") + &item.repo + &reference;
+                out.message = self.t("atualização com a branch base solicitada em ")
+                    + &item.repo
+                    + &reference;
                 client.update_branch(ctx, item)
             }
             Action::Checkout => {
@@ -176,7 +210,12 @@ impl Application {
                 };
                 return match client.checkout(ctx, item, &clone) {
                     Ok(()) => Outcome {
-                        message: format!("branch {}{}{}", item.source_branch, self.t(" em "), clone.display()),
+                        message: format!(
+                            "branch {}{}{}",
+                            item.source_branch,
+                            self.t(" em "),
+                            clone.display()
+                        ),
                         ..out
                     },
                     Err(err) => Outcome::failed(err),
@@ -193,7 +232,8 @@ impl Application {
                     out.message = self.t("worktree pronto: ") + &dir.display().to_string();
                     if command.push {
                         if let Err(err) = (self.hooks.push_worktree)(ctx, &dir, item) {
-                            return out.fail(msg!("branch local atualizada, mas o push falhou: %w", err));
+                            return out
+                                .fail(msg!("branch local atualizada, mas o push falhou: %w", err));
                         }
                         out.message += &self.t(" · push concluído");
                         out.refresh = true;
@@ -230,7 +270,13 @@ impl Application {
         out
     }
 
-    fn ensure_worktree(&self, ctx: &Ctx, client: &dyn Client, item: &Item, update: bool) -> Result<PathBuf> {
+    fn ensure_worktree(
+        &self,
+        ctx: &Ctx,
+        client: &dyn Client,
+        item: &Item,
+        update: bool,
+    ) -> Result<PathBuf> {
         if !update && let Some(dir) = (self.hooks.worktree_exists)(&self.cfg, item) {
             return Ok(dir);
         }
@@ -263,10 +309,16 @@ impl Application {
             return (git_diff, String::new());
         }
         match toolchain::lookup(ctx, "hunk") {
-            Ok(path) => (vec![path.to_string_lossy().into_owned(), "diff".into(), base], String::new()),
+            Ok(path) => (
+                vec![path.to_string_lossy().into_owned(), "diff".into(), base],
+                String::new(),
+            ),
             Err(_) => {
                 let hint = self.t(provider::install_hint("hunk"));
-                (git_diff, self.t("hunk não instalado (") + &hint + &self.t("); usando git diff"))
+                (
+                    git_diff,
+                    self.t("hunk não instalado (") + &hint + &self.t("); usando git diff"),
+                )
             }
         }
     }
@@ -294,7 +346,12 @@ pub(crate) mod tests {
             delete_branch: true,
             ..Instance::default()
         }];
-        cfg.repos = vec![Repo { instance: "work".into(), name: "org/repo".into(), merge_method: "rebase".into(), ..Repo::default() }];
+        cfg.repos = vec![Repo {
+            instance: "work".into(),
+            name: "org/repo".into(),
+            merge_method: "rebase".into(),
+            ..Repo::default()
+        }];
         let client = Arc::new(FakeClient::default());
         let shared = client.clone();
         let hooks = Hooks {
@@ -305,12 +362,22 @@ pub(crate) mod tests {
             push_worktree: Arc::new(|_, _, _| Ok(())),
             remove_worktree: Arc::new(|_, _, _, _| Ok(())),
         };
-        let item = Item { instance: "work".into(), provider: Provider::GitHub, host: "github.com".into(), repo: "org/repo".into(), number: 7, ..Item::default() };
+        let item = Item {
+            instance: "work".into(),
+            provider: Provider::GitHub,
+            host: "github.com".into(),
+            repo: "org/repo".into(),
+            number: 7,
+            ..Item::default()
+        };
         (cfg, hooks, client, item)
     }
 
     fn command(action: Action, item: &Item) -> Command {
-        Command { item: item.clone(), ..Command::new(action) }
+        Command {
+            item: item.clone(),
+            ..Command::new(action)
+        }
     }
 
     fn name(action: Action) -> &'static str {
@@ -335,7 +402,8 @@ pub(crate) mod tests {
                     *client.fail.lock().unwrap() = Some(failure.clone());
                 }
                 let cleanup = Arc::new(AtomicUsize::new(0));
-                let (count, calls, cleanup_failure) = (cleanup.clone(), client.clone(), failure.clone());
+                let (count, calls, cleanup_failure) =
+                    (cleanup.clone(), client.clone(), failure.clone());
                 hooks.remove_worktree = Arc::new(move |_, _, _, force| {
                     count.fetch_add(1, Ordering::SeqCst);
                     assert!(!force, "combined operation forced removal");
@@ -347,18 +415,34 @@ pub(crate) mod tests {
                     }
                 });
                 let app = Application::new(&cfg, None).with_hooks(hooks);
-                let out = app.execute(&Ctx::background(), &Command { remove_after: true, ..command(action, &item) });
+                let out = app.execute(
+                    &Ctx::background(),
+                    &Command {
+                        remove_after: true,
+                        ..command(action, &item)
+                    },
+                );
                 assert_eq!(client.calls(), [name(action)], "{action:?}/{scenario}");
                 if action == Action::Merge {
-                    let expected = MergeOptions { method: "rebase".into(), auto: true, delete_branch: true };
+                    let expected = MergeOptions {
+                        method: "rebase".into(),
+                        auto: true,
+                        delete_branch: true,
+                    };
                     assert_eq!(*client.options.lock().unwrap(), expected);
                 }
                 let cleanups = cleanup.load(Ordering::SeqCst);
                 if scenario == "remote failure" {
-                    assert_eq!((cleanups, out.refresh, out.message.as_str(), out.error), (0, false, "", Some(failure)));
+                    assert_eq!(
+                        (cleanups, out.refresh, out.message.as_str(), out.error),
+                        (0, false, "", Some(failure))
+                    );
                     continue;
                 }
-                assert!(cleanups == 1 && out.refresh && !out.message.is_empty(), "lost remote success: {out:?}");
+                assert!(
+                    cleanups == 1 && out.refresh && !out.message.is_empty(),
+                    "lost remote success: {out:?}"
+                );
                 match scenario {
                     "success" => assert_eq!(out.error, None),
                     "dirty" => assert!(out.error.is_some_and(|err| err.is(ERR_DIRTY_WORKTREE))),
@@ -419,10 +503,19 @@ pub(crate) mod tests {
         let (cfg, hooks, client, mut item) = fixture();
         item.kind = Kind::Issue;
         let app = Application::new(&cfg, None).with_hooks(hooks);
-        let out = app.execute(&Ctx::background(), &Command { body: "  **hello**\n ".into(), ..command(Action::Comment, &item) });
+        let out = app.execute(
+            &Ctx::background(),
+            &Command {
+                body: "  **hello**\n ".into(),
+                ..command(Action::Comment, &item)
+            },
+        );
         assert!(out.error.is_none() && out.refresh && out.reload_thread);
         assert_eq!(*client.body.lock().unwrap(), "**hello**");
-        assert_eq!(app.detail(&Ctx::background(), &item).unwrap().body, "<details>raw markdown</details>");
+        assert_eq!(
+            app.detail(&Ctx::background(), &item).unwrap().body,
+            "<details>raw markdown</details>"
+        );
     }
 
     #[test]
@@ -434,18 +527,41 @@ pub(crate) mod tests {
                 if fail {
                     *client.fail.lock().unwrap() = Some(failure.clone());
                 }
-                let out = Application::new(&cfg, None).with_hooks(hooks).execute(&Ctx::background(), &command(action, &item));
+                let out = Application::new(&cfg, None)
+                    .with_hooks(hooks)
+                    .execute(&Ctx::background(), &command(action, &item));
                 assert_eq!(client.calls(), [name(action)]);
                 if fail {
-                    assert_eq!((out.error, out.refresh, out.message.as_str()), (Some(failure), false, ""));
+                    assert_eq!(
+                        (out.error, out.refresh, out.message.as_str()),
+                        (Some(failure), false, "")
+                    );
                 } else {
-                    assert!(out.error.is_none() && out.refresh && !out.reload_thread && !out.message.is_empty());
+                    assert!(
+                        out.error.is_none()
+                            && out.refresh
+                            && !out.reload_thread
+                            && !out.message.is_empty()
+                    );
                 }
             }
             let (cfg, hooks, client, item) = fixture();
             let app = Application::new(&cfg, None).with_hooks(hooks);
-            let issue = Item { kind: Kind::Issue, ..item.clone() };
-            for invalid in [command(action, &issue), Command { remove_after: true, ..command(action, &item) }, Command { force: true, ..command(action, &item) }] {
+            let issue = Item {
+                kind: Kind::Issue,
+                ..item.clone()
+            };
+            for invalid in [
+                command(action, &issue),
+                Command {
+                    remove_after: true,
+                    ..command(action, &item)
+                },
+                Command {
+                    force: true,
+                    ..command(action, &item)
+                },
+            ] {
                 assert!(app.execute(&Ctx::background(), &invalid).error.is_some());
                 assert!(client.calls().is_empty());
             }
@@ -454,7 +570,11 @@ pub(crate) mod tests {
 
     #[test]
     fn worktree_preparation_and_checkout() {
-        for action in [Action::UpdateWorktree, Action::PrepareTerminal, Action::Checkout] {
+        for action in [
+            Action::UpdateWorktree,
+            Action::PrepareTerminal,
+            Action::Checkout,
+        ] {
             let (cfg, mut hooks, client, item) = fixture();
             let created = Arc::new(AtomicBool::new(false));
             let flag = created.clone();
@@ -463,12 +583,19 @@ pub(crate) mod tests {
                 assert_eq!((clone, remote), (Path::new("/clone"), "upstream"));
                 Ok(PathBuf::from("/created"))
             });
-            let out = Application::new(&cfg, None).with_hooks(hooks).execute(&Ctx::background(), &command(action, &item));
+            let out = Application::new(&cfg, None)
+                .with_hooks(hooks)
+                .execute(&Ctx::background(), &command(action, &item));
             assert_eq!(out.error, None);
             let created = created.load(Ordering::SeqCst);
             match action {
-                Action::UpdateWorktree => assert!(created && out.directory == Some(PathBuf::from("/created"))),
-                Action::PrepareTerminal => assert!(!created && out.directory == Some(PathBuf::from("/worktree")), "existing worktree not reused"),
+                Action::UpdateWorktree => {
+                    assert!(created && out.directory == Some(PathBuf::from("/created")))
+                }
+                Action::PrepareTerminal => assert!(
+                    !created && out.directory == Some(PathBuf::from("/worktree")),
+                    "existing worktree not reused"
+                ),
                 _ => assert_eq!(client.calls(), ["checkout:/clone"]),
             }
         }
@@ -479,38 +606,84 @@ pub(crate) mod tests {
         for scenario in ["local only", "push", "update failure", "push failure"] {
             let (cfg, mut hooks, _, item) = fixture();
             let failure = Error::external("failure");
-            let (updated, pushed) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+            let (updated, pushed) = (
+                Arc::new(AtomicBool::new(false)),
+                Arc::new(AtomicBool::new(false)),
+            );
             let (flag, update_failure) = (updated.clone(), failure.clone());
             hooks.create_worktree = Arc::new(move |_, _, _, _, _, _| {
                 flag.store(true, Ordering::SeqCst);
-                if scenario == "update failure" { Err(update_failure.clone()) } else { Ok(PathBuf::from("/created")) }
+                if scenario == "update failure" {
+                    Err(update_failure.clone())
+                } else {
+                    Ok(PathBuf::from("/created"))
+                }
             });
-            let (was_updated, flag, push_failure, key) = (updated.clone(), pushed.clone(), failure.clone(), item.key());
+            let (was_updated, flag, push_failure, key) =
+                (updated.clone(), pushed.clone(), failure.clone(), item.key());
             hooks.push_worktree = Arc::new(move |_, dir, pr| {
-                assert!(was_updated.load(Ordering::SeqCst) && dir == Path::new("/created") && pr.key() == key);
+                assert!(
+                    was_updated.load(Ordering::SeqCst)
+                        && dir == Path::new("/created")
+                        && pr.key() == key
+                );
                 flag.store(true, Ordering::SeqCst);
-                if scenario == "push failure" { Err(push_failure.clone()) } else { Ok(()) }
+                if scenario == "push failure" {
+                    Err(push_failure.clone())
+                } else {
+                    Ok(())
+                }
             });
             let push = scenario != "local only";
-            let out = Application::new(&cfg, None)
-                .with_hooks(hooks)
-                .execute(&Ctx::background(), &Command { push, ..command(Action::UpdateWorktree, &item) });
+            let out = Application::new(&cfg, None).with_hooks(hooks).execute(
+                &Ctx::background(),
+                &Command {
+                    push,
+                    ..command(Action::UpdateWorktree, &item)
+                },
+            );
             let pushed = pushed.load(Ordering::SeqCst);
             assert!(updated.load(Ordering::SeqCst));
             assert_eq!(pushed, scenario == "push" || scenario == "push failure");
             match scenario {
-                "update failure" => assert_eq!((out.error, out.message.as_str(), out.refresh), (Some(failure), "", false)),
+                "update failure" => assert_eq!(
+                    (out.error, out.message.as_str(), out.refresh),
+                    (Some(failure), "", false)
+                ),
                 "push failure" => {
                     assert!(out.error.is_some_and(|err| err.contains(&failure)));
-                    assert!(out.directory == Some(PathBuf::from("/created")) && !out.message.is_empty() && !out.refresh);
+                    assert!(
+                        out.directory == Some(PathBuf::from("/created"))
+                            && !out.message.is_empty()
+                            && !out.refresh
+                    );
                 }
-                _ => assert!(out.error.is_none() && out.refresh == pushed && !out.reload_thread && !out.message.is_empty()),
+                _ => assert!(
+                    out.error.is_none()
+                        && out.refresh == pushed
+                        && !out.reload_thread
+                        && !out.message.is_empty()
+                ),
             }
         }
-        for action in [Action::Comment, Action::Checkout, Action::PrepareTerminal, Action::RemoveWorktree] {
+        for action in [
+            Action::Comment,
+            Action::Checkout,
+            Action::PrepareTerminal,
+            Action::RemoveWorktree,
+        ] {
             let (cfg, hooks, client, item) = fixture();
-            let out = Application::new(&cfg, None).with_hooks(hooks).execute(&Ctx::background(), &Command { push: true, ..command(action, &item) });
-            assert!(out.error.is_some() && client.calls().is_empty(), "push accepted for {action:?}");
+            let out = Application::new(&cfg, None).with_hooks(hooks).execute(
+                &Ctx::background(),
+                &Command {
+                    push: true,
+                    ..command(action, &item)
+                },
+            );
+            assert!(
+                out.error.is_some() && client.calls().is_empty(),
+                "push accepted for {action:?}"
+            );
         }
     }
 
@@ -523,16 +696,34 @@ pub(crate) mod tests {
         let seen = forced.clone();
         hooks.remove_worktree = Arc::new(move |_, _, _, force| {
             seen.lock().unwrap().push(force);
-            if force { Ok(()) } else { Err(msg!(ERR_DIRTY_WORKTREE)) }
+            if force {
+                Ok(())
+            } else {
+                Err(msg!(ERR_DIRTY_WORKTREE))
+            }
         });
         let app = Application::new(&cfg, None).with_hooks(hooks);
-        for action in [Action::Checkout, Action::UpdateWorktree, Action::PrepareTerminal, Action::PrepareDiff] {
+        for action in [
+            Action::Checkout,
+            Action::UpdateWorktree,
+            Action::PrepareTerminal,
+            Action::PrepareDiff,
+        ] {
             let out = app.execute(&Ctx::background(), &command(action, &item));
-            assert!(out.error.is_some_and(|err| err.is(ERR_CLONE_REQUIRED)), "{action:?}");
+            assert!(
+                out.error.is_some_and(|err| err.is(ERR_CLONE_REQUIRED)),
+                "{action:?}"
+            );
         }
         let out = app.execute(&Ctx::background(), &command(Action::RemoveWorktree, &item));
         assert!(out.error.is_some_and(|err| err.is(ERR_DIRTY_WORKTREE)));
-        let out = app.execute(&Ctx::background(), &Command { force: true, ..command(Action::RemoveWorktree, &item) });
+        let out = app.execute(
+            &Ctx::background(),
+            &Command {
+                force: true,
+                ..command(Action::RemoveWorktree, &item)
+            },
+        );
         assert!(out.error.is_none() && !out.refresh && !out.message.is_empty());
         assert_eq!(*forced.lock().unwrap(), [false, true]);
     }

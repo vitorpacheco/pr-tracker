@@ -18,7 +18,11 @@ impl Bitbucket {
     }
 
     fn err(&self) -> Error {
-        msg!("%w: Bitbucket (%s) — veja docs/bitbucket.md", msg!(ERR_NOT_SUPPORTED), &self.instance.host)
+        msg!(
+            "%w: Bitbucket (%s) — veja docs/bitbucket.md",
+            msg!(ERR_NOT_SUPPORTED),
+            &self.instance.host
+        )
     }
 }
 
@@ -71,9 +75,17 @@ mod tests {
 
     #[test]
     fn every_operation_reports_the_missing_integration() {
-        let client = Bitbucket::new(Instance { name: "bb".into(), provider: Provider::Bitbucket, host: "bitbucket.org".into(), ..Instance::default() });
+        let client = Bitbucket::new(Instance {
+            name: "bb".into(),
+            provider: Provider::Bitbucket,
+            host: "bitbucket.org".into(),
+            ..Instance::default()
+        });
         let err = client.list(&Ctx::background()).unwrap_err();
         assert!(err.is(ERR_NOT_SUPPORTED));
-        assert_eq!(err.text("en"), "provider not supported yet: Bitbucket (bitbucket.org) — see docs/bitbucket.md");
+        assert_eq!(
+            err.text("en"),
+            "provider not supported yet: Bitbucket (bitbucket.org) — see docs/bitbucket.md"
+        );
     }
 }

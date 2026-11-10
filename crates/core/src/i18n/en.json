@@ -546,5 +546,17 @@
   "Branch atualizada ou sem permissão para atualizar no GitHub": "Branch up to date or no permission to update on GitHub",
   "Incorporar a branch base na origem do PR/MR no servidor": "Incorporate the base branch into the PR/MR source on the server",
   "Faz rebase da branch de origem sobre a branch base no servidor e publica a atualização.": "Rebases the source branch onto the base branch on the server and publishes the update.",
-  "Incorpora os commits da branch base na branch de origem por merge no servidor e publica a atualização.": "Merges base branch commits into the source branch on the server and publishes the update."
+  "Incorpora os commits da branch base na branch de origem por merge no servidor e publica a atualização.": "Merges base branch commits into the source branch on the server and publishes the update.",
+  "%s não encontrado no PATH. Instale: %s": "%s not found in PATH. Install: %s",
+  "https://cli.github.com (ex.: brew install gh, pacman -S github-cli, winget install GitHub.cli)": "https://cli.github.com (e.g. brew install gh, pacman -S github-cli, winget install GitHub.cli)",
+  "https://gitlab.com/gitlab-org/cli (ex.: brew install glab, pacman -S glab, winget install glab.glab)": "https://gitlab.com/gitlab-org/cli (e.g. brew install glab, pacman -S glab, winget install glab.glab)",
+  "https://gitea.com/gitea/tea (ex.: brew install tea, ou um binário das releases); precisa da 0.14 ou mais nova": "https://gitea.com/gitea/tea (e.g. brew install tea, or a release binary); requires 0.14 or newer",
+  "https://github.com/avivsinai/bitbucket-cli (integração ainda não implementada)": "https://github.com/avivsinai/bitbucket-cli (integration not implemented yet)",
+  "Automático": "Automatic",
+  "Janela de terminal": "Terminal window",
+  "duração inválida": "invalid duration",
+  "operação cancelada": "operation canceled",
+  "tempo limite excedido": "deadline exceeded",
+  "pasta do usuário não encontrada": "home directory not found",
+  "repositório referencia uma instância inexistente: %s": "repository references a missing instance: %s"
 }

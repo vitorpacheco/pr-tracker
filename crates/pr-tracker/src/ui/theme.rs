@@ -18,7 +18,11 @@ pub enum ThemePreference {
 }
 
 impl ThemePreference {
-    pub const ALL: [ThemePreference; 3] = [ThemePreference::System, ThemePreference::Dark, ThemePreference::Light];
+    pub const ALL: [ThemePreference; 3] = [
+        ThemePreference::System,
+        ThemePreference::Dark,
+        ThemePreference::Light,
+    ];
 
     pub fn parse(value: &str) -> ThemePreference {
         match value {
@@ -139,8 +143,15 @@ pub fn look(preference: ThemePreference, palette: Option<&Palette>, system_dark:
     let background = color(&palette.background, Color::BLACK);
     let text = color(&palette.foreground, Color::WHITE);
     let accent = color(&palette.accent, text);
-    let mut kit = Kit::from_palette(PaletteSeed { bg: background, fg: text, accent });
-    let (panel, raised) = (color(&palette.panel, background), color(&palette.raised, background));
+    let mut kit = Kit::from_palette(PaletteSeed {
+        bg: background,
+        fg: text,
+        accent,
+    });
+    let (panel, raised) = (
+        color(&palette.panel, background),
+        color(&palette.raised, background),
+    );
     let (border, muted) = (color(&palette.border, text), color(&palette.muted, text));
     let (green, red) = (color(&palette.green, accent), color(&palette.red, accent));
     let (yellow, blue) = (color(&palette.yellow, accent), color(&palette.blue, accent));
@@ -152,7 +163,12 @@ pub fn look(preference: ThemePreference, palette: Option<&Palette>, system_dark:
     kit.c.icon_muted = muted;
     kit.c.border_base = border;
     kit.c.border_muted = border.alpha(0.6);
-    for (state, ink) in [(&mut kit.c.success, green), (&mut kit.c.danger, red), (&mut kit.c.warning, yellow), (&mut kit.c.info, blue)] {
+    for (state, ink) in [
+        (&mut kit.c.success, green),
+        (&mut kit.c.danger, red),
+        (&mut kit.c.warning, yellow),
+        (&mut kit.c.info, blue),
+    ] {
         state.fg = ink;
         state.icon = ink;
         state.border = ink.alpha(0.45);
@@ -177,9 +193,16 @@ pub fn look(preference: ThemePreference, palette: Option<&Palette>, system_dark:
 }
 
 /// The palette on screen, in the shape that can be exported and loaded back.
-pub fn displayed(preference: ThemePreference, palette: Option<&Palette>, system_dark: bool) -> Palette {
+pub fn displayed(
+    preference: ThemePreference,
+    palette: Option<&Palette>,
+    system_dark: bool,
+) -> Palette {
     if let Some(palette) = active(preference, palette) {
-        return Palette { name: "Custom".into(), ..palette.clone() };
+        return Palette {
+            name: "Custom".into(),
+            ..palette.clone()
+        };
     }
     let scheme = scheme(preference, system_dark);
     Palette {
@@ -214,18 +237,39 @@ mod tests {
 
     #[test]
     fn manual_preference_overrides_the_system_palette_but_not_a_custom_one() {
-        let omarchy = Palette { name: "Omarchy".into(), ..theme::default_dark() };
-        assert_eq!(displayed(ThemePreference::System, Some(&omarchy), false).background, omarchy.background);
-        assert_eq!(displayed(ThemePreference::Light, Some(&omarchy), true).background, LIGHT.background);
-        let custom = Palette { name: "Custom".into(), ..theme::default_dark() };
-        assert_eq!(displayed(ThemePreference::Light, Some(&custom), false).background, custom.background);
+        let omarchy = Palette {
+            name: "Omarchy".into(),
+            ..theme::default_dark()
+        };
+        assert_eq!(
+            displayed(ThemePreference::System, Some(&omarchy), false).background,
+            omarchy.background
+        );
+        assert_eq!(
+            displayed(ThemePreference::Light, Some(&omarchy), true).background,
+            LIGHT.background
+        );
+        let custom = Palette {
+            name: "Custom".into(),
+            ..theme::default_dark()
+        };
+        assert_eq!(
+            displayed(ThemePreference::Light, Some(&custom), false).background,
+            custom.background
+        );
     }
 
     #[test]
     fn built_in_schemes_follow_the_preference_then_the_system() {
         assert_eq!(displayed(ThemePreference::System, None, true).mode, "dark");
-        assert_eq!(displayed(ThemePreference::System, None, false).mode, "light");
-        assert_eq!(displayed(ThemePreference::Dark, None, false).background, DARK.background);
+        assert_eq!(
+            displayed(ThemePreference::System, None, false).mode,
+            "light"
+        );
+        assert_eq!(
+            displayed(ThemePreference::Dark, None, false).background,
+            DARK.background
+        );
     }
 
     #[test]

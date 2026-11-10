@@ -21,7 +21,13 @@ pub struct Group<'a> {
 }
 
 /// `relation` of [`Relation::NONE`] and an empty `instance` match everything.
-pub fn filter<'a>(rows: &'a [Row], kind: Kind, relation: Relation, query: &str, instance: &str) -> Vec<&'a Row> {
+pub fn filter<'a>(
+    rows: &'a [Row],
+    kind: Kind,
+    relation: Relation,
+    query: &str,
+    instance: &str,
+) -> Vec<&'a Row> {
     let query = query.trim().to_lowercase();
     rows.iter()
         .filter(|row| {
@@ -30,7 +36,12 @@ pub fn filter<'a>(rows: &'a [Row], kind: Kind, relation: Relation, query: &str, 
                 && (relation == Relation::NONE || item.relations.contains(relation))
                 && (instance.is_empty() || item.instance == instance)
                 && (query.is_empty()
-                    || format!("{} {} {} {}", item.title, item.repo, item.author, row.reference).to_lowercase().contains(&query))
+                    || format!(
+                        "{} {} {} {}",
+                        item.title, item.repo, item.author, row.reference
+                    )
+                    .to_lowercase()
+                    .contains(&query))
         })
         .collect()
 }
@@ -41,10 +52,18 @@ pub fn group_by_repository<'a>(rows: &[&'a Row]) -> Vec<Group<'a>> {
     let mut groups: Vec<Group<'a>> = Vec::new();
     for &row in rows {
         let item = &row.item;
-        let same = |group: &Group<'a>| group.rows[0].item.instance == item.instance && group.rows[0].item.host == item.host && group.repo == item.repo;
+        let same = |group: &Group<'a>| {
+            group.rows[0].item.instance == item.instance
+                && group.rows[0].item.host == item.host
+                && group.repo == item.repo
+        };
         match groups.iter_mut().find(|group| same(group)) {
             Some(group) => group.rows.push(row),
-            None => groups.push(Group { repo: &item.repo, instance: &item.instance, rows: vec![row] }),
+            None => groups.push(Group {
+                repo: &item.repo,
+                instance: &item.instance,
+                rows: vec![row],
+            }),
         }
     }
     groups
@@ -80,14 +99,26 @@ mod tests {
             relations,
             ..Item::default()
         };
-        Row { key: item.key(), reference: item.reference(), item, clone: None, worktree: None }
+        Row {
+            key: item.key(),
+            reference: item.reference(),
+            item,
+            clone: None,
+            worktree: None,
+        }
     }
 
     fn rows() -> Vec<Row> {
         vec![
             row("work", "org/api", 3, Kind::Pr, Relation::REVIEW_REQUESTED),
             row("home", "me/site", 9, Kind::Pr, Relation::AUTHORED),
-            row("work", "org/api", 1, Kind::Pr, Relation::AUTHORED | Relation::ASSIGNED),
+            row(
+                "work",
+                "org/api",
+                1,
+                Kind::Pr,
+                Relation::AUTHORED | Relation::ASSIGNED,
+            ),
             row("work", "org/api", 7, Kind::Issue, Relation::MENTIONED),
         ]
     }
@@ -95,13 +126,32 @@ mod tests {
     #[test]
     fn filters_combine_kind_relation_instance_and_query() {
         let rows = rows();
-        let numbers = |found: Vec<&Row>| found.iter().map(|row| row.item.number).collect::<Vec<_>>();
-        assert_eq!(numbers(filter(&rows, Kind::Pr, Relation::NONE, "", "")), [3, 9, 1]);
-        assert_eq!(numbers(filter(&rows, Kind::Pr, Relation::AUTHORED, "", "")), [9, 1]);
-        assert_eq!(numbers(filter(&rows, Kind::Pr, Relation::AUTHORED, "", "work")), [1]);
-        assert_eq!(numbers(filter(&rows, Kind::Pr, Relation::NONE, "  ME/SITE ", "")), [9]);
-        assert_eq!(numbers(filter(&rows, Kind::Pr, Relation::NONE, "#3", "")), [3]);
-        assert_eq!(numbers(filter(&rows, Kind::Issue, Relation::NONE, "", "")), [7]);
+        let numbers =
+            |found: Vec<&Row>| found.iter().map(|row| row.item.number).collect::<Vec<_>>();
+        assert_eq!(
+            numbers(filter(&rows, Kind::Pr, Relation::NONE, "", "")),
+            [3, 9, 1]
+        );
+        assert_eq!(
+            numbers(filter(&rows, Kind::Pr, Relation::AUTHORED, "", "")),
+            [9, 1]
+        );
+        assert_eq!(
+            numbers(filter(&rows, Kind::Pr, Relation::AUTHORED, "", "work")),
+            [1]
+        );
+        assert_eq!(
+            numbers(filter(&rows, Kind::Pr, Relation::NONE, "  ME/SITE ", "")),
+            [9]
+        );
+        assert_eq!(
+            numbers(filter(&rows, Kind::Pr, Relation::NONE, "#3", "")),
+            [3]
+        );
+        assert_eq!(
+            numbers(filter(&rows, Kind::Issue, Relation::NONE, "", "")),
+            [7]
+        );
     }
 
     #[test]
@@ -109,9 +159,19 @@ mod tests {
         let rows = rows();
         let visible = filter(&rows, Kind::Pr, Relation::NONE, "", "");
         let groups = group_by_repository(&visible);
-        let shape: Vec<_> = groups.iter().map(|group| (group.repo, group.instance, group.rows.len())).collect();
+        let shape: Vec<_> = groups
+            .iter()
+            .map(|group| (group.repo, group.instance, group.rows.len()))
+            .collect();
         assert_eq!(shape, [("org/api", "work", 2), ("me/site", "home", 1)]);
-        assert_eq!(groups[0].rows.iter().map(|row| row.item.number).collect::<Vec<_>>(), [3, 1]);
+        assert_eq!(
+            groups[0]
+                .rows
+                .iter()
+                .map(|row| row.item.number)
+                .collect::<Vec<_>>(),
+            [3, 1]
+        );
     }
 
     #[test]

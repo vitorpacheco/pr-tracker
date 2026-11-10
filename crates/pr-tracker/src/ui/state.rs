@@ -7,7 +7,10 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use chrono::{DateTime, Utc};
-use pr_tracker_core::app::{self, Action, Application, Command, Diagnostics, ERR_CLONE_REQUIRED, ERR_DIRTY_WORKTREE, Session, SnapshotStore};
+use pr_tracker_core::app::{
+    self, Action, Application, Command, Diagnostics, ERR_CLONE_REQUIRED, ERR_DIRTY_WORKTREE,
+    Session, SnapshotStore,
+};
 use pr_tracker_core::config::{Config, Instance, Provider};
 use pr_tracker_core::provider::{Kind, MergeOptions, Relation, Thread};
 use pr_tracker_core::theme::{self, Palette};
@@ -65,9 +68,22 @@ pub struct Fresh {
 pub enum Event {
     Loaded(Result<Fresh, Error>),
     Refreshed(Result<Fresh, Error>),
-    Detail { generation: u64, result: Result<Thread, Error> },
-    Executed { request: Request, uses_draft: bool, message: String, error: Option<Error>, reload_thread: bool, fresh: Result<Fresh, Error> },
-    SettingsSaved { result: Result<Fresh, Error>, notice: &'static str },
+    Detail {
+        generation: u64,
+        result: Result<Thread, Error>,
+    },
+    Executed {
+        request: Request,
+        uses_draft: bool,
+        message: String,
+        error: Option<Error>,
+        reload_thread: bool,
+        fresh: Result<Fresh, Error>,
+    },
+    SettingsSaved {
+        result: Result<Fresh, Error>,
+        notice: &'static str,
+    },
     Diagnosed(Result<Diagnostics, Error>),
     Palette(Result<Option<Palette>, Error>),
     ThemeExported(Result<PathBuf, Error>),
@@ -177,12 +193,20 @@ pub struct App {
 
 pub fn sidebar_pane(prefs: &Prefs) -> PaneState {
     let pane = PaneState::new(prefs.sidebar_width).range(180.0, 360.0);
-    if prefs.sidebar_collapsed { pane.collapsed() } else { pane }
+    if prefs.sidebar_collapsed {
+        pane.collapsed()
+    } else {
+        pane
+    }
 }
 
 pub fn inspector_pane(prefs: &Prefs) -> PaneState {
     let pane = PaneState::new(prefs.inspector_width).range(300.0, 720.0);
-    if prefs.inspector_collapsed { pane.collapsed() } else { pane }
+    if prefs.inspector_collapsed {
+        pane.collapsed()
+    } else {
+        pane
+    }
 }
 
 impl App {
@@ -284,7 +308,12 @@ impl App {
         let started = std::time::Instant::now();
         let mut quiet = 0;
         while quiet < 5 && started.elapsed() < std::time::Duration::from_secs(10) {
-            let idle = !self.tick(1.0) && !self.loading && !self.refreshing && !self.detail_loading && self.busy.is_empty() && self.pending.is_empty();
+            let idle = !self.tick(1.0)
+                && !self.loading
+                && !self.refreshing
+                && !self.detail_loading
+                && self.busy.is_empty()
+                && self.pending.is_empty();
             quiet = if idle { quiet + 1 } else { 0 };
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
@@ -307,12 +336,19 @@ impl App {
                 cli::seed(&mut cfg);
                 let _ = session.save_settings(&cfg);
             }
-            Event::Loaded(session.load(&Ctx::background()).map(|state| Fresh { state, cfg: session.configuration() }))
+            Event::Loaded(session.load(&Ctx::background()).map(|state| Fresh {
+                state,
+                cfg: session.configuration(),
+            }))
         });
     }
 
     fn spawn(&self, work: impl FnOnce(&Arc<Session>) -> Event + Send + 'static) {
-        let (session, sender, waker) = (self.session.clone(), self.sender.clone(), self.waker.clone());
+        let (session, sender, waker) = (
+            self.session.clone(),
+            self.sender.clone(),
+            self.waker.clone(),
+        );
         std::thread::spawn(move || {
             let event = work(&session);
             // The window may have closed while the work ran.
@@ -331,7 +367,8 @@ impl App {
             self.apply(event, clock);
             changed = true;
         }
-        if self.refresh_due > 0.0 && clock >= self.refresh_due && !self.loading && !self.refreshing {
+        if self.refresh_due > 0.0 && clock >= self.refresh_due && !self.loading && !self.refreshing
+        {
             self.refresh();
             changed = true;
         }
@@ -380,7 +417,14 @@ impl App {
                     Err(err) => self.detail_error = err.text(self.language),
                 }
             }
-            Event::Executed { request, uses_draft, message, error, reload_thread, fresh } => {
+            Event::Executed {
+                request,
+                uses_draft,
+                message,
+                error,
+                reload_thread,
+                fresh,
+            } => {
                 self.busy.remove(&request.key);
                 let target = self.row(&request.key).cloned();
                 let load_error = match fresh {
@@ -391,7 +435,11 @@ impl App {
                     Err(err) => Some(err),
                 };
                 self.notice = message;
-                self.error = error.as_ref().or(load_error.as_ref()).map(|err| err.text(self.language)).unwrap_or_default();
+                self.error = error
+                    .as_ref()
+                    .or(load_error.as_ref())
+                    .map(|err| err.text(self.language))
+                    .unwrap_or_default();
                 if reload_thread && self.selected == request.key {
                     if uses_draft {
                         self.draft.clear();
@@ -403,19 +451,37 @@ impl App {
                 if dirty && (request.action == Action::RemoveWorktree || request.remove_after) {
                     self.confirm = Some(Confirm {
                         label: "Descartar alterações locais e remover worktree",
-                        target: target.as_ref().map_or_else(|| request.key.clone(), |row| format!("{} {}", row.item.repo, row.reference)),
-                        worktree: target.as_ref().and_then(|row| row.worktree.as_deref()).map(display).unwrap_or_default(),
+                        target: target.as_ref().map_or_else(
+                            || request.key.clone(),
+                            |row| format!("{} {}", row.item.repo, row.reference),
+                        ),
+                        worktree: target
+                            .as_ref()
+                            .and_then(|row| row.worktree.as_deref())
+                            .map(display)
+                            .unwrap_or_default(),
                         source: String::new(),
                         base: String::new(),
-                        provider: target.as_ref().map_or(Provider::GitHub, |row| row.item.provider),
+                        provider: target
+                            .as_ref()
+                            .map_or(Provider::GitHub, |row| row.item.provider),
                         uses_draft: false,
                         merge: None,
-                        request: Request { key: request.key, action: Action::RemoveWorktree, body: String::new(), remove_after: false, force: true, push: false },
+                        request: Request {
+                            key: request.key,
+                            action: Action::RemoveWorktree,
+                            body: String::new(),
+                            remove_after: false,
+                            force: true,
+                            push: false,
+                        },
                     });
                 }
                 if error.as_ref().is_some_and(|err| err.is(ERR_CLONE_REQUIRED)) {
                     self.open_settings();
-                    self.notice = self.tr("Defina a pasta local do repositório nas configurações e repita a ação.");
+                    self.notice = self.tr(
+                        "Defina a pasta local do repositório nas configurações e repita a ação.",
+                    );
                 }
             }
             Event::SettingsSaved { result, notice } => {
@@ -452,7 +518,13 @@ impl App {
             Event::ThemeExported(result) => {
                 self.pending.remove("settings-export");
                 match result {
-                    Ok(path) => self.notice = format!("{}: {}", self.tr("Esquema de cores exportado"), path.display()),
+                    Ok(path) => {
+                        self.notice = format!(
+                            "{}: {}",
+                            self.tr("Esquema de cores exportado"),
+                            path.display()
+                        )
+                    }
                     Err(err) => self.error = err.text(self.language),
                 }
             }
@@ -472,16 +544,30 @@ impl App {
             .into_iter()
             .map(|item| {
                 let key = item.key();
-                Row { reference: item.reference(), clone: state.clones.get(&key).cloned(), worktree: state.worktrees.get(&key).cloned(), key, item }
+                Row {
+                    reference: item.reference(),
+                    clone: state.clones.get(&key).cloned(),
+                    worktree: state.worktrees.get(&key).cloned(),
+                    key,
+                    item,
+                }
             })
             .collect();
-        self.errors = state.errors.iter().map(|(name, err)| (name.clone(), err.text(self.language))).collect();
+        self.errors = state
+            .errors
+            .iter()
+            .map(|(name, err)| (name.clone(), err.text(self.language)))
+            .collect();
         // A cache that failed to open at startup stays reported until it works.
         if let Some(err) = &state.cache_error {
             self.cache_error = err.text(self.language);
         }
         self.synced_at = state.synced_at;
-        if !self.instance.is_empty() && !self.instances().any(|instance| instance.name == self.instance) {
+        if !self.instance.is_empty()
+            && !self
+                .instances()
+                .any(|instance| instance.name == self.instance)
+        {
             self.instance.clear();
         }
         self.reselect();
@@ -489,7 +575,10 @@ impl App {
 
     /// The enabled instances, in configuration order.
     pub fn instances(&self) -> impl Iterator<Item = &Instance> {
-        self.cfg.instances.iter().filter(|instance| !instance.disabled)
+        self.cfg
+            .instances
+            .iter()
+            .filter(|instance| !instance.disabled)
     }
 
     pub fn row(&self, key: &str) -> Option<&Row> {
@@ -502,7 +591,13 @@ impl App {
 
     /// The rows the list shows, most recently updated first.
     pub fn visible(&self) -> Vec<&Row> {
-        list::filter(&self.rows, self.kind, self.relation, &self.query.text, &self.instance)
+        list::filter(
+            &self.rows,
+            self.kind,
+            self.relation,
+            &self.query.text,
+            &self.instance,
+        )
     }
 
     pub fn count(&self, kind: Kind, relation: Relation) -> usize {
@@ -543,7 +638,8 @@ impl App {
         if self.draft.text.is_empty() {
             self.drafts.remove(&self.selected);
         } else {
-            self.drafts.insert(self.selected.clone(), self.draft.text.clone());
+            self.drafts
+                .insert(self.selected.clone(), self.draft.text.clone());
         }
     }
 
@@ -558,7 +654,10 @@ impl App {
         self.more_open = false;
         self.detail_generation += 1;
         let (generation, key) = (self.detail_generation, key.to_string());
-        self.spawn(move |session| Event::Detail { generation, result: session.detail(&Ctx::background(), &key) });
+        self.spawn(move |session| Event::Detail {
+            generation,
+            result: session.detail(&Ctx::background(), &key),
+        });
     }
 
     /// Moves the selection by `delta` rows and returns the newly selected key.
@@ -586,7 +685,11 @@ impl App {
     }
 
     pub fn set_instance(&mut self, name: &str) {
-        self.instance = if self.instance == name { String::new() } else { name.to_string() };
+        self.instance = if self.instance == name {
+            String::new()
+        } else {
+            name.to_string()
+        };
         self.reselect();
     }
 
@@ -604,13 +707,27 @@ impl App {
         self.refreshing = true;
         self.error.clear();
         self.refresh_due = 0.0;
-        self.spawn(|session| Event::Refreshed(session.refresh(&Ctx::background()).map(|state| Fresh { state, cfg: session.configuration() })));
+        self.spawn(|session| {
+            Event::Refreshed(session.refresh(&Ctx::background()).map(|state| Fresh {
+                state,
+                cfg: session.configuration(),
+            }))
+        });
     }
 
     /// Asks for confirmation before acting on the selected item. `body`
     /// overrides the comment box as the text to send.
-    pub fn ask(&mut self, action: Action, label: &'static str, force: bool, remove_after: bool, body: Option<String>) {
-        let Some(row) = self.selected_row() else { return };
+    pub fn ask(
+        &mut self,
+        action: Action,
+        label: &'static str,
+        force: bool,
+        remove_after: bool,
+        body: Option<String>,
+    ) {
+        let Some(row) = self.selected_row() else {
+            return;
+        };
         if self.busy.contains_key(&row.key) {
             return;
         }
@@ -627,7 +744,8 @@ impl App {
             base: item.target_branch.clone(),
             provider: item.provider,
             uses_draft: body.is_none(),
-            merge: (action == Action::Merge).then(|| Application::new(&self.cfg, None).merge_options(item)),
+            merge: (action == Action::Merge)
+                .then(|| Application::new(&self.cfg, None).merge_options(item)),
             request: Request {
                 key: row.key.clone(),
                 action,
@@ -662,22 +780,56 @@ impl App {
 
     /// Runs the confirmed action in the background.
     pub fn execute(&mut self) {
-        let Some(Confirm { request, uses_draft, target, .. }) = self.confirm.take() else { return };
-        self.busy.insert(request.key.clone(), format!("{target} · {}", self.tr(Self::progress_label(&request))));
+        let Some(Confirm {
+            request,
+            uses_draft,
+            target,
+            ..
+        }) = self.confirm.take()
+        else {
+            return;
+        };
+        self.busy.insert(
+            request.key.clone(),
+            format!("{target} · {}", self.tr(Self::progress_label(&request))),
+        );
         self.error.clear();
         self.notice.clear();
         let language = self.language;
         self.spawn(move |session| {
             let ctx = Ctx::background();
-            let command = Command { body: request.body.clone(), remove_after: request.remove_after, force: request.force, push: request.push, ..Command::new(request.action) };
+            let command = Command {
+                body: request.body.clone(),
+                remove_after: request.remove_after,
+                force: request.force,
+                push: request.push,
+                ..Command::new(request.action)
+            };
             let out = session.execute(&ctx, &request.key, command);
             let (mut message, mut error) = (out.message, out.error);
-            if error.is_none() && matches!(request.action, Action::PrepareTerminal | Action::PrepareDiff) {
+            if error.is_none()
+                && matches!(
+                    request.action,
+                    Action::PrepareTerminal | Action::PrepareDiff
+                )
+            {
                 let cfg = session.configuration();
                 let dir = out.directory.unwrap_or_default();
-                let label = request.key.rsplit('|').next().unwrap_or("pr-tracker").to_string();
+                let label = request
+                    .key
+                    .rsplit('|')
+                    .next()
+                    .unwrap_or("pr-tracker")
+                    .to_string();
                 let work = ctx.with_paths(&cfg.tool_paths);
-                match launch::open(&work, launch::resolve(&cfg.terminal), &cfg.desktop_terminal, &dir, &label, &out.args) {
+                match launch::open(
+                    &work,
+                    launch::resolve(&cfg.terminal),
+                    &cfg.desktop_terminal,
+                    &dir,
+                    &label,
+                    &out.args,
+                ) {
                     Ok(()) => {
                         message = t(language, "Terminal aberto");
                         if !out.note.is_empty() {
@@ -687,13 +839,20 @@ impl App {
                     Err(err) => error = Some(err),
                 }
             }
-            let state = if out.refresh { session.refresh(&ctx) } else { session.load(&ctx) };
+            let state = if out.refresh {
+                session.refresh(&ctx)
+            } else {
+                session.load(&ctx)
+            };
             Event::Executed {
                 uses_draft,
                 message,
                 error,
                 reload_thread: out.reload_thread,
-                fresh: state.map(|state| Fresh { state, cfg: session.configuration() }),
+                fresh: state.map(|state| Fresh {
+                    state,
+                    cfg: session.configuration(),
+                }),
                 request,
             }
         });
@@ -714,7 +873,9 @@ impl App {
     }
 
     pub fn save_settings(&mut self) {
-        let Some(cfg) = self.settings.as_ref().map(SettingsForm::to_config) else { return };
+        let Some(cfg) = self.settings.as_ref().map(SettingsForm::to_config) else {
+            return;
+        };
         self.save_config(cfg, "Configurações salvas.");
     }
 
@@ -732,12 +893,18 @@ impl App {
             return;
         }
         self.error.clear();
-        self.pending.insert("settings-save", self.tr("Salvando configurações e sincronizando…"));
+        self.pending.insert(
+            "settings-save",
+            self.tr("Salvando configurações e sincronizando…"),
+        );
         self.spawn(move |session| {
             let result = session
                 .save_settings(&cfg)
                 .and_then(|()| session.refresh(&Ctx::background()))
-                .map(|state| Fresh { state, cfg: session.configuration() });
+                .map(|state| Fresh {
+                    state,
+                    cfg: session.configuration(),
+                });
             Event::SettingsSaved { result, notice }
         });
     }
@@ -745,11 +912,15 @@ impl App {
     /// Whether every open pull/merge request of the selected item's
     /// repository is tracked.
     pub fn tracks_all(&self) -> bool {
-        self.selected_row().and_then(|row| self.cfg.repo(&row.item.instance, &row.item.repo)).is_some_and(|repo| repo.track_all)
+        self.selected_row()
+            .and_then(|row| self.cfg.repo(&row.item.instance, &row.item.repo))
+            .is_some_and(|repo| repo.track_all)
     }
 
     pub fn toggle_track_all(&mut self) {
-        let Some(row) = self.selected_row() else { return };
+        let Some(row) = self.selected_row() else {
+            return;
+        };
         let mut cfg = self.cfg.clone();
         cfg.set_repo_track_all(&row.item.instance, &row.item.repo, !self.tracks_all());
         self.more_open = false;
@@ -768,7 +939,10 @@ impl App {
         if self.settings_busy() {
             return;
         }
-        self.pending.insert("settings-diagnose", self.tr("Verificando ferramentas e autenticação…"));
+        self.pending.insert(
+            "settings-diagnose",
+            self.tr("Verificando ferramentas e autenticação…"),
+        );
         self.spawn(|session| Event::Diagnosed(session.diagnose(&Ctx::background())));
     }
 
@@ -780,7 +954,8 @@ impl App {
     /// Writes the colours on screen to `path` as a reusable palette file.
     pub fn export_theme(&mut self, path: PathBuf) {
         let palette = look::displayed(self.theme, self.palette.as_ref(), self.system_dark.get());
-        self.pending.insert("settings-export", self.tr("Exportando esquema de cores…"));
+        self.pending
+            .insert("settings-export", self.tr("Exportando esquema de cores…"));
         self.spawn(move |_| Event::ThemeExported(theme::export(&path, &palette).map(|()| path)));
     }
 
@@ -790,7 +965,11 @@ impl App {
             return;
         }
         self.palette_pending = true;
-        let path = if self.demo { None } else { self.cfg.theme_path() };
+        let path = if self.demo {
+            None
+        } else {
+            self.cfg.theme_path()
+        };
         let system = !self.demo;
         self.spawn(move |_| {
             Event::Palette(match path {
@@ -804,7 +983,10 @@ impl App {
     /// The link of the selected item, when it is safe to hand to a browser.
     pub fn browser_url(&mut self) -> Option<String> {
         let url = self.selected_row()?.item.url.clone();
-        let web = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://")).is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/'));
+        let web = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))
+            .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/'));
         if !web {
             self.error = self.tr("link inválido");
             return None;
@@ -814,7 +996,9 @@ impl App {
 
     /// Opens the selected item's worktree, or else its clone, in the file manager.
     pub fn open_folder(&mut self) {
-        let Some(row) = self.selected_row() else { return };
+        let Some(row) = self.selected_row() else {
+            return;
+        };
         let Some(dir) = row.worktree.clone().or_else(|| row.clone.clone()) else {
             self.error = msg!(ERR_CLONE_REQUIRED).text(self.language);
             return;
@@ -912,7 +1096,10 @@ pub(crate) mod tests {
     /// Runs `app` until background work settles.
     pub(crate) fn settle(app: &mut App) {
         app.settle();
-        assert!(!app.loading && !app.refreshing && app.busy.is_empty() && app.pending.is_empty(), "background work did not settle");
+        assert!(
+            !app.loading && !app.refreshing && app.busy.is_empty() && app.pending.is_empty(),
+            "background work did not settle"
+        );
     }
 
     pub(crate) fn demo() -> App {
@@ -928,7 +1115,11 @@ pub(crate) mod tests {
         assert_eq!(app.rows.len(), 9);
         assert_eq!(app.visible().len(), 8, "pull requests only");
         assert_eq!(app.selected, app.visible()[0].key);
-        assert!(app.thread.as_ref().is_some_and(|thread| thread.body.contains("Bearer token")));
+        assert!(
+            app.thread
+                .as_ref()
+                .is_some_and(|thread| thread.body.contains("Bearer token"))
+        );
         assert!(app.synced_at.is_some() && app.error.is_empty());
         assert_eq!(app.instances().count(), 2);
     }
@@ -955,7 +1146,10 @@ pub(crate) mod tests {
         app.set_instance("Corp Git");
         assert_eq!(app.count(Kind::Pr, Relation::NONE), 5);
         app.set_instance("Corp Git");
-        assert!(app.instance.is_empty(), "choosing the instance again clears it");
+        assert!(
+            app.instance.is_empty(),
+            "choosing the instance again clears it"
+        );
     }
 
     #[test]
@@ -964,7 +1158,11 @@ pub(crate) mod tests {
         let keys: Vec<String> = app.visible().iter().map(|row| row.key.clone()).collect();
         assert_eq!(app.move_selection(1), Some(keys[1].clone()));
         assert_eq!(app.move_selection(-1), Some(keys[0].clone()));
-        assert_eq!(app.move_selection(-1), Some(keys[0].clone()), "stays on the first row");
+        assert_eq!(
+            app.move_selection(-1),
+            Some(keys[0].clone()),
+            "stays on the first row"
+        );
     }
 
     #[test]
@@ -972,13 +1170,19 @@ pub(crate) mod tests {
         let mut app = demo();
         app.ask(Action::Merge, "Fazer merge", false, false, None);
         let confirm = app.confirm.as_ref().expect("merge asks first");
-        assert_eq!(confirm.merge.as_ref().map(|merge| merge.method.as_str()), Some("squash"));
+        assert_eq!(
+            confirm.merge.as_ref().map(|merge| merge.method.as_str()),
+            Some("squash")
+        );
         assert!(app.busy.is_empty(), "nothing runs before confirmation");
         app.execute();
         assert_eq!(app.busy.len(), 1);
         settle(&mut app);
         assert!(app.confirm.is_none() && app.busy.is_empty());
-        assert_eq!(app.error, t(app.language, "Demonstração: esta ação não altera dados."));
+        assert_eq!(
+            app.error,
+            t(app.language, "Demonstração: esta ação não altera dados.")
+        );
     }
 
     #[test]
@@ -988,9 +1192,25 @@ pub(crate) mod tests {
         settle(&mut app);
         app.ask(Action::Approve, "Aprovar pull request", false, false, None);
         assert!(app.confirm.is_none());
-        assert_eq!(app.notice, t(app.language, "Ação disponível apenas para pull/merge requests."));
-        app.ask(Action::Comment, "Enviar comentário", false, false, Some("oi".into()));
-        assert!(app.confirm.as_ref().is_some_and(|confirm| confirm.request.body == "oi" && !confirm.uses_draft));
+        assert_eq!(
+            app.notice,
+            t(
+                app.language,
+                "Ação disponível apenas para pull/merge requests."
+            )
+        );
+        app.ask(
+            Action::Comment,
+            "Enviar comentário",
+            false,
+            false,
+            Some("oi".into()),
+        );
+        assert!(
+            app.confirm
+                .as_ref()
+                .is_some_and(|confirm| confirm.request.body == "oi" && !confirm.uses_draft)
+        );
     }
 
     #[test]
@@ -1002,9 +1222,15 @@ pub(crate) mod tests {
         assert_eq!(app.draft.text, "");
         app.select(&keys[0]);
         assert_eq!(app.draft.text, "rascunho");
-        assert_eq!(app.prefs().drafts.get(&keys[0]).map(String::as_str), Some("rascunho"));
+        assert_eq!(
+            app.prefs().drafts.get(&keys[0]).map(String::as_str),
+            Some("rascunho")
+        );
         app.draft.clear();
-        assert!(app.prefs().drafts.is_empty(), "an emptied draft is forgotten");
+        assert!(
+            app.prefs().drafts.is_empty(),
+            "an emptied draft is forgotten"
+        );
     }
 
     #[test]
@@ -1012,17 +1238,45 @@ pub(crate) mod tests {
         let mut app = demo();
         let generation = app.detail_generation;
         app.thread = None;
-        app.apply(Event::Detail { generation: generation - 1, result: Ok(Thread { body: "old".into(), comments: Vec::new() }) }, 1.0);
+        app.apply(
+            Event::Detail {
+                generation: generation - 1,
+                result: Ok(Thread {
+                    body: "old".into(),
+                    comments: Vec::new(),
+                }),
+            },
+            1.0,
+        );
         assert!(app.thread.is_none());
-        app.apply(Event::Detail { generation, result: Ok(Thread { body: "new".into(), comments: Vec::new() }) }, 1.0);
-        assert_eq!(app.thread.map(|thread| thread.body), Some("new".to_string()));
+        app.apply(
+            Event::Detail {
+                generation,
+                result: Ok(Thread {
+                    body: "new".into(),
+                    comments: Vec::new(),
+                }),
+            },
+            1.0,
+        );
+        assert_eq!(
+            app.thread.map(|thread| thread.body),
+            Some("new".to_string())
+        );
     }
 
     #[test]
     fn a_dirty_worktree_offers_forced_removal_and_a_missing_clone_opens_settings() {
         let mut app = demo();
         let key = app.selected.clone();
-        let request = Request { key: key.clone(), action: Action::Merge, body: String::new(), remove_after: true, force: false, push: false };
+        let request = Request {
+            key: key.clone(),
+            action: Action::Merge,
+            body: String::new(),
+            remove_after: true,
+            force: false,
+            push: false,
+        };
         let executed = |request: &Request, error| Event::Executed {
             request: request.clone(),
             uses_draft: false,
@@ -1033,7 +1287,11 @@ pub(crate) mod tests {
         };
         app.apply(executed(&request, msg!(ERR_DIRTY_WORKTREE)), 1.0);
         let confirm = app.confirm.take().expect("offers to discard local changes");
-        assert!(confirm.request.force && confirm.request.action == Action::RemoveWorktree && confirm.worktree == "/example/worktree");
+        assert!(
+            confirm.request.force
+                && confirm.request.action == Action::RemoveWorktree
+                && confirm.worktree == "/example/worktree"
+        );
         app.apply(executed(&request, msg!(ERR_CLONE_REQUIRED)), 1.0);
         assert!(app.settings.is_some() && !app.notice.is_empty());
     }
@@ -1055,7 +1313,13 @@ pub(crate) mod tests {
         assert!(app.palette_open && app.palette_query.focused);
         assert_eq!(app.palette_commands().len(), PaletteCommand::ALL.len());
         app.palette_query.replace_text("MERGE");
-        assert_eq!(app.palette_commands().iter().map(|command| command.0).collect::<Vec<_>>(), [PaletteCommand::Merge]);
+        assert_eq!(
+            app.palette_commands()
+                .iter()
+                .map(|command| command.0)
+                .collect::<Vec<_>>(),
+            [PaletteCommand::Merge]
+        );
         app.toggle_palette();
         app.open_settings();
         app.toggle_palette();
@@ -1066,7 +1330,11 @@ pub(crate) mod tests {
     fn only_web_links_reach_the_browser() {
         let mut app = demo();
         assert_eq!(app.browser_url().as_deref(), Some("https://example.com"));
-        let index = app.rows.iter().position(|row| row.key == app.selected).unwrap();
+        let index = app
+            .rows
+            .iter()
+            .position(|row| row.key == app.selected)
+            .unwrap();
         for bad in ["file:///etc/passwd", "javascript:alert(1)", "https://", ""] {
             app.rows[index].item.url = bad.into();
             assert_eq!(app.browser_url(), None, "{bad:?}");
@@ -1076,7 +1344,10 @@ pub(crate) mod tests {
     #[test]
     fn refresh_is_scheduled_after_each_result() {
         let mut app = demo();
-        assert!(app.refresh_due > 1.0, "next refresh follows the configured interval");
+        assert!(
+            app.refresh_due > 1.0,
+            "next refresh follows the configured interval"
+        );
         let due = app.refresh_due;
         assert!(!app.tick(due - 1.0) || !app.refreshing);
         app.tick(due + 0.1);

@@ -6,7 +6,10 @@ use rune::{Cursor, El, FileDialogOptions, ScrollSpec, TextEdit, Tx, col, row, te
 use rune_kit::{Button, ButtonVariant, Checkbox, Dialog, Select, TextArea, TextInput};
 
 use super::run_command;
-use super::settings::{DIFF_TOOLS, Field, InstanceForm, LANGUAGES, MERGE_METHODS, PROVIDERS, RepoForm, SettingsForm, TERMINALS, TOOLS};
+use super::settings::{
+    DIFF_TOOLS, Field, InstanceForm, LANGUAGES, MERGE_METHODS, PROVIDERS, RepoForm, SettingsForm,
+    TERMINALS, TOOLS,
+};
 use super::state::App;
 use super::theme::{Look, ThemePreference};
 use super::widgets::{BannerKind, activity, banner, eyebrow, kbd, rule};
@@ -19,7 +22,12 @@ pub fn confirm(app: &App, look: &Look, layer: &mut Vec<El>) {
     let Some(confirm) = &app.confirm else { return };
     let k = &look.kit;
     let request = &confirm.request;
-    let mut body = col().w_full().px(16.0).pb(16.0).gap(10.0).child(text(confirm.target.clone()).font(k.ty.ui_medium).color(look.text).wrap());
+    let mut body = col().w_full().px(16.0).pb(16.0).gap(10.0).child(
+        text(confirm.target.clone())
+            .font(k.ty.ui_medium)
+            .color(look.text)
+            .wrap(),
+    );
     if request.force {
         body = body
             .child(text(confirm.worktree.clone()).font(k.ty.mono).color(look.muted).wrap_anywhere())
@@ -39,7 +47,12 @@ pub fn confirm(app: &App, look: &Look, layer: &mut Vec<El>) {
                 "Incorpora os commits da branch base na branch de origem por merge no servidor e publica a atualização."
             };
             body = body
-                .child(text(format!("{} → {}", confirm.base, confirm.source)).font(k.ty.mono).color(look.muted).wrap_anywhere())
+                .child(
+                    text(format!("{} → {}", confirm.base, confirm.source))
+                        .font(k.ty.mono)
+                        .color(look.muted)
+                        .wrap_anywhere(),
+                )
                 .child(paragraph(app.tr(how), look));
         }
         Action::UpdateWorktree => {
@@ -70,8 +83,16 @@ pub fn confirm(app: &App, look: &Look, layer: &mut Vec<El>) {
                     .padding(10.0)
                     .radius(k.radius.md)
                     .fill(look.raised)
-                    .child(text(request.body.clone()).font(k.ty.mono).color(look.text).wrap().selectable(true))
-                    .scroll(ScrollSpec { stick_bottom: false }),
+                    .child(
+                        text(request.body.clone())
+                            .font(k.ty.mono)
+                            .color(look.text)
+                            .wrap()
+                            .selectable(true),
+                    )
+                    .scroll(ScrollSpec {
+                        stick_bottom: false,
+                    }),
             );
         }
         Action::Merge => {
@@ -81,9 +102,25 @@ pub fn confirm(app: &App, look: &Look, layer: &mut Vec<El>) {
                     col()
                         .key("confirm-merge-options")
                         .gap(2.0)
-                        .child(text(format!("{} {}", app.tr("Método:"), merge.method)).font(k.ty.ui).color(look.text))
-                        .child(text(format!("Auto-merge: {}", yes_no(merge.auto))).font(k.ty.ui).color(look.text))
-                        .child(text(format!("{} {}", app.tr("Apagar branch de origem:"), yes_no(merge.delete_branch))).font(k.ty.ui).color(look.text)),
+                        .child(
+                            text(format!("{} {}", app.tr("Método:"), merge.method))
+                                .font(k.ty.ui)
+                                .color(look.text),
+                        )
+                        .child(
+                            text(format!("Auto-merge: {}", yes_no(merge.auto)))
+                                .font(k.ty.ui)
+                                .color(look.text),
+                        )
+                        .child(
+                            text(format!(
+                                "{} {}",
+                                app.tr("Apagar branch de origem:"),
+                                yes_no(merge.delete_branch)
+                            ))
+                            .font(k.ty.ui)
+                            .color(look.text),
+                        ),
                 );
             }
         }
@@ -96,10 +133,20 @@ pub fn confirm(app: &App, look: &Look, layer: &mut Vec<El>) {
             .gap(8.0)
             .pt(6.0)
             .justify_end()
-            .child(Button::new(app.tr("Cancelar")).variant(ButtonVariant::Outline).on_press(|app: &mut App| app.confirm = None).build(k).key("confirm-cancel"))
+            .child(
+                Button::new(app.tr("Cancelar"))
+                    .variant(ButtonVariant::Outline)
+                    .on_press(|app: &mut App| app.confirm = None)
+                    .build(k)
+                    .key("confirm-cancel"),
+            )
             .child(
                 Button::new(app.tr("Confirmar"))
-                    .variant(if danger { ButtonVariant::Danger } else { ButtonVariant::Contrast })
+                    .variant(if danger {
+                        ButtonVariant::Danger
+                    } else {
+                        ButtonVariant::Contrast
+                    })
                     .on_press(|app: &mut App| app.execute())
                     .build(k)
                     .key("confirm-accept"),
@@ -158,7 +205,11 @@ pub fn palette(app: &App, look: &Look, layer: &mut Vec<El>) {
                 .child(kbd(key, look)),
         );
     }
-    let modifier = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl" };
+    let modifier = if cfg!(target_os = "macos") {
+        "⌘"
+    } else {
+        "Ctrl"
+    };
     let body = col()
         .w_full()
         .px(16.0)
@@ -166,12 +217,27 @@ pub fn palette(app: &App, look: &Look, layer: &mut Vec<El>) {
         .gap(10.0)
         .child(search)
         .child(list)
-        .child(text(format!("{modifier}{}", app.tr("+K abre comandos · Esc fecha"))).font(k.ty.small).color(look.muted));
-    Dialog::new("palette", app.tr("Comandos")).open(true).fit().width(520.0).child(body).on_close(|app: &mut App| app.palette_open = false).build(k, layer);
+        .child(
+            text(format!(
+                "{modifier}{}",
+                app.tr("+K abre comandos · Esc fecha")
+            ))
+            .font(k.ty.small)
+            .color(look.muted),
+        );
+    Dialog::new("palette", app.tr("Comandos"))
+        .open(true)
+        .fit()
+        .width(520.0)
+        .child(body)
+        .on_close(|app: &mut App| app.palette_open = false)
+        .build(k, layer);
 }
 
 fn edit_of(app: &mut App, field: Field) -> &mut TextEdit {
-    let App { settings, scratch, .. } = app;
+    let App {
+        settings, scratch, ..
+    } = app;
     match settings.as_mut().and_then(|form| form.edit(field)) {
         Some(edit) => edit,
         None => scratch,
@@ -179,7 +245,12 @@ fn edit_of(app: &mut App, field: Field) -> &mut TextEdit {
 }
 
 fn labeled(label: String, control: El, look: &Look) -> El {
-    col().grow(1.0).min_w(180.0).gap(4.0).child(text(label).font(look.kit.ty.small_medium).color(look.muted)).child(control)
+    col()
+        .grow(1.0)
+        .min_w(180.0)
+        .gap(4.0)
+        .child(text(label).font(look.kit.ty.small_medium).color(look.muted))
+        .child(control)
 }
 
 fn input(label: String, edit: &TextEdit, placeholder: String, field: Field, look: &Look) -> El {
@@ -207,9 +278,15 @@ fn choice(
     layer: &mut Vec<El>,
 ) -> El {
     let labels: Vec<&str> = options.iter().map(|(_, label)| label.as_str()).collect();
-    let shown = options.iter().find(|(value, _)| value == current).map(|(_, label)| label.as_str());
+    let shown = options
+        .iter()
+        .find(|(value, _)| value == current)
+        .map(|(_, label)| label.as_str());
     let options = options.to_vec();
-    let (toggle_key, open) = (key.clone(), form.open_select.as_deref() == Some(key.as_str()));
+    let (toggle_key, open) = (
+        key.clone(),
+        form.open_select.as_deref() == Some(key.as_str()),
+    );
     let close = |app: &mut App| {
         if let Some(form) = &mut app.settings {
             form.open_select = None;
@@ -221,7 +298,11 @@ fn choice(
         .open(open)
         .on_toggle(move |app: &mut App| {
             if let Some(form) = &mut app.settings {
-                form.open_select = if form.open_select.as_deref() == Some(toggle_key.as_str()) { None } else { Some(toggle_key.clone()) };
+                form.open_select = if form.open_select.as_deref() == Some(toggle_key.as_str()) {
+                    None
+                } else {
+                    Some(toggle_key.clone())
+                };
             }
         })
         .on_close(close)
@@ -238,7 +319,10 @@ fn choice(
 }
 
 fn translated(app: &App, options: &[(&str, &str)]) -> Vec<(String, String)> {
-    options.iter().map(|(value, label)| (value.to_string(), app.tr(label))).collect()
+    options
+        .iter()
+        .map(|(value, label)| (value.to_string(), app.tr(label)))
+        .collect()
 }
 
 fn fieldset(key: String, title: String, look: &Look) -> El {
@@ -256,7 +340,13 @@ fn grid() -> El {
     row().w_full().gap(10.0).flex_wrap().items_end()
 }
 
-fn toggle(key: String, label: String, checked: bool, look: &Look, flip: impl Fn(&mut SettingsForm) + 'static) -> El {
+fn toggle(
+    key: String,
+    label: String,
+    checked: bool,
+    look: &Look,
+    flip: impl Fn(&mut SettingsForm) + 'static,
+) -> El {
     Checkbox::new(checked)
         .label(label)
         .on_toggle(move |app: &mut App| {
@@ -268,7 +358,12 @@ fn toggle(key: String, label: String, checked: bool, look: &Look, flip: impl Fn(
         .key(key)
 }
 
-fn danger_link(key: String, label: String, look: &Look, remove: impl Fn(&mut SettingsForm) + 'static) -> El {
+fn danger_link(
+    key: String,
+    label: String,
+    look: &Look,
+    remove: impl Fn(&mut SettingsForm) + 'static,
+) -> El {
     row().child(
         Button::new(label)
             .variant(ButtonVariant::Ghost)
@@ -282,7 +377,14 @@ fn danger_link(key: String, label: String, look: &Look, remove: impl Fn(&mut Set
     )
 }
 
-fn instance_fields(app: &App, form: &SettingsForm, index: usize, instance: &InstanceForm, look: &Look, layer: &mut Vec<El>) -> El {
+fn instance_fields(
+    app: &App,
+    form: &SettingsForm,
+    index: usize,
+    instance: &InstanceForm,
+    look: &Look,
+    layer: &mut Vec<El>,
+) -> El {
     let k = &look.kit;
     let id = instance.id;
     let providers: Vec<(String, String)> = PROVIDERS
@@ -297,7 +399,13 @@ fn instance_fields(app: &App, form: &SettingsForm, index: usize, instance: &Inst
         })
         .collect();
     let fields = grid()
-        .child(input(app.tr("Nome"), &instance.name, String::new(), Field::InstanceName(id), look))
+        .child(input(
+            app.tr("Nome"),
+            &instance.name,
+            String::new(),
+            Field::InstanceName(id),
+            look,
+        ))
         .child(choice(
             app,
             form,
@@ -315,7 +423,13 @@ fn instance_fields(app: &App, form: &SettingsForm, index: usize, instance: &Inst
             look,
             layer,
         ))
-        .child(input("Host".into(), &instance.host, instance.provider.default_host().to_string(), Field::InstanceHost(id), look))
+        .child(input(
+            "Host".into(),
+            &instance.host,
+            instance.provider.default_host().to_string(),
+            Field::InstanceHost(id),
+            look,
+        ))
         .child(choice(
             app,
             form,
@@ -324,7 +438,8 @@ fn instance_fields(app: &App, form: &SettingsForm, index: usize, instance: &Inst
             &translated(app, &MERGE_METHODS),
             &instance.merge_method,
             move |app, value| {
-                if let Some(instance) = app.settings.as_mut().and_then(|form| form.instance_mut(id)) {
+                if let Some(instance) = app.settings.as_mut().and_then(|form| form.instance_mut(id))
+                {
                     instance.merge_method = value.to_string();
                 }
             },
@@ -352,55 +467,101 @@ fn instance_fields(app: &App, form: &SettingsForm, index: usize, instance: &Inst
             .build(k)
             .key(format!("preset-body-{preset_id}"));
         presets = presets.child(
-            fieldset(format!("preset-{preset_id}"), format!("{} {}", app.tr("Comentário"), number + 1), look)
-                .child(grid().child(input(app.tr("Nome do botão"), &preset.label, String::new(), Field::PresetLabel(id, preset_id), look)))
-                .child(labeled(app.tr("Texto do comentário"), body, look))
-                .child(danger_link(format!("preset-remove-{preset_id}"), app.tr("Remover comentário"), look, move |form| form.remove_preset(id, preset_id))),
+            fieldset(
+                format!("preset-{preset_id}"),
+                format!("{} {}", app.tr("Comentário"), number + 1),
+                look,
+            )
+            .child(grid().child(input(
+                app.tr("Nome do botão"),
+                &preset.label,
+                String::new(),
+                Field::PresetLabel(id, preset_id),
+                look,
+            )))
+            .child(labeled(app.tr("Texto do comentário"), body, look))
+            .child(danger_link(
+                format!("preset-remove-{preset_id}"),
+                app.tr("Remover comentário"),
+                look,
+                move |form| form.remove_preset(id, preset_id),
+            )),
         );
     }
-    presets = presets.child(row().child(
-        Button::new(app.tr("Adicionar comentário predefinido"))
-            .variant(ButtonVariant::Outline)
-            .on_press(move |app: &mut App| {
-                if let Some(form) = &mut app.settings {
-                    form.add_preset(id);
-                }
-            })
-            .build(k)
-            .key(format!("preset-add-{id}")),
-    ));
-    fieldset(format!("instance-form-{id}"), format!("{} {}", app.tr("Instância"), index + 1), look)
-        .child(fields)
-        .child(toggle(format!("instance-disabled-{id}"), app.tr("Desativada"), instance.disabled, look, move |form| flip(form, |i| i.disabled = !i.disabled)))
-        .child(toggle(
-            format!("instance-auto-{id}"),
-            app.tr("Auto-merge quando o pipeline passar"),
-            instance.auto_merge,
-            look,
-            move |form| flip(form, |i| i.auto_merge = !i.auto_merge),
-        ))
-        .child(toggle(
-            format!("instance-delete-{id}"),
-            app.tr("Apagar branch de origem após merge"),
-            instance.delete_branch,
-            look,
-            move |form| flip(form, |i| i.delete_branch = !i.delete_branch),
-        ))
-        .child(presets)
-        .child(danger_link(format!("instance-remove-{id}"), app.tr("Remover da configuração"), look, move |form| form.remove_instance(id)))
+    presets = presets.child(
+        row().child(
+            Button::new(app.tr("Adicionar comentário predefinido"))
+                .variant(ButtonVariant::Outline)
+                .on_press(move |app: &mut App| {
+                    if let Some(form) = &mut app.settings {
+                        form.add_preset(id);
+                    }
+                })
+                .build(k)
+                .key(format!("preset-add-{id}")),
+        ),
+    );
+    fieldset(
+        format!("instance-form-{id}"),
+        format!("{} {}", app.tr("Instância"), index + 1),
+        look,
+    )
+    .child(fields)
+    .child(toggle(
+        format!("instance-disabled-{id}"),
+        app.tr("Desativada"),
+        instance.disabled,
+        look,
+        move |form| flip(form, |i| i.disabled = !i.disabled),
+    ))
+    .child(toggle(
+        format!("instance-auto-{id}"),
+        app.tr("Auto-merge quando o pipeline passar"),
+        instance.auto_merge,
+        look,
+        move |form| flip(form, |i| i.auto_merge = !i.auto_merge),
+    ))
+    .child(toggle(
+        format!("instance-delete-{id}"),
+        app.tr("Apagar branch de origem após merge"),
+        instance.delete_branch,
+        look,
+        move |form| flip(form, |i| i.delete_branch = !i.delete_branch),
+    ))
+    .child(presets)
+    .child(danger_link(
+        format!("instance-remove-{id}"),
+        app.tr("Remover da configuração"),
+        look,
+        move |form| form.remove_instance(id),
+    ))
 }
 
-fn repo_fields(app: &App, form: &SettingsForm, repo: &RepoForm, look: &Look, layer: &mut Vec<El>) -> El {
+fn repo_fields(
+    app: &App,
+    form: &SettingsForm,
+    repo: &RepoForm,
+    look: &Look,
+    layer: &mut Vec<El>,
+) -> El {
     let k = &look.kit;
     let id = repo.id;
-    let instances: Vec<(String, String)> = form.instances.iter().map(|instance| (instance.id.to_string(), form.instance_label(instance.id))).collect();
+    let instances: Vec<(String, String)> = form
+        .instances
+        .iter()
+        .map(|instance| (instance.id.to_string(), form.instance_label(instance.id)))
+        .collect();
     let pick = Button::new(app.tr("Selecionar pasta…"))
         .variant(ButtonVariant::Outline)
         .disabled(app.settings_busy())
         .on_press_tx(move |app: &mut App, tx: &mut Tx| {
-            let options = FileDialogOptions { title: app.tr("Selecionar clone local"), ..FileDialogOptions::default() };
+            let options = FileDialogOptions {
+                title: app.tr("Selecionar clone local"),
+                ..FileDialogOptions::default()
+            };
             tx.open_folder(options, move |app: &mut App, result, _| match result {
-                Ok(Some(path)) => edit_of(app, Field::RepoPath(id)).replace_text(path.to_string_lossy().into_owned()),
+                Ok(Some(path)) => edit_of(app, Field::RepoPath(id))
+                    .replace_text(path.to_string_lossy().into_owned()),
                 Ok(None) => {}
                 Err(err) => app.error = err.to_string(),
             });
@@ -418,47 +579,116 @@ fn repo_fields(app: &App, form: &SettingsForm, repo: &RepoForm, look: &Look, lay
                     &instances,
                     &repo.instance.to_string(),
                     move |app, value| {
-                        if let (Some(repo), Ok(instance)) = (app.settings.as_mut().and_then(|form| form.repo_mut(id)), value.parse()) {
+                        if let (Some(repo), Ok(instance)) = (
+                            app.settings.as_mut().and_then(|form| form.repo_mut(id)),
+                            value.parse(),
+                        ) {
                             repo.instance = instance;
                         }
                     },
                     look,
                     layer,
                 ))
-                .child(input(app.tr("Repositório"), &repo.name, app.tr("organização/repo"), Field::RepoName(id), look)),
+                .child(input(
+                    app.tr("Repositório"),
+                    &repo.name,
+                    app.tr("organização/repo"),
+                    Field::RepoName(id),
+                    look,
+                )),
         )
         .child(
             grid()
-                .child(input(app.tr("Pasta do clone"), &repo.path, "/home/…".into(), Field::RepoPath(id), look))
+                .child(input(
+                    app.tr("Pasta do clone"),
+                    &repo.path,
+                    "/home/…".into(),
+                    Field::RepoPath(id),
+                    look,
+                ))
                 .child(pick)
-                .child(input("Remote".into(), &repo.remote, "origin".into(), Field::RepoRemote(id), look)),
+                .child(input(
+                    "Remote".into(),
+                    &repo.remote,
+                    "origin".into(),
+                    Field::RepoRemote(id),
+                    look,
+                )),
         )
-        .child(toggle(format!("repo-track-{id}"), app.tr("Acompanhar todos os PRs"), repo.track_all, look, move |form| {
-            if let Some(repo) = form.repo_mut(id) {
-                repo.track_all = !repo.track_all;
-            }
-        }))
-        .child(danger_link(format!("repo-remove-{id}"), app.tr("Remover mapeamento"), look, move |form| form.remove_repo(id)))
+        .child(toggle(
+            format!("repo-track-{id}"),
+            app.tr("Acompanhar todos os PRs"),
+            repo.track_all,
+            look,
+            move |form| {
+                if let Some(repo) = form.repo_mut(id) {
+                    repo.track_all = !repo.track_all;
+                }
+            },
+        ))
+        .child(danger_link(
+            format!("repo-remove-{id}"),
+            app.tr("Remover mapeamento"),
+            look,
+            move |form| form.remove_repo(id),
+        ))
 }
 
 fn diagnostics(app: &App, look: &Look) -> El {
     let k = &look.kit;
-    let label = if app.pending.contains_key("settings-diagnose") { "Verificando…" } else { "Executar diagnóstico" };
-    let mut out = col().key("diagnostics").w_full().gap(6.0).child(row().child(
-        Button::new(app.tr(label)).variant(ButtonVariant::Outline).disabled(app.settings_busy()).on_press(|app: &mut App| app.diagnose()).build(k).key("diagnose"),
-    ));
-    let Some(found) = &app.diagnostics else { return out };
+    let label = if app.pending.contains_key("settings-diagnose") {
+        "Verificando…"
+    } else {
+        "Executar diagnóstico"
+    };
+    let mut out = col().key("diagnostics").w_full().gap(6.0).child(
+        row().child(
+            Button::new(app.tr(label))
+                .variant(ButtonVariant::Outline)
+                .disabled(app.settings_busy())
+                .on_press(|app: &mut App| app.diagnose())
+                .build(k)
+                .key("diagnose"),
+        ),
+    );
+    let Some(found) = &app.diagnostics else {
+        return out;
+    };
     for tool in &found.tools {
-        let (mark, ink) = if tool.path.is_some() { ("✓", look.green) } else { ("×", look.red) };
-        let place = tool.path.as_ref().map_or_else(|| format!("{} · {}", app.tr("Não encontrada no PATH"), app.tr(tool.hint)), |path| path.display().to_string());
+        let (mark, ink) = if tool.path.is_some() {
+            ("✓", look.green)
+        } else {
+            ("×", look.red)
+        };
+        let place = tool.path.as_ref().map_or_else(
+            || {
+                format!(
+                    "{} · {}",
+                    app.tr("Não encontrada no PATH"),
+                    app.tr(tool.hint)
+                )
+            },
+            |path| path.display().to_string(),
+        );
         out = out.child(
             row()
                 .w_full()
                 .gap(8.0)
                 .items_start()
                 .child(text(mark).font(k.ty.ui_medium).color(ink).w(14.0))
-                .child(text(tool.name).font(k.ty.ui_medium).color(look.text).w(44.0))
-                .child(text(place).font(k.ty.ui).color(look.muted).wrap_anywhere().grow(1.0)),
+                .child(
+                    text(tool.name)
+                        .font(k.ty.ui_medium)
+                        .color(look.text)
+                        .w(44.0),
+                )
+                .child(
+                    text(place)
+                        .font(k.ty.ui)
+                        .color(look.muted)
+                        .wrap_anywhere()
+                        .grow(1.0),
+                ),
         );
     }
     for instance in &found.instances {
@@ -469,7 +699,13 @@ fn diagnostics(app: &App, look: &Look) -> El {
         } else {
             instance.error.clone()
         };
-        out = out.child(text(format!("{}: {status}", instance.name)).font(k.ty.ui).color(look.muted).wrap().selectable(true));
+        out = out.child(
+            text(format!("{}: {status}", instance.name))
+                .font(k.ty.ui)
+                .color(look.muted)
+                .wrap()
+                .selectable(true),
+        );
     }
     out
 }
@@ -479,22 +715,52 @@ pub fn settings(app: &App, look: &Look, layer: &mut Vec<El>, height: f32) {
     let k = &look.kit;
     // Selects open above the dialog, so their popups are mounted after it.
     let mut popups = Vec::new();
-    let heading = |label: &str| text(app.tr(label)).font(k.ty.body_medium).color(look.text).pt(6.0);
-    let mut body = col().key("settings-body").w_full().px(16.0).pb(8.0).gap(12.0).child(eyebrow(app.tr("PREFERÊNCIAS"), look));
-    for (name, label) in app.pending.iter().filter(|(name, _)| name.starts_with("settings-")) {
+    let heading = |label: &str| {
+        text(app.tr(label))
+            .font(k.ty.body_medium)
+            .color(look.text)
+            .pt(6.0)
+    };
+    let mut body = col()
+        .key("settings-body")
+        .w_full()
+        .px(16.0)
+        .pb(8.0)
+        .gap(12.0)
+        .child(eyebrow(app.tr("PREFERÊNCIAS"), look));
+    for (name, label) in app
+        .pending
+        .iter()
+        .filter(|(name, _)| name.starts_with("settings-"))
+    {
         body = body.child(activity(label.clone(), look).key(format!("settings-activity-{name}")));
     }
     if !app.error.is_empty() {
-        body = body.child(banner("settings-error", app.error.clone(), BannerKind::Error, Some(|app| app.error.clear()), look));
+        body = body.child(banner(
+            "settings-error",
+            app.error.clone(),
+            BannerKind::Error,
+            Some(|app| app.error.clear()),
+            look,
+        ));
     }
-    let themes: Vec<(String, String)> = ThemePreference::ALL.iter().map(|theme| (theme.as_str().to_string(), app.tr(theme.label()))).collect();
+    let themes: Vec<(String, String)> = ThemePreference::ALL
+        .iter()
+        .map(|theme| (theme.as_str().to_string(), app.tr(theme.label())))
+        .collect();
     let pick_theme = Button::new(app.tr("Selecionar arquivo"))
         .variant(ButtonVariant::Outline)
         .disabled(app.settings_busy())
         .on_press_tx(|app: &mut App, tx: &mut Tx| {
-            let options = FileDialogOptions { title: app.tr("Arquivo de cores"), ..FileDialogOptions::default() }.filter("TOML", &["toml"]);
+            let options = FileDialogOptions {
+                title: app.tr("Arquivo de cores"),
+                ..FileDialogOptions::default()
+            }
+            .filter("TOML", &["toml"]);
             tx.open_file(options, |app: &mut App, result, _| match result {
-                Ok(Some(path)) => edit_of(app, Field::ThemeFile).replace_text(path.to_string_lossy().into_owned()),
+                Ok(Some(path)) => {
+                    edit_of(app, Field::ThemeFile).replace_text(path.to_string_lossy().into_owned())
+                }
                 Ok(None) => {}
                 Err(err) => app.error = err.to_string(),
             });
@@ -505,8 +771,12 @@ pub fn settings(app: &App, look: &Look, layer: &mut Vec<El>, height: f32) {
         .variant(ButtonVariant::Outline)
         .disabled(app.settings_busy())
         .on_press_tx(|app: &mut App, tx: &mut Tx| {
-            let options = FileDialogOptions { title: app.tr("Exportar esquema de cores"), file_name: Some("colors.toml".into()), ..FileDialogOptions::default() }
-                .filter("TOML", &["toml"]);
+            let options = FileDialogOptions {
+                title: app.tr("Exportar esquema de cores"),
+                file_name: Some("colors.toml".into()),
+                ..FileDialogOptions::default()
+            }
+            .filter("TOML", &["toml"]);
             tx.save_file(options, |app: &mut App, result, _| match result {
                 Ok(Some(path)) => app.export_theme(path),
                 Ok(None) => {}
@@ -518,7 +788,17 @@ pub fn settings(app: &App, look: &Look, layer: &mut Vec<El>, height: f32) {
     body = body
         .child(
             grid()
-                .child(choice(app, form, "settings-theme".into(), app.tr("Tema"), &themes, app.theme.as_str(), |app, value| app.set_theme(ThemePreference::parse(value)), look, &mut popups))
+                .child(choice(
+                    app,
+                    form,
+                    "settings-theme".into(),
+                    app.tr("Tema"),
+                    &themes,
+                    app.theme.as_str(),
+                    |app, value| app.set_theme(ThemePreference::parse(value)),
+                    look,
+                    &mut popups,
+                ))
                 .child(choice(
                     app,
                     form,
@@ -535,12 +815,38 @@ pub fn settings(app: &App, look: &Look, layer: &mut Vec<El>, height: f32) {
                     &mut popups,
                 )),
         )
-        .child(grid().child(input(app.tr("Arquivo de cores"), &form.theme_file, "colors.toml".into(), Field::ThemeFile, look)).child(pick_theme).child(export_theme))
-        .child(paragraph(app.tr("Vazio segue o tema do sistema; caminho relativo à configuração"), look))
         .child(
             grid()
-                .child(input(app.tr("Intervalo de atualização"), &form.refresh_interval, "5m".into(), Field::RefreshInterval, look))
-                .child(input(app.tr("Pasta de worktrees"), &form.worktree_dir, app.tr("Padrão da aplicação"), Field::WorktreeDir, look)),
+                .child(input(
+                    app.tr("Arquivo de cores"),
+                    &form.theme_file,
+                    "colors.toml".into(),
+                    Field::ThemeFile,
+                    look,
+                ))
+                .child(pick_theme)
+                .child(export_theme),
+        )
+        .child(paragraph(
+            app.tr("Vazio segue o tema do sistema; caminho relativo à configuração"),
+            look,
+        ))
+        .child(
+            grid()
+                .child(input(
+                    app.tr("Intervalo de atualização"),
+                    &form.refresh_interval,
+                    "5m".into(),
+                    Field::RefreshInterval,
+                    look,
+                ))
+                .child(input(
+                    app.tr("Pasta de worktrees"),
+                    &form.worktree_dir,
+                    app.tr("Padrão da aplicação"),
+                    Field::WorktreeDir,
+                    look,
+                )),
         )
         .child(
             grid()
@@ -585,40 +891,57 @@ pub fn settings(app: &App, look: &Look, layer: &mut Vec<El>, height: f32) {
         .child(heading("Caminhos das ferramentas"));
     let mut tools = grid();
     for (index, tool) in TOOLS.iter().enumerate() {
-        tools = tools.child(input(tool.to_string(), &form.tools[index], app.tr("Detectar no PATH"), Field::Tool(index), look));
+        tools = tools.child(input(
+            tool.to_string(),
+            &form.tools[index],
+            app.tr("Detectar no PATH"),
+            Field::Tool(index),
+            look,
+        ));
     }
     body = body.child(tools).child(heading("Instâncias"));
     for (index, instance) in form.instances.iter().enumerate() {
-        body = body.child(instance_fields(app, form, index, instance, look, &mut popups));
+        body = body.child(instance_fields(
+            app,
+            form,
+            index,
+            instance,
+            look,
+            &mut popups,
+        ));
     }
     body = body
-        .child(row().child(
-            Button::new(app.tr("＋ Adicionar instância"))
-                .variant(ButtonVariant::Outline)
-                .on_press(|app: &mut App| {
-                    if let Some(form) = &mut app.settings {
-                        form.add_instance();
-                    }
-                })
-                .build(k)
-                .key("instance-form-add"),
-        ))
+        .child(
+            row().child(
+                Button::new(app.tr("＋ Adicionar instância"))
+                    .variant(ButtonVariant::Outline)
+                    .on_press(|app: &mut App| {
+                        if let Some(form) = &mut app.settings {
+                            form.add_instance();
+                        }
+                    })
+                    .build(k)
+                    .key("instance-form-add"),
+            ),
+        )
         .child(heading("Repositórios locais"));
     for repo in &form.repos {
         body = body.child(repo_fields(app, form, repo, look, &mut popups));
     }
     body = body
-        .child(row().child(
-            Button::new(app.tr("＋ Mapear repositório"))
-                .variant(ButtonVariant::Outline)
-                .on_press(|app: &mut App| {
-                    if let Some(form) = &mut app.settings {
-                        form.add_repo();
-                    }
-                })
-                .build(k)
-                .key("repo-form-add"),
-        ))
+        .child(
+            row().child(
+                Button::new(app.tr("＋ Mapear repositório"))
+                    .variant(ButtonVariant::Outline)
+                    .on_press(|app: &mut App| {
+                        if let Some(form) = &mut app.settings {
+                            form.add_repo();
+                        }
+                    })
+                    .build(k)
+                    .key("repo-form-add"),
+            ),
+        )
         .child(heading("Ferramentas e autenticação"))
         .child(diagnostics(app, look));
     let saving = app.pending.contains_key("settings-save");
@@ -628,16 +951,35 @@ pub fn settings(app: &App, look: &Look, layer: &mut Vec<El>, height: f32) {
         .py(12.0)
         .gap(8.0)
         .justify_end()
-        .child(Button::new(app.tr("Cancelar")).variant(ButtonVariant::Outline).on_press(|app: &mut App| app.settings = None).build(k).key("settings-cancel"))
         .child(
-            Button::new(app.tr(if saving { "Salvando…" } else { "Salvar configurações" }))
-                .variant(ButtonVariant::Contrast)
-                .disabled(app.settings_busy())
-                .on_press(|app: &mut App| app.save_settings())
+            Button::new(app.tr("Cancelar"))
+                .variant(ButtonVariant::Outline)
+                .on_press(|app: &mut App| app.settings = None)
                 .build(k)
-                .key("settings-save"),
+                .key("settings-cancel"),
+        )
+        .child(
+            Button::new(app.tr(if saving {
+                "Salvando…"
+            } else {
+                "Salvar configurações"
+            }))
+            .variant(ButtonVariant::Contrast)
+            .disabled(app.settings_busy())
+            .on_press(|app: &mut App| app.save_settings())
+            .build(k)
+            .key("settings-save"),
         );
-    let content = col().w_full().child(body.scroll(ScrollSpec { stick_bottom: false }).h(height)).child(rule(look)).child(footer);
+    let content = col()
+        .w_full()
+        .child(
+            body.scroll(ScrollSpec {
+                stick_bottom: false,
+            })
+            .h(height),
+        )
+        .child(rule(look))
+        .child(footer);
     Dialog::new("settings", app.tr("Configurações"))
         .open(true)
         .fit()

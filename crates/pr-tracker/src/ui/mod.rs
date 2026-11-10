@@ -74,10 +74,30 @@ pub(crate) fn run_command(app: &mut App, command: PaletteCommand, tx: &mut Tx) {
         PaletteCommand::Conversation => app.show_conversation(false),
         PaletteCommand::Comment => app.show_conversation(true),
         PaletteCommand::Browser => open_browser(app, tx),
-        PaletteCommand::Worktree => app.ask(Action::UpdateWorktree, "Criar ou atualizar worktree", false, false, None),
-        PaletteCommand::Terminal => app.ask(Action::PrepareTerminal, "Abrir terminal no worktree", false, false, None),
-        PaletteCommand::Diff => app.ask(Action::PrepareDiff, "Abrir diff no terminal", false, false, None),
-        PaletteCommand::Approve => app.ask(Action::Approve, "Aprovar pull request", false, false, None),
+        PaletteCommand::Worktree => app.ask(
+            Action::UpdateWorktree,
+            "Criar ou atualizar worktree",
+            false,
+            false,
+            None,
+        ),
+        PaletteCommand::Terminal => app.ask(
+            Action::PrepareTerminal,
+            "Abrir terminal no worktree",
+            false,
+            false,
+            None,
+        ),
+        PaletteCommand::Diff => app.ask(
+            Action::PrepareDiff,
+            "Abrir diff no terminal",
+            false,
+            false,
+            None,
+        ),
+        PaletteCommand::Approve => {
+            app.ask(Action::Approve, "Aprovar pull request", false, false, None)
+        }
         PaletteCommand::Merge => app.ask(Action::Merge, "Fazer merge", false, false, None),
         PaletteCommand::Settings => app.open_settings(),
     }
@@ -141,9 +161,21 @@ fn on_key(app: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
             "t" => run_command(app, PaletteCommand::Terminal, tx),
             "d" => run_command(app, PaletteCommand::Diff, tx),
             "w" => run_command(app, PaletteCommand::Worktree, tx),
-            "c" => app.ask(Action::Checkout, "Trocar branch do clone local", false, false, None),
+            "c" => app.ask(
+                Action::Checkout,
+                "Trocar branch do clone local",
+                false,
+                false,
+                None,
+            ),
             "X" => app.ask(Action::Close, "Fechar sem merge", false, false, None),
-            "x" => app.ask(Action::RemoveWorktree, "Remover worktree", false, false, None),
+            "x" => app.ask(
+                Action::RemoveWorktree,
+                "Remover worktree",
+                false,
+                false,
+                None,
+            ),
             "1" => app.switch_kind(Kind::Pr),
             "2" => app.switch_kind(Kind::Issue),
             "s" => app.open_settings(),
@@ -164,12 +196,24 @@ fn spec() -> AppSpec<App> {
         on_key: Some(on_key),
         scenes: &[
             ("issues", |app| app.switch_kind(Kind::Issue)),
-            ("conversation", |app| app.detail_tab = DetailTab::Conversation),
+            ("conversation", |app| {
+                app.detail_tab = DetailTab::Conversation
+            }),
             ("checks", |app| app.detail_tab = DetailTab::Checks),
             ("settings", |app| app.open_settings()),
             ("palette", |app| app.toggle_palette()),
-            ("confirm-merge", |app| app.ask(Action::Merge, "Fazer merge", false, false, None)),
-            ("confirm-worktree", |app| app.ask(Action::UpdateWorktree, "Criar ou atualizar worktree", false, false, None)),
+            ("confirm-merge", |app| {
+                app.ask(Action::Merge, "Fazer merge", false, false, None)
+            }),
+            ("confirm-worktree", |app| {
+                app.ask(
+                    Action::UpdateWorktree,
+                    "Criar ou atualizar worktree",
+                    false,
+                    false,
+                    None,
+                )
+            }),
             ("more", |app| app.more_open = true),
         ],
         ..AppSpec::new(TITLE, SIZE, init, view::view)
@@ -189,7 +233,15 @@ mod tests {
 
     fn runtime() -> Runtime<App> {
         let app = state::tests::demo();
-        let mut runtime = Runtime::new(app, view::view, SIZE, Env { system_dark: true, scale: 1.0 });
+        let mut runtime = Runtime::new(
+            app,
+            view::view,
+            SIZE,
+            Env {
+                system_dark: true,
+                scale: 1.0,
+            },
+        );
         runtime.on_key = Some(on_key);
         runtime.poll = Some(poll);
         runtime.frame(0.0);
@@ -203,22 +255,33 @@ mod tests {
     }
 
     fn press(runtime: &mut Runtime<App>, key: &str) {
-        let (x, y) = runtime.find(key).unwrap_or_else(|| panic!("no element keyed {key:?}"));
+        let (x, y) = runtime
+            .find(key)
+            .unwrap_or_else(|| panic!("no element keyed {key:?}"));
         runtime.pointer_down(x, y);
         runtime.pointer_up(x, y);
         frames(runtime, 2);
     }
 
     fn typed(text: &str) -> KeyEvent {
-        KeyEvent { key: Key::Text(text.into()), mods: Mods::default() }
+        KeyEvent {
+            key: Key::Text(text.into()),
+            mods: Mods::default(),
+        }
     }
 
     #[test]
     fn the_window_draws_the_list_and_the_selected_item() {
         let runtime = runtime();
         let first = runtime.state.visible()[0].key.clone();
-        assert!(runtime.find(&view::row_key(&first)).is_some(), "first row is drawn");
-        assert!(runtime.find("inspector-title").is_some(), "inspector shows the selection");
+        assert!(
+            runtime.find(&view::row_key(&first)).is_some(),
+            "first row is drawn"
+        );
+        assert!(
+            runtime.find("inspector-title").is_some(),
+            "inspector shows the selection"
+        );
         assert!(runtime.find("confirm-dialog").is_none());
     }
 
@@ -235,7 +298,10 @@ mod tests {
         let mut runtime = runtime();
         press(&mut runtime, "action-approve");
         assert!(runtime.state.confirm.is_some());
-        assert!(runtime.find("confirm-dialog").is_some(), "the question is on screen");
+        assert!(
+            runtime.find("confirm-dialog").is_some(),
+            "the question is on screen"
+        );
         press(&mut runtime, "confirm-cancel");
         assert!(runtime.state.confirm.is_none() && runtime.state.busy.is_empty());
     }
@@ -255,14 +321,26 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         frames(&mut runtime, 2);
-        assert!(runtime.state.error.contains("Demo") || runtime.state.error.contains("Demonstração"), "{}", runtime.state.error);
-        assert!(runtime.find("banner-error").is_some(), "the failure is shown");
+        assert!(
+            runtime.state.error.contains("Demo") || runtime.state.error.contains("Demonstração"),
+            "{}",
+            runtime.state.error
+        );
+        assert!(
+            runtime.find("banner-error").is_some(),
+            "the failure is shown"
+        );
     }
 
     #[test]
     fn keyboard_shortcuts_drive_the_list_and_dialogs() {
         let mut runtime = runtime();
-        let keys: Vec<String> = runtime.state.visible().iter().map(|row| row.key.clone()).collect();
+        let keys: Vec<String> = runtime
+            .state
+            .visible()
+            .iter()
+            .map(|row| row.key.clone())
+            .collect();
         runtime.key(typed("j"));
         frames(&mut runtime, 2);
         assert_eq!(runtime.state.selected, keys[1]);
@@ -277,7 +355,10 @@ mod tests {
         assert!(runtime.state.confirm.is_some(), "m asks to merge");
         runtime.key(typed("j"));
         frames(&mut runtime, 2);
-        assert_eq!(runtime.state.selected, keys[0], "shortcuts wait while a dialog is open");
+        assert_eq!(
+            runtime.state.selected, keys[0],
+            "shortcuts wait while a dialog is open"
+        );
     }
 
     #[test]
@@ -287,15 +368,26 @@ mod tests {
         assert_eq!(runtime.state.kind, Kind::Issue);
         press(&mut runtime, "kind-prs");
         press(&mut runtime, "filter-2");
-        assert_eq!(runtime.state.visible().len(), 2, "Mine shows the authored pull requests");
+        assert_eq!(
+            runtime.state.visible().len(),
+            2,
+            "Mine shows the authored pull requests"
+        );
     }
 
     #[test]
     fn settings_open_with_the_current_configuration() {
         let mut runtime = runtime();
         press(&mut runtime, "open-settings");
-        let form = runtime.state.settings.as_ref().expect("settings dialog state");
+        let form = runtime
+            .state
+            .settings
+            .as_ref()
+            .expect("settings dialog state");
         assert_eq!(form.instances.len(), 2);
-        assert!(runtime.find("settings-save").is_some(), "the dialog is drawn");
+        assert!(
+            runtime.find("settings-save").is_some(),
+            "the dialog is drawn"
+        );
     }
 }

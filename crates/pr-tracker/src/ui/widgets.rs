@@ -72,8 +72,19 @@ pub fn activity(label: impl Into<String>, look: &Look) -> El {
         .center_y()
         .radius(look.kit.radius.md)
         .fill(look.raised)
-        .child(Spinner::new().size(14.0).color(look.accent).build(&look.kit))
-        .child(text(label.into()).font(look.kit.ty.ui).color(look.muted).truncate().grow(1.0))
+        .child(
+            Spinner::new()
+                .size(14.0)
+                .color(look.accent)
+                .build(&look.kit),
+        )
+        .child(
+            text(label.into())
+                .font(look.kit.ty.ui)
+                .color(look.muted)
+                .truncate()
+                .grow(1.0),
+        )
 }
 
 pub enum BannerKind {
@@ -82,7 +93,13 @@ pub enum BannerKind {
 }
 
 /// A message across the pane, optionally dismissible.
-pub fn banner(key: &str, message: impl Into<String>, kind: BannerKind, dismiss: Option<fn(&mut App)>, look: &Look) -> El {
+pub fn banner(
+    key: &str,
+    message: impl Into<String>,
+    kind: BannerKind,
+    dismiss: Option<fn(&mut App)>,
+    look: &Look,
+) -> El {
     let ink = match kind {
         BannerKind::Error => look.red,
         BannerKind::Notice => look.accent,
@@ -97,7 +114,14 @@ pub fn banner(key: &str, message: impl Into<String>, kind: BannerKind, dismiss: 
         .radius(look.kit.radius.md)
         .fill(ink.alpha(0.1))
         .border(1.0, ink.alpha(0.35))
-        .child(text(message.into()).font(look.kit.ty.ui).color(look.text).wrap().selectable(true).grow(1.0));
+        .child(
+            text(message.into())
+                .font(look.kit.ty.ui)
+                .color(look.text)
+                .wrap()
+                .selectable(true)
+                .grow(1.0),
+        );
     if let Some(dismiss) = dismiss {
         banner = banner.child(
             IconButton::new(look.kit.glyph.close)
@@ -113,12 +137,21 @@ pub fn banner(key: &str, message: impl Into<String>, kind: BannerKind, dismiss: 
 
 /// A small uppercase caption above a section.
 pub fn eyebrow(label: impl Into<String>, look: &Look) -> El {
-    text(label.into().to_uppercase()).font(TextStyle { tracking: 0.6, ..look.kit.ty.small_medium }).color(look.muted)
+    text(label.into().to_uppercase())
+        .font(TextStyle {
+            tracking: 0.6,
+            ..look.kit.ty.small_medium
+        })
+        .color(look.muted)
 }
 
 /// A titled block in the inspector.
 pub fn section(title: impl Into<String>, look: &Look) -> El {
-    col().w_full().gap(8.0).pt(14.0).child(text(title.into()).font(look.kit.ty.ui_medium).color(look.text))
+    col().w_full().gap(8.0).pt(14.0).child(
+        text(title.into())
+            .font(look.kit.ty.ui_medium)
+            .color(look.text),
+    )
 }
 
 /// A one-pixel horizontal rule.
@@ -140,5 +173,9 @@ pub fn avatar(name: &str, look: &Look) -> El {
         .center()
         .fill(look.accent.alpha(0.16))
         .border(1.0, look.accent.alpha(0.35))
-        .child(text(initials).font(look.kit.ty.small_medium).color(look.accent))
+        .child(
+            text(initials)
+                .font(look.kit.ty.small_medium)
+                .color(look.accent),
+        )
 }

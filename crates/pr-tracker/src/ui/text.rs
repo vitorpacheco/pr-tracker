@@ -10,7 +10,9 @@ pub fn t(language: &str, message: &str) -> String {
 
 /// A short age such as "5 min. ago" or "há 3 h".
 pub fn relative_age(time: Option<DateTime<Utc>>, now: DateTime<Utc>, language: &str) -> String {
-    let Some(time) = time else { return "—".to_string() };
+    let Some(time) = time else {
+        return "—".to_string();
+    };
     let minutes = (now - time).num_minutes().max(0);
     let pt = language == "pt";
     match minutes {
@@ -62,12 +64,19 @@ mod tests {
             assert_eq!(relative_age(ago(minutes), now, "pt"), pt);
         }
         assert_eq!(relative_age(None, now, "en"), "—");
-        assert_eq!(relative_age(Some(now + Duration::minutes(9)), now, "en"), "now", "clock skew");
+        assert_eq!(
+            relative_age(Some(now + Duration::minutes(9)), now, "en"),
+            "now",
+            "clock skew"
+        );
     }
 
     #[test]
     fn status_names_are_translated_and_unknown_ones_pass_through() {
-        assert_eq!(status_label("pt", "changes_requested"), "alterações solicitadas");
+        assert_eq!(
+            status_label("pt", "changes_requested"),
+            "alterações solicitadas"
+        );
         assert_eq!(status_label("en", "changes_requested"), "changes requested");
         assert_eq!(status_label("en", "skipped"), "skipped");
     }

@@ -6,19 +6,78 @@ use std::sync::Arc;
 use chrono::{Duration, Utc};
 use pr_tracker_core::app::{Application, Hooks};
 use pr_tracker_core::config::{CommentPreset, Config, Instance, Provider};
-use pr_tracker_core::provider::{Check, CiState, Client, Comment, Item, Kind, MergeOptions, REVIEW_APPROVED, REVIEW_REQUIRED, Relation, Thread};
+use pr_tracker_core::provider::{
+    Check, CiState, Client, Comment, Item, Kind, MergeOptions, REVIEW_APPROVED, REVIEW_REQUIRED,
+    Relation, Thread,
+};
 use pr_tracker_core::toolchain::Ctx;
 use pr_tracker_core::{Error, Result, msg};
 
 const ROWS: [(&str, i64, &str, &str, CiState, Relation); 8] = [
-    ("platform/web", 482, "Adiciona autenticação via token para API interna", "mrlima", CiState::Success, Relation::REVIEW_REQUESTED),
-    ("services/auth", 317, "Refatora fluxo de renovação de sessão", "jcarvalho", CiState::Pending, Relation::REVIEW_REQUESTED),
-    ("platform/cli", 219, "Melhora cache do pipeline e reduz tempo de build", "fernandes", CiState::Success, Relation::REVIEW_REQUESTED),
-    ("ui/components", 741, "Novo componente de tabela com virtualização", "anacosta", CiState::Pending, Relation::AUTHORED),
-    ("services/payments", 603, "Corrige tratamento de falha no webhook", "dlima", CiState::Failure, Relation::ASSIGNED),
-    ("platform/cli", 518, "Adiciona comando para gerenciar worktrees", "rbarbosa", CiState::Success, Relation::REVIEW_REQUESTED),
-    ("docs", 402, "Atualiza documentação de contribuição", "cferreira", CiState::None, Relation::AUTHORED),
-    ("infra/k8s", 288, "Ajusta probes de readiness e liveness", "mrlima", CiState::Success, Relation::ASSIGNED),
+    (
+        "platform/web",
+        482,
+        "Adiciona autenticação via token para API interna",
+        "mrlima",
+        CiState::Success,
+        Relation::REVIEW_REQUESTED,
+    ),
+    (
+        "services/auth",
+        317,
+        "Refatora fluxo de renovação de sessão",
+        "jcarvalho",
+        CiState::Pending,
+        Relation::REVIEW_REQUESTED,
+    ),
+    (
+        "platform/cli",
+        219,
+        "Melhora cache do pipeline e reduz tempo de build",
+        "fernandes",
+        CiState::Success,
+        Relation::REVIEW_REQUESTED,
+    ),
+    (
+        "ui/components",
+        741,
+        "Novo componente de tabela com virtualização",
+        "anacosta",
+        CiState::Pending,
+        Relation::AUTHORED,
+    ),
+    (
+        "services/payments",
+        603,
+        "Corrige tratamento de falha no webhook",
+        "dlima",
+        CiState::Failure,
+        Relation::ASSIGNED,
+    ),
+    (
+        "platform/cli",
+        518,
+        "Adiciona comando para gerenciar worktrees",
+        "rbarbosa",
+        CiState::Success,
+        Relation::REVIEW_REQUESTED,
+    ),
+    (
+        "docs",
+        402,
+        "Atualiza documentação de contribuição",
+        "cferreira",
+        CiState::None,
+        Relation::AUTHORED,
+    ),
+    (
+        "infra/k8s",
+        288,
+        "Ajusta probes de readiness e liveness",
+        "mrlima",
+        CiState::Success,
+        Relation::ASSIGNED,
+    ),
 ];
 
 const INSTANCES: [&str; 2] = ["Work Git", "Corp Git"];
@@ -26,58 +85,88 @@ const WORKTREE: &str = "/example/worktree";
 
 pub fn config() -> Config {
     let mut cfg = Config::default();
-    let preset = |label: &str, body: &str| CommentPreset { label: label.into(), body: body.into() };
+    let preset = |label: &str, body: &str| CommentPreset {
+        label: label.into(),
+        body: body.into(),
+    };
     cfg.instances = vec![
         Instance {
             name: INSTANCES[0].into(),
             provider: Provider::GitHub,
             host: "github.com".into(),
             merge_method: "squash".into(),
-            comment_presets: vec![preset("Aprovado", "aprovado"), preset("Reprovado", "reprovado")],
+            comment_presets: vec![
+                preset("Aprovado", "aprovado"),
+                preset("Reprovado", "reprovado"),
+            ],
             ..Instance::default()
         },
-        Instance { name: INSTANCES[1].into(), provider: Provider::GitHub, host: "git.corp.example".into(), ..Instance::default() },
+        Instance {
+            name: INSTANCES[1].into(),
+            provider: Provider::GitHub,
+            host: "git.corp.example".into(),
+            ..Instance::default()
+        },
     ];
     cfg
 }
 
 fn items(instance: &Instance) -> Vec<Item> {
     let now = Utc::now();
-    let check = |name: &str, state| Check { name: name.into(), state, url: String::new() };
+    let check = |name: &str, state| Check {
+        name: name.into(),
+        state,
+        url: String::new(),
+    };
     let mut items: Vec<Item> = ROWS
         .iter()
         .enumerate()
         .filter(|(index, _)| INSTANCES[usize::from(index % 3 != 0)] == instance.name)
-        .map(|(index, &(repo, number, title, author, ci, relations))| Item {
-            kind: Kind::Pr,
-            instance: instance.name.clone(),
-            provider: instance.provider,
-            host: instance.host.clone(),
-            repo: repo.into(),
-            number,
-            title: title.into(),
-            url: "https://example.com".into(),
-            author: author.into(),
-            draft: index == 3,
-            source_branch: "feature/token-auth".into(),
-            target_branch: "main".into(),
-            behind_base: index == 0,
-            can_update_branch: index == 0,
-            created_at: Some(now - Duration::days(1)),
-            updated_at: Some(now - Duration::minutes(12 * (index as i64 + 1))),
-            additions: 328,
-            deletions: 42,
-            files: 12,
-            review: if index == 0 { REVIEW_APPROVED } else { REVIEW_REQUIRED }.into(),
-            approved_by: if index == 0 { vec!["jcarvalho".into(), "anacosta".into()] } else { Vec::new() },
-            conflicts: index == 1,
-            ci,
-            checks: vec![check("build", CiState::Success), check("test", CiState::Success), check("lint", ci)],
-            labels: vec!["enhancement".into(), "security".into()],
-            comments: index as i64 + 2,
-            relations,
-            ..Item::default()
-        })
+        .map(
+            |(index, &(repo, number, title, author, ci, relations))| Item {
+                kind: Kind::Pr,
+                instance: instance.name.clone(),
+                provider: instance.provider,
+                host: instance.host.clone(),
+                repo: repo.into(),
+                number,
+                title: title.into(),
+                url: "https://example.com".into(),
+                author: author.into(),
+                draft: index == 3,
+                source_branch: "feature/token-auth".into(),
+                target_branch: "main".into(),
+                behind_base: index == 0,
+                can_update_branch: index == 0,
+                created_at: Some(now - Duration::days(1)),
+                updated_at: Some(now - Duration::minutes(12 * (index as i64 + 1))),
+                additions: 328,
+                deletions: 42,
+                files: 12,
+                review: if index == 0 {
+                    REVIEW_APPROVED
+                } else {
+                    REVIEW_REQUIRED
+                }
+                .into(),
+                approved_by: if index == 0 {
+                    vec!["jcarvalho".into(), "anacosta".into()]
+                } else {
+                    Vec::new()
+                },
+                conflicts: index == 1,
+                ci,
+                checks: vec![
+                    check("build", CiState::Success),
+                    check("test", CiState::Success),
+                    check("lint", ci),
+                ],
+                labels: vec!["enhancement".into(), "security".into()],
+                comments: index as i64 + 2,
+                relations,
+                ..Item::default()
+            },
+        )
         .collect();
     if instance.name == INSTANCES[0] {
         items.push(Item {
@@ -161,9 +250,15 @@ impl Client for DemoClient {
 /// An application whose providers and worktrees are canned.
 pub fn application() -> Application {
     Application::new(&config(), None).with_hooks(Hooks {
-        client: Arc::new(|instance, _| Arc::new(DemoClient { instance: instance.clone() })),
+        client: Arc::new(|instance, _| {
+            Arc::new(DemoClient {
+                instance: instance.clone(),
+            })
+        }),
         resolve_clone: Arc::new(|_, _, _| None),
-        worktree_exists: Arc::new(|_, item| (item.number == ROWS[0].1).then(|| PathBuf::from(WORKTREE))),
+        worktree_exists: Arc::new(|_, item| {
+            (item.number == ROWS[0].1).then(|| PathBuf::from(WORKTREE))
+        }),
         create_worktree: Arc::new(|_, _, _, _, _, _| Err(read_only())),
         push_worktree: Arc::new(|_, _, _| Err(read_only())),
         remove_worktree: Arc::new(|_, _, _, _| Err(read_only())),
@@ -181,10 +276,24 @@ mod tests {
         let state = session.refresh(&Ctx::background()).unwrap();
         assert_eq!(state.items.len(), ROWS.len() + 1);
         assert_eq!(state.worktrees.len(), 1);
-        let key = state.items.iter().find(|item| item.number == 482).unwrap().key();
-        assert!(session.detail(&Ctx::background(), &key).unwrap().body.contains("Bearer token"));
+        let key = state
+            .items
+            .iter()
+            .find(|item| item.number == 482)
+            .unwrap()
+            .key();
+        assert!(
+            session
+                .detail(&Ctx::background(), &key)
+                .unwrap()
+                .body
+                .contains("Bearer token")
+        );
         let out = session.execute(&Ctx::background(), &key, Command::new(Action::Approve));
-        assert_eq!(out.error.map(|err| err.text("en")), Some("Demo: this action does not change data.".to_string()));
+        assert_eq!(
+            out.error.map(|err| err.text("en")),
+            Some("Demo: this action does not change data.".to_string())
+        );
         session.close();
     }
 }

@@ -41,7 +41,8 @@ impl SnapshotStore for cache::Store {
 type ClientFn = dyn Fn(&Instance, &[Repo]) -> Arc<dyn Client> + Send + Sync;
 type ResolveCloneFn = dyn Fn(&Ctx, &Config, &Item) -> Option<(PathBuf, String)> + Send + Sync;
 type WorktreeExistsFn = dyn Fn(&Config, &Item) -> Option<PathBuf> + Send + Sync;
-type CreateWorktreeFn = dyn Fn(&Ctx, &Config, &dyn Client, &Item, &Path, &str) -> Result<PathBuf> + Send + Sync;
+type CreateWorktreeFn =
+    dyn Fn(&Ctx, &Config, &dyn Client, &Item, &Path, &str) -> Result<PathBuf> + Send + Sync;
 type PushWorktreeFn = dyn Fn(&Ctx, &Path, &Item) -> Result<()> + Send + Sync;
 type RemoveWorktreeFn = dyn Fn(&Ctx, &Config, &Item, bool) -> Result<()> + Send + Sync;
 
@@ -107,7 +108,11 @@ pub struct Snapshot {
 
 impl Application {
     pub fn new(cfg: &Config, store: Option<Arc<dyn SnapshotStore>>) -> Self {
-        Application { cfg: cfg.clone(), store, hooks: Hooks::default() }
+        Application {
+            cfg: cfg.clone(),
+            store,
+            hooks: Hooks::default(),
+        }
     }
 
     pub fn with_hooks(mut self, hooks: Hooks) -> Self {
@@ -134,9 +139,16 @@ impl Application {
     /// Usable snapshots come back even when another instance's cache fails.
     pub fn load(&self) -> (Cached, Option<Error>) {
         let mut cached = Cached::default();
-        let Some(store) = &self.store else { return (cached, None) };
+        let Some(store) = &self.store else {
+            return (cached, None);
+        };
         let mut errors = Vec::new();
-        for instance in self.cfg.instances.iter().filter(|instance| !instance.disabled) {
+        for instance in self
+            .cfg
+            .instances
+            .iter()
+            .filter(|instance| !instance.disabled)
+        {
             let snapshot = match store.load(instance) {
                 Ok(snapshot) => snapshot,
                 Err(err) => {
@@ -144,7 +156,9 @@ impl Application {
                     continue;
                 }
             };
-            let Some(synced_at) = snapshot.synced_at else { continue };
+            let Some(synced_at) = snapshot.synced_at else {
+                continue;
+            };
             cached.items.insert(instance.name.clone(), snapshot.items);
             if cached.synced_at.is_none_or(|latest| synced_at > latest) {
                 cached.synced_at = Some(synced_at);
@@ -158,7 +172,12 @@ impl Application {
         let ctx = ctx.with_paths(&self.cfg.tool_paths);
         let result = Mutex::new(RefreshResult::default());
         std::thread::scope(|scope| {
-            for instance in self.cfg.instances.iter().filter(|instance| !instance.disabled) {
+            for instance in self
+                .cfg
+                .instances
+                .iter()
+                .filter(|instance| !instance.disabled)
+            {
                 let client = self.client(instance);
                 let (ctx, result) = (&ctx, &result);
                 scope.spawn(move || {
@@ -170,12 +189,16 @@ impl Application {
                             cache_error = store.replace(instance, items, Utc::now()).err();
                         }
                         for item in items {
-                            if let Some((path, _)) = (self.hooks.resolve_clone)(ctx, &self.cfg, item) {
+                            if let Some((path, _)) =
+                                (self.hooks.resolve_clone)(ctx, &self.cfg, item)
+                            {
                                 clones.insert(item.key(), path);
                             }
                         }
                     }
-                    let mut result = result.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let mut result = result
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
                     match listed {
                         Err(err) => {
                             result.errors.insert(instance.name.clone(), err);
@@ -191,7 +214,9 @@ impl Application {
                 });
             }
         });
-        result.into_inner().unwrap_or_else(|poisoned| poisoned.into_inner())
+        result
+            .into_inner()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Preserves stale data on remote failure and drops removed or disabled
@@ -199,10 +224,21 @@ impl Application {
     pub fn reconcile(&self, previous: &Snapshot, result: &RefreshResult) -> Snapshot {
         let mut next = Snapshot::default();
         let mut cache_errors = Vec::new();
-        for instance in self.cfg.instances.iter().filter(|instance| !instance.disabled) {
+        for instance in self
+            .cfg
+            .instances
+            .iter()
+            .filter(|instance| !instance.disabled)
+        {
             match result.items.get(&instance.name) {
                 Some(items) => next.items.extend(items.iter().cloned()),
-                None => next.items.extend(previous.items.iter().filter(|item| item.instance == instance.name).cloned()),
+                None => next.items.extend(
+                    previous
+                        .items
+                        .iter()
+                        .filter(|item| item.instance == instance.name)
+                        .cloned(),
+                ),
             }
             if let Some(err) = result.errors.get(&instance.name) {
                 next.errors.insert(instance.name.clone(), err.clone());
@@ -211,7 +247,8 @@ impl Application {
                 cache_errors.push(err.clone());
             }
         }
-        next.items.sort_by_key(|item| std::cmp::Reverse(item.updated_at));
+        next.items
+            .sort_by_key(|item| std::cmp::Reverse(item.updated_at));
         for item in &next.items {
             let key = item.key();
             if let Some(path) = result.clones.get(&key) {
@@ -251,8 +288,13 @@ pub(crate) mod tests {
     }
 
     impl FakeClient {
-        pub fn listing(list: impl Fn(&Ctx) -> Result<Vec<Item>> + Send + Sync + 'static) -> Arc<FakeClient> {
-            Arc::new(FakeClient { list: Some(Box::new(list)), ..FakeClient::default() })
+        pub fn listing(
+            list: impl Fn(&Ctx) -> Result<Vec<Item>> + Send + Sync + 'static,
+        ) -> Arc<FakeClient> {
+            Arc::new(FakeClient {
+                list: Some(Box::new(list)),
+                ..FakeClient::default()
+            })
         }
 
         fn record(&self, call: impl Into<String>) -> Result<()> {
@@ -280,7 +322,10 @@ pub(crate) mod tests {
         }
         fn thread(&self, _: &Ctx, _: &Item) -> Result<Thread> {
             self.record("detail")?;
-            Ok(Thread { body: "<details>raw markdown</details>".into(), comments: Vec::new() })
+            Ok(Thread {
+                body: "<details>raw markdown</details>".into(),
+                comments: Vec::new(),
+            })
         }
         fn add_comment(&self, _: &Ctx, _: &Item, body: &str) -> Result<()> {
             *self.body.lock().unwrap() = body.to_string();
@@ -314,10 +359,15 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn instance(name: &str) -> Instance {
-        Instance { name: name.into(), ..Instance::default() }
+        Instance {
+            name: name.into(),
+            ..Instance::default()
+        }
     }
 
-    pub(crate) fn hooks_with(client: impl Fn(&Instance) -> Arc<dyn Client> + Send + Sync + 'static) -> Hooks {
+    pub(crate) fn hooks_with(
+        client: impl Fn(&Instance) -> Arc<dyn Client> + Send + Sync + 'static,
+    ) -> Hooks {
         Hooks {
             client: Arc::new(move |instance, _| client(instance)),
             resolve_clone: Arc::new(|_, _, _| None),
@@ -327,7 +377,11 @@ pub(crate) mod tests {
     }
 
     fn item(instance: &str, number: i64) -> Item {
-        Item { instance: instance.into(), number, ..Item::default() }
+        Item {
+            instance: instance.into(),
+            number,
+            ..Item::default()
+        }
     }
 
     struct FailingStore;
@@ -344,15 +398,31 @@ pub(crate) mod tests {
     fn load_and_refresh_preserve_failed_instance() {
         let mut cfg = Config::default();
         cfg.instances = vec![
-            Instance { name: "offline".into(), provider: Provider::GitHub, host: "github.com".into(), ..Instance::default() },
-            Instance { name: "online".into(), provider: Provider::GitLab, host: "gitlab.com".into(), ..Instance::default() },
-            Instance { name: "disabled".into(), disabled: true, ..Instance::default() },
+            Instance {
+                name: "offline".into(),
+                provider: Provider::GitHub,
+                host: "github.com".into(),
+                ..Instance::default()
+            },
+            Instance {
+                name: "online".into(),
+                provider: Provider::GitLab,
+                host: "gitlab.com".into(),
+                ..Instance::default()
+            },
+            Instance {
+                name: "disabled".into(),
+                disabled: true,
+                ..Instance::default()
+            },
         ];
         let dir = tempfile::tempdir().unwrap();
         let store = Arc::new(cache::Store::open(&dir.path().join("cache.db")).unwrap());
         let synced_at = Utc.with_ymd_and_hms(2026, 9, 1, 0, 0, 0).unwrap();
         for instance in &cfg.instances {
-            store.replace(instance, &[item(&instance.name, 1)], synced_at).unwrap();
+            store
+                .replace(instance, &[item(&instance.name, 1)], synced_at)
+                .unwrap();
         }
         let mut hooks = hooks_with(move |instance| {
             assert!(!instance.disabled, "disabled provider constructed");
@@ -361,11 +431,17 @@ pub(crate) mod tests {
                 if name == "offline" {
                     return Err(Error::external("offline"));
                 }
-                Ok(vec![Item { updated_at: Some(synced_at), ..item(&name, 2) }])
+                Ok(vec![Item {
+                    updated_at: Some(synced_at),
+                    ..item(&name, 2)
+                }])
             })
         });
         hooks.resolve_clone = Arc::new(|_, _, item| {
-            assert_ne!(item.instance, "offline", "resolved clone for incomplete provider result");
+            assert_ne!(
+                item.instance, "offline",
+                "resolved clone for incomplete provider result"
+            );
             Some((PathBuf::from("/clone"), "origin".into()))
         });
         let app = Application::new(&cfg, Some(store.clone())).with_hooks(hooks);
@@ -373,18 +449,43 @@ pub(crate) mod tests {
         let (loaded, err) = app.load();
         assert!(err.is_none());
         assert_eq!((loaded.items.len(), loaded.synced_at), (2, Some(synced_at)));
-        let mut previous = app.reconcile(&Snapshot::default(), &RefreshResult { items: loaded.items.clone(), ..RefreshResult::default() });
+        let mut previous = app.reconcile(
+            &Snapshot::default(),
+            &RefreshResult {
+                items: loaded.items.clone(),
+                ..RefreshResult::default()
+            },
+        );
         let stale_key = loaded.items["offline"][0].key();
-        previous.clones.insert(stale_key.clone(), PathBuf::from("/old-clone"));
+        previous
+            .clones
+            .insert(stale_key.clone(), PathBuf::from("/old-clone"));
 
         let next = app.reconcile(&previous, &app.refresh(&Ctx::background()));
-        assert_eq!(next.items.iter().map(|item| item.number).collect::<Vec<_>>(), [2, 1]);
+        assert_eq!(
+            next.items
+                .iter()
+                .map(|item| item.number)
+                .collect::<Vec<_>>(),
+            [2, 1]
+        );
         assert!(next.errors.contains_key("offline"));
         assert_eq!(next.clones[&stale_key], PathBuf::from("/old-clone"));
         let persisted = store.load(&cfg.instances[0]).unwrap();
-        assert_eq!((persisted.items[0].number, persisted.synced_at), (1, Some(synced_at)), "failed refresh replaced cache");
+        assert_eq!(
+            (persisted.items[0].number, persisted.synced_at),
+            (1, Some(synced_at)),
+            "failed refresh replaced cache"
+        );
         let persisted = store.load(&cfg.instances[1]).unwrap();
-        assert_eq!(persisted.items.iter().map(|item| item.number).collect::<Vec<_>>(), [2]);
+        assert_eq!(
+            persisted
+                .items
+                .iter()
+                .map(|item| item.number)
+                .collect::<Vec<_>>(),
+            [2]
+        );
     }
 
     #[test]
@@ -409,7 +510,9 @@ pub(crate) mod tests {
         let ctx = Ctx::background().with_cancel(cancel.clone());
         let worker = std::thread::spawn(move || app.refresh(&ctx));
         for _ in 0..2 {
-            starts.recv_timeout(Duration::from_secs(5)).expect("instances did not start concurrently");
+            starts
+                .recv_timeout(Duration::from_secs(5))
+                .expect("instances did not start concurrently");
         }
         cancel.store(true, Ordering::SeqCst);
         let result = worker.join().unwrap();
@@ -422,10 +525,18 @@ pub(crate) mod tests {
     fn refresh_cache_write_failure_keeps_fresh_items() {
         let mut cfg = Config::default();
         cfg.instances = vec![instance("one")];
-        let app = Application::new(&cfg, Some(Arc::new(FailingStore)))
-            .with_hooks(hooks_with(|_| FakeClient::listing(|_| Ok(vec![item("one", 2)]))));
+        let app =
+            Application::new(&cfg, Some(Arc::new(FailingStore))).with_hooks(hooks_with(|_| {
+                FakeClient::listing(|_| Ok(vec![item("one", 2)]))
+            }));
         let next = app.reconcile(&Snapshot::default(), &app.refresh(&Ctx::background()));
-        assert_eq!(next.items.iter().map(|item| item.number).collect::<Vec<_>>(), [2]);
+        assert_eq!(
+            next.items
+                .iter()
+                .map(|item| item.number)
+                .collect::<Vec<_>>(),
+            [2]
+        );
         assert!(next.errors.is_empty());
         assert!(next.cache_error.is_some());
     }
@@ -433,21 +544,39 @@ pub(crate) mod tests {
     #[test]
     fn reconcile_clears_empty_disabled_and_removed_instances() {
         let mut cfg = Config::default();
-        cfg.instances = vec![instance("empty"), Instance { disabled: true, ..instance("disabled") }, instance("failed")];
+        cfg.instances = vec![
+            instance("empty"),
+            Instance {
+                disabled: true,
+                ..instance("disabled")
+            },
+            instance("failed"),
+        ];
         let app = Application::new(&cfg, None);
         let mut previous = Snapshot::default();
         for name in ["empty", "disabled", "removed", "failed"] {
             let item = item(name, 1);
-            previous.clones.insert(item.key(), PathBuf::from(format!("/{name}")));
+            previous
+                .clones
+                .insert(item.key(), PathBuf::from(format!("/{name}")));
             previous.items.push(item);
         }
         let result = RefreshResult {
-            items: HashMap::from([("empty".to_string(), Vec::new()), ("disabled".to_string(), vec![item("disabled", 0)])]),
+            items: HashMap::from([
+                ("empty".to_string(), Vec::new()),
+                ("disabled".to_string(), vec![item("disabled", 0)]),
+            ]),
             errors: HashMap::from([("failed".to_string(), Error::external("offline"))]),
             ..RefreshResult::default()
         };
         let next = app.reconcile(&previous, &result);
-        assert_eq!(next.items.iter().map(|item| item.instance.as_str()).collect::<Vec<_>>(), ["failed"]);
+        assert_eq!(
+            next.items
+                .iter()
+                .map(|item| item.instance.as_str())
+                .collect::<Vec<_>>(),
+            ["failed"]
+        );
         assert_eq!(next.clones.len(), 1);
     }
 
@@ -455,12 +584,20 @@ pub(crate) mod tests {
     fn application_captures_configuration() {
         let mut cfg = Config::default();
         cfg.instances = vec![instance("original")];
-        cfg.repos = vec![Repo { instance: "original".into(), name: "org/repo".into(), track_all: true, ..Repo::default() }];
+        cfg.repos = vec![Repo {
+            instance: "original".into(),
+            name: "org/repo".into(),
+            track_all: true,
+            ..Repo::default()
+        }];
         let calls = Arc::new(AtomicUsize::new(0));
         let seen = calls.clone();
         let hooks = Hooks {
             client: Arc::new(move |instance, repos| {
-                assert!(instance.name == "original" && repos[0].track_all, "configuration changed");
+                assert!(
+                    instance.name == "original" && repos[0].track_all,
+                    "configuration changed"
+                );
                 let seen = seen.clone();
                 FakeClient::listing(move |_| {
                     seen.fetch_add(1, Ordering::SeqCst);
@@ -476,7 +613,10 @@ pub(crate) mod tests {
         let (loaded, err) = app.load();
         assert!(err.is_none() && loaded.items.is_empty());
         let result = app.refresh(&Ctx::background());
-        assert!(result.items.contains_key("original"), "missing empty successful result");
+        assert!(
+            result.items.contains_key("original"),
+            "missing empty successful result"
+        );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
@@ -486,7 +626,10 @@ pub(crate) mod tests {
             match instance.name.as_str() {
                 "broken" => Err(Error::external("invalid cached payload")),
                 "missing" => Ok(cache::Snapshot::default()),
-                _ => Ok(cache::Snapshot { items: Vec::new(), synced_at: Utc.timestamp_opt(100, 0).single() }),
+                _ => Ok(cache::Snapshot {
+                    items: Vec::new(),
+                    synced_at: Utc.timestamp_opt(100, 0).single(),
+                }),
             }
         }
         fn replace(&self, _: &Instance, _: &[Item], _: DateTime<Utc>) -> Result<()> {
@@ -502,7 +645,10 @@ pub(crate) mod tests {
         let (loaded, err) = app.load();
         assert!(err.is_some(), "cache read failure was hidden");
         assert_eq!(loaded.items.len(), 1);
-        assert!(loaded.items.contains_key("empty"), "successful empty snapshot was discarded");
+        assert!(
+            loaded.items.contains_key("empty"),
+            "successful empty snapshot was discarded"
+        );
         assert_eq!(loaded.synced_at, Utc.timestamp_opt(100, 0).single());
     }
 }

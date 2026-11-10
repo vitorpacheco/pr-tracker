@@ -96,7 +96,9 @@ impl Error {
             return true;
         }
         match self {
-            Error::Message { args, .. } => args.iter().any(|arg| matches!(arg, Arg::Err(inner) if inner.contains(target))),
+            Error::Message { args, .. } => args
+                .iter()
+                .any(|arg| matches!(arg, Arg::Err(inner) if inner.contains(target))),
             Error::Joined(errors) => errors.iter().any(|err| err.contains(target)),
             _ => false,
         }
@@ -107,7 +109,10 @@ impl Error {
     pub fn is(&self, format: &str) -> bool {
         match self {
             Error::Message { format: own, args } => {
-                own == format || args.iter().any(|arg| matches!(arg, Arg::Err(inner) if inner.is(format)))
+                own == format
+                    || args
+                        .iter()
+                        .any(|arg| matches!(arg, Arg::Err(inner) if inner.is(format)))
             }
             Error::Joined(errors) => errors.iter().any(|err| err.is(format)),
             _ => false,
@@ -118,7 +123,9 @@ impl Error {
     pub fn is_missing_tool(&self) -> bool {
         match self {
             Error::MissingTool(_) => true,
-            Error::Message { args, .. } => args.iter().any(|arg| matches!(arg, Arg::Err(inner) if inner.is_missing_tool())),
+            Error::Message { args, .. } => args
+                .iter()
+                .any(|arg| matches!(arg, Arg::Err(inner) if inner.is_missing_tool())),
             Error::Joined(errors) => errors.iter().any(Error::is_missing_tool),
             _ => false,
         }
@@ -141,11 +148,18 @@ impl Error {
             Error::External(text) => text.clone(),
             Error::MissingTool(tool) => sprintf(
                 &i18n::text(language, "%s não encontrado no PATH. Instale: %s"),
-                &[Rendered::Str(tool.clone()), Rendered::Str(i18n::text(language, crate::provider::install_hint(tool)))],
+                &[
+                    Rendered::Str(tool.clone()),
+                    Rendered::Str(i18n::text(language, crate::provider::install_hint(tool))),
+                ],
             ),
             Error::Canceled => i18n::text(language, "operação cancelada"),
             Error::DeadlineExceeded => i18n::text(language, "tempo limite excedido"),
-            Error::Joined(errors) => errors.iter().map(|err| err.text(language)).collect::<Vec<_>>().join("\n"),
+            Error::Joined(errors) => errors
+                .iter()
+                .map(|err| err.text(language))
+                .collect::<Vec<_>>()
+                .join("\n"),
         }
     }
 }

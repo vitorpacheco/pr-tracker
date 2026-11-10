@@ -21,12 +21,29 @@ pub fn row_key(key: &str) -> String {
 /// The views of each kind: label (a catalog key) and relation.
 pub fn tabs(kind: Kind) -> [(&'static str, Relation); 4] {
     match kind {
-        Kind::Pr => [("Todos", Relation::NONE), ("Revisar", Relation::REVIEW_REQUESTED), ("Meus", Relation::AUTHORED), ("Atribuídos", Relation::ASSIGNED)],
-        Kind::Issue => [("Todas", Relation::NONE), ("Atribuídas", Relation::ASSIGNED), ("Criadas", Relation::AUTHORED), ("Menções", Relation::MENTIONED)],
+        Kind::Pr => [
+            ("Todos", Relation::NONE),
+            ("Revisar", Relation::REVIEW_REQUESTED),
+            ("Meus", Relation::AUTHORED),
+            ("Atribuídos", Relation::ASSIGNED),
+        ],
+        Kind::Issue => [
+            ("Todas", Relation::NONE),
+            ("Atribuídas", Relation::ASSIGNED),
+            ("Criadas", Relation::AUTHORED),
+            ("Menções", Relation::MENTIONED),
+        ],
     }
 }
 
-pub fn tab(key: String, label: String, count: Option<usize>, active: bool, look: &Look, press: impl Fn(&mut App) + 'static) -> El {
+pub fn tab(
+    key: String,
+    label: String,
+    count: Option<usize>,
+    active: bool,
+    look: &Look,
+    press: impl Fn(&mut App) + 'static,
+) -> El {
     let ink = if active { look.text } else { look.muted };
     let mut tab = row()
         .key(key)
@@ -40,12 +57,20 @@ pub fn tab(key: String, label: String, count: Option<usize>, active: bool, look:
         .gap(6.0)
         .center_y()
         .radius(look.kit.radius.md)
-        .fill(if active { look.selection } else { look.panel.alpha(0.0) })
+        .fill(if active {
+            look.selection
+        } else {
+            look.panel.alpha(0.0)
+        })
         .hover(look.kit.c.hover)
         .on_press(press)
         .child(text(label).font(look.kit.ty.ui_medium).color(ink));
     if let Some(count) = count {
-        tab = tab.child(text(count.to_string()).font(look.kit.ty.small).color(look.muted));
+        tab = tab.child(
+            text(count.to_string())
+                .font(look.kit.ty.small)
+                .color(look.muted),
+        );
     }
     tab
 }
@@ -55,8 +80,22 @@ fn toolbar(app: &App, look: &Look) -> Toolbar {
     let kinds = row()
         .key("kind-tabs")
         .gap(2.0)
-        .child(tab("kind-prs".into(), "PRs".into(), None, app.kind == Kind::Pr, look, |app| app.switch_kind(Kind::Pr)))
-        .child(tab("kind-issues".into(), "Issues".into(), None, app.kind == Kind::Issue, look, |app| app.switch_kind(Kind::Issue)));
+        .child(tab(
+            "kind-prs".into(),
+            "PRs".into(),
+            None,
+            app.kind == Kind::Pr,
+            look,
+            |app| app.switch_kind(Kind::Pr),
+        ))
+        .child(tab(
+            "kind-issues".into(),
+            "Issues".into(),
+            None,
+            app.kind == Kind::Issue,
+            look,
+            |app| app.switch_kind(Kind::Issue),
+        ));
     let search = TextInput::new(&app.query)
         .placeholder(app.tr("Buscar título, repo, autor…"))
         .label(app.tr("Buscar itens"))
@@ -69,7 +108,11 @@ fn toolbar(app: &App, look: &Look) -> Toolbar {
         .key("search");
     let busy = app.loading || app.refreshing;
     let refresh = if busy {
-        row().key("refreshing").size(28.0, 28.0).center().child(Spinner::new().size(14.0).color(look.accent).build(k))
+        row()
+            .key("refreshing")
+            .size(28.0, 28.0)
+            .center()
+            .child(Spinner::new().size(14.0).color(look.accent).build(k))
     } else {
         IconButton::new(&widgets::REFRESH)
             .variant(IconButtonVariant::GhostMuted)
@@ -101,10 +144,15 @@ fn toolbar(app: &App, look: &Look) -> Toolbar {
         .on_press(|app: &mut App| app.inspector.toggle())
         .build(k)
         .key("toggle-inspector");
-    Toolbar::new()
-        .leading(kinds)
-        .center(search)
-        .trailing(row().gap(2.0).center_y().child(commands).child(refresh).child(settings).child(inspector))
+    Toolbar::new().leading(kinds).center(search).trailing(
+        row()
+            .gap(2.0)
+            .center_y()
+            .child(commands)
+            .child(refresh)
+            .child(settings)
+            .child(inspector),
+    )
 }
 
 fn sidebar(app: &App, look: &Look) -> El {
@@ -121,16 +169,30 @@ fn sidebar(app: &App, look: &Look) -> El {
     let mut instances = SidebarSection::new(app.tr("INSTÂNCIAS")).key("instances");
     for instance in app.instances() {
         let name = instance.name.clone();
-        let total = app.rows.iter().filter(|row| row.item.instance == name).count();
-        let mut entry = SidebarRow::new(name.clone()).detail(total.to_string()).selected(app.instance == name);
+        let total = app
+            .rows
+            .iter()
+            .filter(|row| row.item.instance == name)
+            .count();
+        let mut entry = SidebarRow::new(name.clone())
+            .detail(total.to_string())
+            .selected(app.instance == name);
         if app.errors.contains_key(&name) {
             entry = entry.trailing(pill("!", look.red, look));
         }
         let chosen = name.clone();
-        instances = instances.row(entry.on_select(move |app: &mut App, _| app.set_instance(&chosen)).build(k).key(format!("instance-{name}")));
+        instances = instances.row(
+            entry
+                .on_select(move |app: &mut App, _| app.set_instance(&chosen))
+                .build(k)
+                .key(format!("instance-{name}")),
+        );
     }
     instances = instances.row(
-        SidebarRow::new(app.tr("＋ Adicionar instância")).on_select(|app: &mut App, _| app.open_settings()).build(k).key("instance-add"),
+        SidebarRow::new(app.tr("＋ Adicionar instância"))
+            .on_select(|app: &mut App, _| app.open_settings())
+            .build(k)
+            .key("instance-add"),
     );
     let mut views = SidebarSection::new(app.tr("VISÕES")).key("views");
     for (label, relation) in tabs(app.kind) {
@@ -144,25 +206,48 @@ fn sidebar(app: &App, look: &Look) -> El {
         );
     }
     let synced = match app.synced_at {
-        Some(at) => format!("{}{}", app.tr("Sincronizado "), relative_age(Some(at), Utc::now(), app.language)),
+        Some(at) => format!(
+            "{}{}",
+            app.tr("Sincronizado "),
+            relative_age(Some(at), Utc::now(), app.language)
+        ),
         None => app.tr("Aguardando sincronização"),
     };
-    let source = if app.demo { app.tr("Demonstração · dados fictícios") } else { app.tr("Cache local · SQLite") };
+    let source = if app.demo {
+        app.tr("Demonstração · dados fictícios")
+    } else {
+        app.tr("Cache local · SQLite")
+    };
     let footer = col()
         .key("sync-status")
         .w_full()
         .px(8.0)
         .py(8.0)
         .gap(2.0)
-        .child(text(source).font(k.ty.small_medium).color(look.muted).truncate())
+        .child(
+            text(source)
+                .font(k.ty.small_medium)
+                .color(look.muted)
+                .truncate(),
+        )
         .child(text(synced).font(k.ty.small).color(look.muted).truncate());
-    Sidebar::new().label(app.tr("Menu lateral")).header(all).section(instances).section(views).footer(footer).build(k)
+    Sidebar::new()
+        .label(app.tr("Menu lateral"))
+        .header(all)
+        .section(instances)
+        .section(views)
+        .footer(footer)
+        .build(k)
 }
 
 fn notifications(app: &App, look: &Look) -> Vec<El> {
     let mut out = Vec::new();
     if app.loading || app.refreshing {
-        let label = if app.loading { "Carregando sua fila" } else { "Sincronizando itens…" };
+        let label = if app.loading {
+            "Carregando sua fila"
+        } else {
+            "Sincronizando itens…"
+        };
         out.push(activity(app.tr(label), look).key("activity-sync"));
     }
     for (name, label) in &app.pending {
@@ -172,23 +257,62 @@ fn notifications(app: &App, look: &Look) -> Vec<El> {
         out.push(activity(label.clone(), look).key(format!("activity-{key}")));
     }
     if !app.theme_error.is_empty() {
-        out.push(banner("banner-theme", app.theme_error.clone(), BannerKind::Error, None, look));
+        out.push(banner(
+            "banner-theme",
+            app.theme_error.clone(),
+            BannerKind::Error,
+            None,
+            look,
+        ));
     }
     if !app.error.is_empty() && app.error != app.theme_error {
-        out.push(banner("banner-error", app.error.clone(), BannerKind::Error, Some(|app| app.error.clear()), look));
+        out.push(banner(
+            "banner-error",
+            app.error.clone(),
+            BannerKind::Error,
+            Some(|app| app.error.clear()),
+            look,
+        ));
     }
     if !app.notice.is_empty() {
-        out.push(banner("banner-notice", app.notice.clone(), BannerKind::Notice, Some(|app| app.notice.clear()), look));
+        out.push(banner(
+            "banner-notice",
+            app.notice.clone(),
+            BannerKind::Notice,
+            Some(|app| app.notice.clear()),
+            look,
+        ));
     }
     if app.demo {
-        out.push(banner("banner-demo", app.tr("Demonstração visual — nenhuma ação altera dados."), BannerKind::Notice, None, look));
+        out.push(banner(
+            "banner-demo",
+            app.tr("Demonstração visual — nenhuma ação altera dados."),
+            BannerKind::Notice,
+            None,
+            look,
+        ));
     }
     if !app.cache_error.is_empty() {
-        out.push(banner("banner-cache", format!("{} {}", app.tr("Cache indisponível:"), app.cache_error), BannerKind::Error, None, look));
+        out.push(banner(
+            "banner-cache",
+            format!("{} {}", app.tr("Cache indisponível:"), app.cache_error),
+            BannerKind::Error,
+            None,
+            look,
+        ));
     }
     for (name, message) in &app.errors {
-        let text = format!("{name}: {message} {}", app.tr("· exibindo dados anteriores."));
-        out.push(banner(&format!("banner-instance-{name}"), text, BannerKind::Error, None, look));
+        let text = format!(
+            "{name}: {message} {}",
+            app.tr("· exibindo dados anteriores.")
+        );
+        out.push(banner(
+            &format!("banner-instance-{name}"),
+            text,
+            BannerKind::Error,
+            None,
+            look,
+        ));
     }
     out
 }
@@ -207,15 +331,29 @@ fn item_row(app: &App, row_data: &Row, look: &Look) -> El {
     let k = &look.kit;
     let item = &row_data.item;
     let selected = app.selected == row_data.key;
-    let glyph = if item.is_issue() { &widgets::ISSUE } else { &widgets::BRANCH };
-    let mut line = row()
-        .gap(6.0)
-        .center_y()
-        .child(tinted(glyph, 14.0, if item.draft { look.muted } else { look.accent }));
+    let glyph = if item.is_issue() {
+        &widgets::ISSUE
+    } else {
+        &widgets::BRANCH
+    };
+    let mut line = row().gap(6.0).center_y().child(tinted(
+        glyph,
+        14.0,
+        if item.draft { look.muted } else { look.accent },
+    ));
     if app.kind == Kind::Issue {
-        line = line.child(text(item.repo.clone()).font(k.ty.small).color(look.muted).truncate());
+        line = line.child(
+            text(item.repo.clone())
+                .font(k.ty.small)
+                .color(look.muted)
+                .truncate(),
+        );
     }
-    line = line.child(text(row_data.reference.clone()).font(k.ty.small_medium).color(look.muted));
+    line = line.child(
+        text(row_data.reference.clone())
+            .font(k.ty.small_medium)
+            .color(look.muted),
+    );
     if app.busy.contains_key(&row_data.key) {
         line = line.child(Spinner::new().size(12.0).color(look.accent).build(k));
     }
@@ -223,41 +361,73 @@ fn item_row(app: &App, row_data: &Row, look: &Look) -> El {
         line = line.child(pill(app.tr("Rascunho"), look.muted, look));
     }
     if item.conflicts {
-        line = line.child(pill(app.tr("Conflitos"), look.red, look).help(app.tr("Conflitos precisam ser resolvidos antes do merge.")));
+        line = line.child(
+            pill(app.tr("Conflitos"), look.red, look)
+                .help(app.tr("Conflitos precisam ser resolvidos antes do merge.")),
+        );
     }
-    let title_ink = if selected { look.selection_text } else { look.text };
-    let main = col()
-        .grow(1.0)
-        .min_w(0.0)
-        .gap(3.0)
-        .child(line)
-        .child(text(item.title.clone()).font(k.ty.ui_medium).color(title_ink).truncate());
+    let title_ink = if selected {
+        look.selection_text
+    } else {
+        look.text
+    };
+    let main = col().grow(1.0).min_w(0.0).gap(3.0).child(line).child(
+        text(item.title.clone())
+            .font(k.ty.ui_medium)
+            .color(title_ink)
+            .truncate(),
+    );
     let author = row()
         .w(140.0)
         .gap(8.0)
         .center_y()
         .child(avatar(&item.author, look))
-        .child(text(item.author.clone()).font(k.ty.ui).color(look.muted).truncate().grow(1.0));
+        .child(
+            text(item.author.clone())
+                .font(k.ty.ui)
+                .color(look.muted)
+                .truncate()
+                .grow(1.0),
+        );
     let (mark, ink) = ci_mark(item.ci, look);
-    let ci_help = if item.ci == CiState::None { app.tr("Sem checks") } else { status_label(app.language, item.ci.as_str()) };
-    let ci = row().w(40.0).center().child(text(mark).font(k.ty.ui_medium).color(ink)).help(ci_help);
+    let ci_help = if item.ci == CiState::None {
+        app.tr("Sem checks")
+    } else {
+        status_label(app.language, item.ci.as_str())
+    };
+    let ci = row()
+        .w(40.0)
+        .center()
+        .child(text(mark).font(k.ty.ui_medium).color(ink))
+        .help(ci_help);
     let updated = col()
         .w(96.0)
         .items_end()
         .gap(2.0)
-        .child(text(relative_age(item.updated_at, Utc::now(), app.language)).font(k.ty.small).color(look.muted))
+        .child(
+            text(relative_age(item.updated_at, Utc::now(), app.language))
+                .font(k.ty.small)
+                .color(look.muted),
+        )
         .child(
             row()
                 .gap(4.0)
                 .center_y()
                 .child(tinted(&widgets::COMMENT, 12.0, look.muted))
-                .child(text(item.comments.to_string()).font(k.ty.small).color(look.muted)),
+                .child(
+                    text(item.comments.to_string())
+                        .font(k.ty.small)
+                        .color(look.muted),
+                ),
         );
     let key = row_data.key.clone();
     row()
         .key(row_key(&row_data.key))
         .role("row")
-        .label(format!("{} {}: {}", item.repo, row_data.reference, item.title))
+        .label(format!(
+            "{} {}: {}",
+            item.repo, row_data.reference, item.title
+        ))
         .checked(selected)
         .cursor(Cursor::Pointer)
         .w_full()
@@ -266,7 +436,11 @@ fn item_row(app: &App, row_data: &Row, look: &Look) -> El {
         .gap(12.0)
         .center_y()
         .radius(k.radius.md)
-        .fill(if selected { look.selection } else { look.panel.alpha(0.0) })
+        .fill(if selected {
+            look.selection
+        } else {
+            look.panel.alpha(0.0)
+        })
         .hover(k.c.hover)
         .on_press(move |app: &mut App| {
             if app.selected != key {
@@ -292,16 +466,38 @@ fn empty(app: &App, look: &Look) -> El {
             .gap(10.0)
             .items_center()
             .child(Spinner::new().size(20.0).color(look.accent).build(k))
-            .child(text(app.tr("Carregando sua fila")).font(k.ty.body_medium).color(look.text))
-            .child(text(app.tr("Buscando primeiro os dados do cache local.")).font(k.ty.ui).color(look.muted));
+            .child(
+                text(app.tr("Carregando sua fila"))
+                    .font(k.ty.body_medium)
+                    .color(look.text),
+            )
+            .child(
+                text(app.tr("Buscando primeiro os dados do cache local."))
+                    .font(k.ty.ui)
+                    .color(look.muted),
+            );
     }
     let any = !app.rows.is_empty();
-    let title = if app.query.text.trim().is_empty() { "Tudo em dia por aqui" } else { "Nenhum resultado" };
-    let hint = if any { "Experimente outra visão ou busca." } else { "Configure uma instância ou atualize para buscar seus PRs e issues." };
-    let action = if any {
-        Button::new(app.tr("Limpar filtros")).on_press(|app: &mut App| app.clear_filters()).build(k).key("clear-filters")
+    let title = if app.query.text.trim().is_empty() {
+        "Tudo em dia por aqui"
     } else {
-        Button::new(app.tr("Configurar instâncias")).on_press(|app: &mut App| app.open_settings()).build(k).key("configure-instances")
+        "Nenhum resultado"
+    };
+    let hint = if any {
+        "Experimente outra visão ou busca."
+    } else {
+        "Configure uma instância ou atualize para buscar seus PRs e issues."
+    };
+    let action = if any {
+        Button::new(app.tr("Limpar filtros"))
+            .on_press(|app: &mut App| app.clear_filters())
+            .build(k)
+            .key("clear-filters")
+    } else {
+        Button::new(app.tr("Configurar instâncias"))
+            .on_press(|app: &mut App| app.open_settings())
+            .build(k)
+            .key("configure-instances")
     };
     col()
         .key("list-empty")
@@ -326,14 +522,35 @@ fn list_pane(app: &App, look: &Look) -> El {
             row()
                 .gap(10.0)
                 .items_end()
-                .child(text(if app.kind == Kind::Pr { "Pull requests" } else { "Issues" }).font(k.ty.body_medium).color(look.text))
-                .child(text(visible.len().to_string()).key("visible-count").font(k.ty.ui).color(look.muted)),
+                .child(
+                    text(if app.kind == Kind::Pr {
+                        "Pull requests"
+                    } else {
+                        "Issues"
+                    })
+                    .font(k.ty.body_medium)
+                    .color(look.text),
+                )
+                .child(
+                    text(visible.len().to_string())
+                        .key("visible-count")
+                        .font(k.ty.ui)
+                        .color(look.muted),
+                ),
         )
         .child(
             text(format!(
                 "{} · {}",
-                if app.instance.is_empty() { app.tr("Todas as instâncias") } else { app.instance.clone() },
-                app.tr(if app.kind == Kind::Pr { "por repositório · mais recentes primeiro" } else { "mais recentes primeiro" })
+                if app.instance.is_empty() {
+                    app.tr("Todas as instâncias")
+                } else {
+                    app.instance.clone()
+                },
+                app.tr(if app.kind == Kind::Pr {
+                    "por repositório · mais recentes primeiro"
+                } else {
+                    "mais recentes primeiro"
+                })
             ))
             .font(k.ty.small)
             .color(look.muted),
@@ -378,9 +595,23 @@ fn list_pane(app: &App, look: &Look) -> El {
                     .pb(4.0)
                     .gap(8.0)
                     .items_end()
-                    .child(text(group.repo.to_string()).font(k.ty.ui_medium).color(look.text).truncate())
-                    .child(text(group.rows.len().to_string()).font(k.ty.small).color(look.muted))
-                    .child(text(group.instance.to_string()).font(k.ty.small).color(look.muted).truncate()),
+                    .child(
+                        text(group.repo.to_string())
+                            .font(k.ty.ui_medium)
+                            .color(look.text)
+                            .truncate(),
+                    )
+                    .child(
+                        text(group.rows.len().to_string())
+                            .font(k.ty.small)
+                            .color(look.muted),
+                    )
+                    .child(
+                        text(group.instance.to_string())
+                            .font(k.ty.small)
+                            .color(look.muted)
+                            .truncate(),
+                    ),
             );
             for row_data in group.rows {
                 rows = rows.child(item_row(app, row_data, look));
@@ -402,13 +633,26 @@ fn list_pane(app: &App, look: &Look) -> El {
         .child(kbd("k", look))
         .child(text(app.tr("navegar")).font(k.ty.small).color(look.muted))
         .child(kbd("Enter", look))
-        .child(text(app.tr("abrir")).font(k.ty.small).color(look.muted).grow(1.0))
         .child(
-            Button::new(format!("{}+K {}", if cfg!(target_os = "macos") { "⌘" } else { "Ctrl" }, app.tr("comandos")))
-                .variant(ButtonVariant::Ghost)
-                .on_press(|app: &mut App| app.toggle_palette())
-                .build(k)
-                .key("footer-palette"),
+            text(app.tr("abrir"))
+                .font(k.ty.small)
+                .color(look.muted)
+                .grow(1.0),
+        )
+        .child(
+            Button::new(format!(
+                "{}+K {}",
+                if cfg!(target_os = "macos") {
+                    "⌘"
+                } else {
+                    "Ctrl"
+                },
+                app.tr("comandos")
+            ))
+            .variant(ButtonVariant::Ghost)
+            .on_press(|app: &mut App| app.toggle_palette())
+            .build(k)
+            .key("footer-palette"),
         );
     col()
         .key("list-pane")
@@ -422,7 +666,13 @@ fn list_pane(app: &App, look: &Look) -> El {
         .children(notifications(app, look))
         .child(filters)
         .child(table_head)
-        .child(rows.scroll(ScrollSpec { stick_bottom: false }).grow(1.0).min_h(0.0))
+        .child(
+            rows.scroll(ScrollSpec {
+                stick_bottom: false,
+            })
+            .grow(1.0)
+            .min_h(0.0),
+        )
         .child(footer)
 }
 
@@ -439,7 +689,11 @@ pub fn view(app: &App, cx: &mut Cx<App>) -> El {
     let mut layer = Vec::new();
     let details = inspector::inspector(app, &look, &mut layer);
     let frame = SplitView::new(list_pane(app, &look))
-        .sidebar(&app.sidebar, |app: &mut App| &mut app.sidebar, sidebar(app, &look))
+        .sidebar(
+            &app.sidebar,
+            |app: &mut App| &mut app.sidebar,
+            sidebar(app, &look),
+        )
         .inspector(&app.inspector, |app: &mut App| &mut app.inspector, details)
         .toolbar(toolbar(app, &look))
         .titlebar_inset(cx.titlebar_inset())

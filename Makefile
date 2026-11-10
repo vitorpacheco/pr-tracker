@@ -1,17 +1,16 @@
-GO_SOURCES := $(shell git ls-files --cached --others --exclude-standard '*.go')
 BINARY  := pr-tracker
-PKG     := github.com/vitorpacheco/pr-tracker
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -s -w -X main.version=$(VERSION)
 PREFIX  ?= $(HOME)/.local
 DIST    := dist
+CARGO_AUDIT_VERSION := 0.22.2
 
-PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
-GOVULNCHECK := golang.org/x/vuln/cmd/govulncheck@latest
+# The packaged platform: the host by default, as the window links native
+# graphics libraries and is built on each platform's own runner.
+OS   ?= $(shell uname -s | tr '[:upper:]' '[:lower:]' | sed -e 's/mingw.*/windows/' -e 's/msys.*/windows/')
+ARCH ?= $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
+EXT  := $(if $(filter windows,$(OS)),.exe,)
 
-# Native desktop builds are separate from the CGO-disabled CLI release loop.
-WAILS_VERSION := v2.16.0
-DESKTOP_TAGS ?= gui,desktop,production,webkit2_41
+export PR_TRACKER_VERSION := $(VERSION)
 
 .DEFAULT_GOAL := help
 
@@ -24,120 +23,74 @@ help: ## Lista os comandos disponíveis por categoria
 ##@ Execução e desenvolvimento
 
 .PHONY: run
-run: ## Executa a interface (use ARGS="doctor" para subcomandos)
-	go run . $(ARGS)
+run: ## Abre a janela (use ARGS="doctor" para subcomandos, ARGS="--demo" para dados fictícios)
+	cargo run -p pr-tracker -- $(ARGS)
 
 .PHONY: doctor
-doctor: build ## Verifica CLIs, autenticação e configuração
-	./$(BINARY) doctor
+doctor: ## Verifica CLIs, autenticação e configuração
+	cargo run -p pr-tracker -- doctor
 
-.PHONY: desktop-run
-desktop-run: desktop-build ## Compila e executa a GUI nativa
-	./$(DIST)/pr-tracker-desktop
-
-.PHONY: desktop-dev
-desktop-dev: ## Abre preview da GUI no navegador (use ?demo=1 para dados fictícios)
-	cd desktop/frontend && npm run dev
+.PHONY: snapshot
+snapshot: ## Renderiza a janela com dados fictícios em dist/preview (sem abrir janela)
+	@mkdir -p $(DIST)/preview
+	cargo run -p pr-tracker -- --demo --snap $(DIST)/preview/window.png $(ARGS)
 
 ##@ Build e distribuição
 
 .PHONY: build
 build: ## Compila o binário ./pr-tracker
-	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) .
-
-.PHONY: desktop-build
-desktop-build: ## Compila a GUI nativa em dist/pr-tracker-desktop (Linux com WebKitGTK 4.1)
-	cd desktop/frontend && npm run build
-	go build -trimpath -tags $(DESKTOP_TAGS) -o $(DIST)/pr-tracker-desktop ./desktop
-
-.PHONY: dist
-dist: ## Compila para Linux, macOS e Windows em ./dist (binários)
-	@mkdir -p $(DIST)
-	@for p in $(PLATFORMS); do \
-		os=$${p%/*}; arch=$${p#*/}; ext=; [ $$os = windows ] && ext=.exe; \
-		out=$(DIST)/$(BINARY)-$$os-$$arch$$ext; \
-		echo "→ $$out"; \
-		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $$out . || exit 1; \
-	done
+	cargo build --release -p pr-tracker
+	cp target/release/$(BINARY)$(EXT) $(BINARY)$(EXT)
 
 .PHONY: package
-package: dist ## Empacota os binários (.tar.gz/.zip) e gera checksums.txt para release
-	@set -e; cd $(DIST); \
-	for p in $(PLATFORMS); do \
-		os=$${p%/*}; arch=$${p#*/}; ext=; [ $$os = windows ] && ext=.exe; \
-		name=$(BINARY)_$(VERSION)_$${os}_$${arch}; \
-		rm -rf $$name && mkdir $$name; \
-		cp $(BINARY)-$$os-$$arch$$ext $$name/$(BINARY)$$ext; \
-		cp ../README.md $$name/; \
-		if [ $$os = windows ]; then zip -qr $$name.zip $$name; else tar -czf $$name.tar.gz $$name; fi; \
-		rm -rf $$name; \
-		echo "→ $(DIST)/$$name"; \
-	done; \
-	if command -v sha256sum >/dev/null; then sha256sum *.tar.gz *.zip; else shasum -a 256 *.tar.gz *.zip; fi > checksums.txt
+package: ## Empacota o binário desta plataforma (.tar.gz/.zip) em ./dist
+	cargo build --release -p pr-tracker
+	@set -e; name=$(BINARY)_$(VERSION)_$(OS)_$(ARCH); \
+	rm -rf $(DIST)/$$name && mkdir -p $(DIST)/$$name; \
+	cp target/release/$(BINARY)$(EXT) README.md $(DIST)/$$name/; \
+	if [ $(OS) = linux ]; then cp packaging/linux/* $(DIST)/$$name/; fi; \
+	if [ $(OS) = windows ]; then (cd $(DIST) && 7z a -bso0 $$name.zip $$name); else tar -C $(DIST) -czf $(DIST)/$$name.tar.gz $$name; fi; \
+	rm -rf $(DIST)/$$name; \
+	echo "→ $(DIST)/$$name"
+
+.PHONY: checksums
+checksums: ## Gera dist/checksums.txt para os pacotes em ./dist
+	@cd $(DIST) && if command -v sha256sum >/dev/null; then sha256sum *.tar.gz *.zip; else shasum -a 256 *.tar.gz *.zip; fi > checksums.txt
 
 ##@ Testes e qualidade
 
 .PHONY: test
 test: ## Roda os testes
-	go test ./...
-
-.PHONY: cover
-cover: ## Roda os testes com relatório de cobertura
-	go test -coverprofile=coverage.out ./...
-	go tool cover -func=coverage.out | tail -1
-
-.PHONY: vet
-vet: ## Roda go vet
-	go vet ./...
+	cargo test --workspace
 
 .PHONY: fmt
 fmt: ## Formata o código
-	gofmt -w $(GO_SOURCES)
+	cargo fmt --all
 
 .PHONY: lint
-lint: ## Verifica formatação e roda go vet
-	@test -z "$$(gofmt -l $(GO_SOURCES))" || (echo "arquivos não formatados:"; gofmt -l $(GO_SOURCES); exit 1)
-	go vet ./...
+lint: ## Verifica formatação e roda clippy
+	cargo fmt --all -- --check
+	cargo clippy --workspace --all-targets -- -D warnings
 
 .PHONY: check
 check: lint test ## Lint + testes (use antes de commitar)
 
 .PHONY: vuln
-vuln: ## Procura vulnerabilidades conhecidas nas dependências (govulncheck)
-	go run $(GOVULNCHECK) ./...
-
-.PHONY: desktop-check
-desktop-check: ## Verifica TypeScript/Svelte e testes do frontend
-	cd desktop/frontend && npm run check && npm test
-
-.PHONY: desktop-e2e
-desktop-e2e: ## Testa os layouts desktop em Chromium (CHROMIUM_PATH opcional)
-	cd desktop/frontend && npm run test:e2e
-
-##@ Dependências e bindings
-
-.PHONY: tidy
-tidy: ## Atualiza go.mod/go.sum
-	go mod tidy
-
-.PHONY: desktop-install
-desktop-install: ## Instala dependências do frontend desktop
-	cd desktop/frontend && npm ci
-
-.PHONY: desktop-bindings
-desktop-bindings: ## Regenera contratos Go/TypeScript (requer assets do frontend)
-	cd desktop && go run github.com/wailsapp/wails/v2/cmd/wails@$(WAILS_VERSION) generate module -tags gui,webkit2_41
+vuln: ## Procura vulnerabilidades conhecidas nas dependências (cargo-audit)
+	cargo install cargo-audit --locked --version $(CARGO_AUDIT_VERSION)
+	cargo audit
 
 ##@ Instalação e limpeza
 
 .PHONY: install
 install: build ## Instala em $(PREFIX)/bin (padrão ~/.local/bin)
-	install -Dm755 $(BINARY) $(PREFIX)/bin/$(BINARY)
+	install -Dm755 $(BINARY)$(EXT) $(PREFIX)/bin/$(BINARY)$(EXT)
 
 .PHONY: uninstall
 uninstall: ## Remove de $(PREFIX)/bin
-	rm -f $(PREFIX)/bin/$(BINARY)
+	rm -f $(PREFIX)/bin/$(BINARY)$(EXT)
 
 .PHONY: clean
 clean: ## Remove artefatos de build
-	rm -rf $(BINARY) $(DIST) coverage.out
+	cargo clean
+	rm -rf $(BINARY) $(BINARY).exe $(DIST)

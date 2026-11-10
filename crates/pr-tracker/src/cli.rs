@@ -12,7 +12,8 @@ pub const VERSION: &str = match option_env!("PR_TRACKER_VERSION") {
     None => "dev",
 };
 
-pub const USAGE: &str = "pr-tracker — acompanhe pull/merge requests e issues (GitHub, GitLab, Gitea)
+pub const USAGE: &str =
+    "pr-tracker — acompanhe pull/merge requests e issues (GitHub, GitLab, Gitea)
 
 Uso:
   pr-tracker                          abre a interface
@@ -31,7 +32,18 @@ Uso:
 pub fn handles(command: &str) -> bool {
     matches!(
         command,
-        "-h" | "--help" | "help" | "version" | "--version" | "config" | "doctor" | "list" | "ls" | "instance" | "instances" | "repo" | "repos"
+        "-h" | "--help"
+            | "help"
+            | "version"
+            | "--version"
+            | "config"
+            | "doctor"
+            | "list"
+            | "ls"
+            | "instance"
+            | "instances"
+            | "repo"
+            | "repos"
     )
 }
 
@@ -65,10 +77,17 @@ pub fn run(args: &[String]) -> Result<(), String> {
 
 /// Creates instances for the hosts the installed CLIs are logged in to.
 pub fn seed(cfg: &mut Config) {
-    let ctx = Ctx::background().with_paths(&cfg.tool_paths).with_timeout(Duration::from_secs(15));
+    let ctx = Ctx::background()
+        .with_paths(&cfg.tool_paths)
+        .with_timeout(Duration::from_secs(15));
     for provider in [Provider::GitHub, Provider::GitLab] {
         let host = provider.default_host().to_string();
-        let instance = Instance { name: host.clone(), provider, host, ..Instance::default() };
+        let instance = Instance {
+            name: host.clone(),
+            provider,
+            host,
+            ..Instance::default()
+        };
         let client = provider::new(&instance, &[]);
         if toolchain::lookup(&ctx, client.tool()).is_ok() && client.auth_status(&ctx).is_ok() {
             let _ = cfg.upsert_instance("", instance);
@@ -105,7 +124,10 @@ fn table(rows: &[Vec<String>]) -> String {
         for (index, cell) in row.iter().enumerate() {
             out.push_str(cell);
             if index + 1 < row.len() {
-                out.extend(std::iter::repeat_n(' ', widths[index] - cell.chars().count() + 2));
+                out.extend(std::iter::repeat_n(
+                    ' ',
+                    widths[index] - cell.chars().count() + 2,
+                ));
             }
         }
         out.push('\n');
@@ -115,9 +137,17 @@ fn table(rows: &[Vec<String>]) -> String {
 
 fn doctor(cfg: &Config) {
     println!("configuração: {}", cfg.file_path().display());
-    let cache = cache::path().map_or_else(|err| format!("indisponível: {err}"), |path| path.display().to_string());
+    let cache = cache::path().map_or_else(
+        |err| format!("indisponível: {err}"),
+        |path| path.display().to_string(),
+    );
     println!("cache:        {cache}");
-    println!("worktrees:    {}", cfg.worktrees().map(|dir| dir.display().to_string()).unwrap_or_default());
+    println!(
+        "worktrees:    {}",
+        cfg.worktrees()
+            .map(|dir| dir.display().to_string())
+            .unwrap_or_default()
+    );
     println!();
     let ctx = Ctx::background().with_paths(&cfg.tool_paths);
     for tool in ["git", "gh", "glab", "tea", "hunk", "herdr", "tmux"] {
@@ -132,11 +162,19 @@ fn doctor(cfg: &Config) {
     let ctx = ctx.with_timeout(Duration::from_secs(30));
     for instance in &cfg.instances {
         let status = provider::new(instance, &[]).auth_status(&ctx);
-        let mut message = status.as_ref().map_or_else(|err| err.to_string(), |_| "ok".to_string());
+        let mut message = status
+            .as_ref()
+            .map_or_else(|err| err.to_string(), |_| "ok".to_string());
         if instance.disabled {
             message += " (desativada)";
         }
-        println!("{} {} [{} {}] {message}", mark(status.is_ok()), instance.name, instance.provider, instance.host);
+        println!(
+            "{} {} [{} {}] {message}",
+            mark(status.is_ok()),
+            instance.name,
+            instance.provider,
+            instance.host
+        );
     }
     if cfg.instances.is_empty() {
         println!("nenhuma instância configurada: pr-tracker instance add --provider github");
@@ -144,8 +182,20 @@ fn doctor(cfg: &Config) {
 }
 
 fn list(cfg: &Config) {
-    let ctx = Ctx::background().with_paths(&cfg.tool_paths).with_timeout(Duration::from_secs(120));
-    let header = ["INSTÂNCIA", "TIPO", "REPO", "Nº", "CI", "REVISÃO", "COMENT.", "RELAÇÃO", "TÍTULO"];
+    let ctx = Ctx::background()
+        .with_paths(&cfg.tool_paths)
+        .with_timeout(Duration::from_secs(120));
+    let header = [
+        "INSTÂNCIA",
+        "TIPO",
+        "REPO",
+        "Nº",
+        "CI",
+        "REVISÃO",
+        "COMENT.",
+        "RELAÇÃO",
+        "TÍTULO",
+    ];
     let mut rows = vec![header.map(String::from).to_vec()];
     let mut errors = Vec::new();
     for instance in cfg.instances.iter().filter(|instance| !instance.disabled) {
@@ -208,7 +258,10 @@ impl Flags {
             let value = match inline {
                 Some(value) => value,
                 None if switches.contains(&name) => "true".to_string(),
-                None => args.next().cloned().ok_or_else(|| format!("--{name} exige um valor"))?,
+                None => args
+                    .next()
+                    .cloned()
+                    .ok_or_else(|| format!("--{name} exige um valor"))?,
             };
             values.push((name.to_string(), value));
         }
@@ -216,7 +269,11 @@ impl Flags {
     }
 
     fn get(&self, name: &str) -> &str {
-        self.0.iter().rev().find(|(flag, _)| flag == name).map_or("", |(_, value)| value)
+        self.0
+            .iter()
+            .rev()
+            .find(|(flag, _)| flag == name)
+            .map_or("", |(_, value)| value)
     }
 
     fn switch(&self, name: &str) -> bool {
@@ -227,24 +284,43 @@ impl Flags {
 fn instance(mut cfg: Config, args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         None | Some("list" | "ls") => {
-            let mut rows = vec![["NOME", "PROVIDER", "HOST", "MERGE", "STATUS"].map(String::from).to_vec()];
+            let mut rows = vec![
+                ["NOME", "PROVIDER", "HOST", "MERGE", "STATUS"]
+                    .map(String::from)
+                    .to_vec(),
+            ];
             for instance in &cfg.instances {
                 rows.push(vec![
                     instance.name.clone(),
                     instance.provider.to_string(),
                     instance.host.clone(),
                     or_dash(&instance.merge_method).to_string(),
-                    if instance.disabled { "desativada" } else { "ativa" }.to_string(),
+                    if instance.disabled {
+                        "desativada"
+                    } else {
+                        "ativa"
+                    }
+                    .to_string(),
                 ]);
             }
             print!("{}", table(&rows));
             Ok(())
         }
         Some("add") => {
-            let known = ["provider", "host", "name", "merge-method", "auto-merge", "delete-branch"];
+            let known = [
+                "provider",
+                "host",
+                "name",
+                "merge-method",
+                "auto-merge",
+                "delete-branch",
+            ];
             let flags = Flags::parse(&args[1..], &known, &["auto-merge", "delete-branch"])?;
             let Some(provider) = Provider::parse(flags.get("provider")) else {
-                return Err(format!("provider desconhecido {:?} (github, gitlab, gitea ou bitbucket)", flags.get("provider")));
+                return Err(format!(
+                    "provider desconhecido {:?} (github, gitlab, gitea ou bitbucket)",
+                    flags.get("provider")
+                ));
             };
             let instance = Instance {
                 name: flags.get("name").to_string(),
@@ -255,23 +331,39 @@ fn instance(mut cfg: Config, args: &[String]) -> Result<(), String> {
                 delete_branch: flags.switch("delete-branch"),
                 ..Instance::default()
             };
-            cfg.upsert_instance("", instance).map_err(|err| err.to_string())?;
+            cfg.upsert_instance("", instance)
+                .map_err(|err| err.to_string())?;
             cfg.save().map_err(|err| err.to_string())?;
-            let Some(added) = cfg.instances.last() else { return Ok(()) };
-            println!("instância {:?} adicionada ({} {})", added.name, added.provider, added.host);
+            let Some(added) = cfg.instances.last() else {
+                return Ok(());
+            };
+            println!(
+                "instância {:?} adicionada ({} {})",
+                added.name, added.provider, added.host
+            );
             let client = provider::new(added, &[]);
-            let ctx = Ctx::background().with_paths(&cfg.tool_paths).with_timeout(Duration::from_secs(20));
+            let ctx = Ctx::background()
+                .with_paths(&cfg.tool_paths)
+                .with_timeout(Duration::from_secs(20));
             if added.provider == Provider::Bitbucket {
-                println!("aviso: a integração com Bitbucket ainda não existe — veja docs/bitbucket.md");
+                println!(
+                    "aviso: a integração com Bitbucket ainda não existe — veja docs/bitbucket.md"
+                );
             } else if toolchain::lookup(&ctx, client.tool()).is_err() {
-                println!("aviso: {} não está instalado. Instale: {}", client.tool(), provider::install_hint(client.tool()));
+                println!(
+                    "aviso: {} não está instalado. Instale: {}",
+                    client.tool(),
+                    provider::install_hint(client.tool())
+                );
             } else if let Err(err) = client.auth_status(&ctx) {
                 println!("aviso: {err}");
             }
             Ok(())
         }
         Some("rm" | "remove" | "delete") => {
-            let Some(name) = args.get(1) else { return Err("uso: pr-tracker instance rm NOME".to_string()) };
+            let Some(name) = args.get(1) else {
+                return Err("uso: pr-tracker instance rm NOME".to_string());
+            };
             if !cfg.remove_instance(name) {
                 return Err(format!("instância {name:?} não encontrada"));
             }
@@ -284,7 +376,11 @@ fn instance(mut cfg: Config, args: &[String]) -> Result<(), String> {
 fn repo(mut cfg: Config, args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         None | Some("list" | "ls") => {
-            let mut rows = vec![["INSTÂNCIA", "REPO", "PASTA", "REMOTE", "TODOS PRS/MRS"].map(String::from).to_vec()];
+            let mut rows = vec![
+                ["INSTÂNCIA", "REPO", "PASTA", "REMOTE", "TODOS PRS/MRS"]
+                    .map(String::from)
+                    .to_vec(),
+            ];
             for repo in &cfg.repos {
                 rows.push(vec![
                     repo.instance.clone(),
@@ -298,8 +394,13 @@ fn repo(mut cfg: Config, args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("set") => {
-            let flags = Flags::parse(&args[1..], &["instance", "repo", "path", "remote", "merge-method"], &[])?;
-            let (instance, name, path) = (flags.get("instance"), flags.get("repo"), flags.get("path"));
+            let flags = Flags::parse(
+                &args[1..],
+                &["instance", "repo", "path", "remote", "merge-method"],
+                &[],
+            )?;
+            let (instance, name, path) =
+                (flags.get("instance"), flags.get("repo"), flags.get("path"));
             if cfg.instance(instance).is_none() {
                 return Err(format!("instância {instance:?} não encontrada"));
             }
@@ -308,7 +409,8 @@ fn repo(mut cfg: Config, args: &[String]) -> Result<(), String> {
             }
             if !path.is_empty() {
                 let ctx = Ctx::background().with_paths(&cfg.tool_paths);
-                gitops::validate_clone(&ctx, &config::expand_home(path)).map_err(|err| err.to_string())?;
+                gitops::validate_clone(&ctx, &config::expand_home(path))
+                    .map_err(|err| err.to_string())?;
             }
             cfg.set_repo_path(instance, name, path);
             if let Some(repo) = cfg.repo_mut(instance, name) {
@@ -332,8 +434,20 @@ mod tests {
     #[test]
     fn flags_accept_the_forms_the_go_cli_did() {
         let known = ["provider", "host", "auto-merge"];
-        let flags = Flags::parse(&args(&["--provider", "gitlab", "-host=git.corp", "--auto-merge"]), &known, &["auto-merge"]).unwrap();
-        assert_eq!((flags.get("provider"), flags.get("host"), flags.switch("auto-merge")), ("gitlab", "git.corp", true));
+        let flags = Flags::parse(
+            &args(&["--provider", "gitlab", "-host=git.corp", "--auto-merge"]),
+            &known,
+            &["auto-merge"],
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                flags.get("provider"),
+                flags.get("host"),
+                flags.switch("auto-merge")
+            ),
+            ("gitlab", "git.corp", true)
+        );
         assert_eq!(flags.get("name"), "");
         assert!(Flags::parse(&args(&["--unknown", "x"]), &known, &[]).is_err());
         assert!(Flags::parse(&args(&["--provider"]), &known, &[]).is_err());
@@ -342,8 +456,15 @@ mod tests {
 
     #[test]
     fn table_pads_every_column_but_the_last() {
-        let rows = vec![args(&["NOME", "HOST"]), args(&["trabalho", "git.corp"]), args(&["é", "h"])];
-        assert_eq!(table(&rows), "NOME      HOST\ntrabalho  git.corp\né         h\n");
+        let rows = vec![
+            args(&["NOME", "HOST"]),
+            args(&["trabalho", "git.corp"]),
+            args(&["é", "h"]),
+        ];
+        assert_eq!(
+            table(&rows),
+            "NOME      HOST\ntrabalho  git.corp\né         h\n"
+        );
     }
 
     #[test]
