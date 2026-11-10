@@ -32,13 +32,10 @@ fn demo_requested() -> bool {
 }
 
 fn init() -> App {
-    if !demo_requested() {
-        return App::open();
-    }
-    let mut app = App::demo();
+    let mut app = if demo_requested() { App::demo() } else { App::open() };
     if rune::tooling::headless_run().is_some() {
         // A headless frame is drawn on a virtual clock that does not wait for
-        // threads, so the fictional data is loaded before the first one.
+        // threads, so the list is loaded before the first one.
         app.begin(Arc::new(|| {}));
         app.settle();
     }
