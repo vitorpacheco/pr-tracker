@@ -1,10 +1,7 @@
-/pr-tracker
+/target/
 /dist/
 *.tmp
-coverage.out
 /.cache/
-/desktop/frontend/node_modules/
-/desktop/frontend/dist/
-/desktop/build/bin/
-
 /.t/
+/pr-tracker
+/pr-tracker.exe

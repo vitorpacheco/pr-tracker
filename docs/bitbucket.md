@@ -19,8 +19,8 @@ O candidato natural é o **`bkt`**, porque é o que mais se parece com `gh`/`gla
 
 - Ele suporta Cloud e Data Center (self-hosted), com várias instâncias. Isso é
   requisito do pr-tracker.
-- A saída estruturada (`--json`) permite implementar `provider.Client` do mesmo
-  jeito que `github.go` e `gitlab.go`.
+- A saída estruturada (`--json`) permite implementar `provider::Client` do mesmo
+  jeito que `github.rs` e `gitlab.rs`.
 - O `bkt pr checks` expõe o status dos builds e pipelines de cada PR.
 - Os PRs do Bitbucket têm ref de head no servidor. No Data Center é
   `refs/pull-requests/<id>/from`. No Cloud **não existe** ref equivalente, então
@@ -28,6 +28,6 @@ O candidato natural é o **`bkt`**, porque é o que mais se parece com `gh`/`gla
 
 Por não ser oficial, adicionar o `bkt` como dependência é uma decisão em aberto.
 
-Para implementar, basta completar `internal/provider/bitbucket.go` (hoje ele
-retorna `ErrNotSupported`). A UI já trata o provider `bitbucket` e a ferramenta
+Para implementar, basta completar `crates/core/src/provider/bitbucket.rs` (hoje
+ele retorna `ERR_NOT_SUPPORTED`). A UI já trata o provider `bitbucket` e a ferramenta
 `bkt` nas mensagens de "CLI não instalado".

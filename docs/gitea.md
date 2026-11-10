@@ -1,6 +1,6 @@
 # Gitea: a integração com o `tea`
 
-O provider `gitea` (`internal/provider/gitea.go`) fala com um servidor Gitea
+O provider `gitea` (`crates/core/src/provider/gitea.rs`) fala com um servidor Gitea
 através do [`tea`](https://gitea.com/gitea/tea), o CLI oficial mantido pela
 própria Gitea. Como em GitHub e GitLab, **nenhum token passa pelo pr-tracker**:
 a autenticação é a que o `tea` já tem.
@@ -22,27 +22,27 @@ O provider checa a versão uma vez por instância. A checagem também serve de
 defesa contra outro programa chamado `tea` no PATH — o nome é genérico o
 bastante para colidir.
 
-## Mapeamento de `provider.Client`
+## Mapeamento de `provider::Client`
 
 | Método | Implementação | Por quê |
 |---|---|---|
-| `List` | `tea api /repos/issues/search` + enriquecimento | único endpoint que filtra por relação com o usuário |
-| `Thread` | `tea api` em `/issues/{n}`, `/issues/{n}/comments`, `/pulls/{n}/reviews` e `/reviews/{id}/comments` | o Gitea guarda reviews e comentários inline fora da lista de comentários do issue |
-| `AddComment` | `tea api -X POST …/issues/{n}/comments` | evita depender do `tea comments add` (0.14.2+), que em versões anteriores travava no stdin |
-| `Approve` | `tea pulls approve` | |
-| `Merge` | `tea api -X POST …/pulls/{n}/merge` | `tea pulls merge` só expõe `--style`; apagar a branch e "merge quando os checks passarem" são opções da instância |
-| `Close` | `tea pulls close` | |
-| `Checkout` | `tea pulls checkout --branch`, rodando dentro do clone | |
-| `HeadRef` | `refs/pull/{n}/head` | o Gitea mantém esse ref no repositório base, forks incluídos — o `gitops` funciona sem mudança |
-| `AuthStatus` | `tea api /user` | ver "login sem token", abaixo |
+| `list` | `tea api /repos/issues/search` + enriquecimento | único endpoint que filtra por relação com o usuário |
+| `thread` | `tea api` em `/issues/{n}`, `/issues/{n}/comments`, `/pulls/{n}/reviews` e `/reviews/{id}/comments` | o Gitea guarda reviews e comentários inline fora da lista de comentários do issue |
+| `add_comment` | `tea api -X POST …/issues/{n}/comments` | evita depender do `tea comments add` (0.14.2+), que em versões anteriores travava no stdin |
+| `approve` | `tea pulls approve` | |
+| `merge` | `tea api -X POST …/pulls/{n}/merge` | `tea pulls merge` só expõe `--style`; apagar a branch e "merge quando os checks passarem" são opções da instância |
+| `close` | `tea pulls close` | |
+| `checkout` | `tea pulls checkout --branch`, rodando dentro do clone | |
+| `head_ref` | `refs/pull/{n}/head` | o Gitea mantém esse ref no repositório base, forks incluídos — o `gitops` funciona sem mudança |
+| `auth_status` | `tea api /user` | ver "login sem token", abaixo |
 
 ## Como a lista é montada
 
 O Gitea não tem GraphQL, então não existe o equivalente à chamada única que
-`github.go` e `gitlab.go` fazem. O filtro "relacionado a mim" está em
-`GET /repos/issues/search`, e cobre exatamente as abas do pr-tracker:
+`github.rs` e `gitlab.rs` fazem. O filtro "relacionado a mim" está em
+`GET /repos/issues/search`, e cobre exatamente as visões do pr-tracker:
 
-| Aba | Parâmetros |
+| Visão | Parâmetros |
 |---|---|
 | PRs · Revisar | `type=pulls&review_requested=true` |
 | PRs · Meus | `type=pulls&created=true` |
@@ -82,11 +82,11 @@ URLs, o que mantém servidores em HTTP puro ou em porta não padrão funcionando
 **Login sem token falha em silêncio.** Um login pode existir sem token usável
 (criado só com ssh-key, por exemplo). Nesse caso `/repos/issues/search` continua
 respondendo **200 com o que é público**, ou seja, a lista viria vazia e sem erro
-nenhum. Por isso tanto `List` quanto `AuthStatus` passam antes por `/user`, que
+nenhum. Por isso tanto `list` quanto `auth_status` passam antes por `/user`, que
 é o endpoint que de fato exige autenticação.
 
 **`tea api` sai com código 0 mesmo em 4xx.** O único sinal de falha é o envelope
-`{"message": …}` no corpo, então toda resposta passa por `apiError`. O envelope
+`{"message": …}` no corpo, então toda resposta passa por `api_error`. O envelope
 vira um erro tipado para que a dica de login possa ser anexada quando o problema
 for autenticação.
 
@@ -101,14 +101,14 @@ filtrados; uma checagem em andamento se resolve no refresh seguinte.
 
 **`target_url` relativo.** Os checks das Gitea Actions vêm com URL relativa
 (`/owner/repo/actions/runs/1/jobs/1`), que é completada com a base do servidor —
-o mesmo tratamento que o `gitlab.go` dá ao `webPath`.
+o mesmo tratamento que o `gitlab.rs` dá ao `webPath`.
 
 **Campo `Do` do merge.** O swagger do Gitea 1.27 expõe o campo como `do`, mas
 versões mais antigas o ligam como `Do`. A requisição manda os dois; campos
 desconhecidos são ignorados pelo servidor.
 
 **Numeração compartilhada.** Issues e PRs dividem o mesmo contador dentro de um
-repositório, então `Ref()` continua sendo `#N` e `Key()` já funcionava.
+repositório, então `reference()` continua sendo `#N` e `key()` já funcionava.
 
 ## Limitações conhecidas
 
@@ -117,7 +117,7 @@ repositório, então `Ref()` continua sendo `#N` e `Key()` já funcionava.
   versão reclamar.
 - Uma única página de 50 itens por busca, como nos outros providers.
 - Comandos interativos do `tea` (`tea pulls review`, o `--comments` do
-  `tea pulls`) não são usados; o `run()` do pacote já zera o stdin.
+  `tea pulls`) não são usados; o `toolchain` já roda os CLIs sem stdin.
 
 ## Como verificar à mão
 

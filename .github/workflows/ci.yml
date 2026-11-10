@@ -1,12 +1,11 @@
-# Build, tests and dependency vulnerability scan.
-# Pushes to main and version tags run this through nightly.yml / release.yml
-# (workflow_call), so the published artifacts are always gated by it.
+# Lint, tests and dependency vulnerability scan. Pushes to main and version
+# tags run this through nightly.yml / release.yml (workflow_call), so the
+# published artifacts are always gated by it. Native packages are built only
+# for those, or on demand: a pull request is checked, not packaged.
 name: CI
 
 on:
   pull_request:
-  push:
-    branches-ignore: [main]
   workflow_call:
     inputs:
       version:
@@ -22,6 +21,11 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  CARGO_TERM_COLOR: always
+  # The window links these on Linux, also for headless test runs.
+  LINUX_PACKAGES: libxkbcommon-dev libwayland-dev
+
 jobs:
   lint:
     name: Lint
@@ -30,13 +34,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      - name: go mod tidy está em dia
-        run: |
-          go mod tidy
-          git diff --exit-code -- go.mod go.sum
+      - run: sudo apt-get update && sudo apt-get install -y $LINUX_PACKAGES
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Cargo.lock está em dia
+        run: cargo metadata --locked --format-version 1 > /dev/null
       - run: make lint
 
   test:
@@ -50,59 +52,70 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      - name: go test
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" = Linux ]; then
-            go test -race -coverprofile=coverage.out ./...
-            go tool cover -func=coverage.out | tail -1
-          else
-            go test ./...
-          fi
+      - name: Bibliotecas Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y $LINUX_PACKAGES
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --locked
 
-  build:
-    name: Build (todas as plataformas)
-    runs-on: ubuntu-latest
+  package:
+    name: Pacote (${{ matrix.os }}/${{ matrix.arch }})
+    if: github.event_name != 'pull_request'
+    needs: [lint, test, vuln]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            os: linux
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
+          - runner: macos-15-intel
+            os: darwin
+            arch: amd64
+          - runner: macos-15
+            os: darwin
+            arch: arm64
+          - runner: windows-latest
+            os: windows
+            arch: amd64
+          - runner: windows-11-arm
+            os: windows
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      - name: Empacotar CLI
+      - name: Bibliotecas Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y $LINUX_PACKAGES
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Empacotar
         shell: bash
         env:
           VERSION_INPUT: ${{ inputs.version }}
         run: |
           version="${VERSION_INPUT:-ci-${GITHUB_SHA::7}}"
-          make package VERSION="$version"
+          make package VERSION="$version" OS="${{ matrix.os }}" ARCH="${{ matrix.arch }}"
       - uses: actions/upload-artifact@v7
         with:
-          name: pr-tracker-${{ github.sha }}
-          path: |
-            dist/*.tar.gz
-            dist/*.zip
-            dist/checksums.txt
+          name: pr-tracker-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/pr-tracker_*.${{ matrix.os == 'windows' && 'zip' || 'tar.gz' }}
+          if-no-files-found: error
           retention-days: 7
 
-  desktop:
-    name: Desktop (todas as plataformas)
-    uses: ./.github/workflows/desktop.yml
-    with:
-      version: ${{ inputs.version }}
-
   vuln:
-    name: govulncheck
+    name: cargo-audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
       - run: make vuln
