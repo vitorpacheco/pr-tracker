@@ -32,7 +32,11 @@ fn demo_requested() -> bool {
 }
 
 fn init() -> App {
-    let mut app = if demo_requested() { App::demo() } else { App::open() };
+    let mut app = if demo_requested() {
+        App::demo()
+    } else {
+        App::open()
+    };
     if rune::tooling::headless_run().is_some() {
         // A headless frame is drawn on a virtual clock that does not wait for
         // threads, so the list is loaded before the first one.
