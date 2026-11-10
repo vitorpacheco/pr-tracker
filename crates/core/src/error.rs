@@ -59,6 +59,8 @@ pub enum Error {
     Canceled,
     /// The operation ran past its deadline.
     DeadlineExceeded,
+    /// Independent failures of one operation, reported together.
+    Joined(Vec<Error>),
 }
 
 /// Builds an [`Error::Message`]: `msg!("lendo %s: %w", path, err)`.
@@ -77,6 +79,29 @@ impl Error {
         Error::External(text.into())
     }
 
+    /// One error for several: `None` when there are none, the error itself
+    /// when there is one.
+    pub fn join(mut errors: Vec<Error>) -> Option<Error> {
+        match errors.len() {
+            0 => None,
+            1 => errors.pop(),
+            _ => Some(Error::Joined(errors)),
+        }
+    }
+
+    /// Reports whether the chain contains `target`, as when a caller's
+    /// cancellation surfaces wrapped in a message.
+    pub fn contains(&self, target: &Error) -> bool {
+        if self == target {
+            return true;
+        }
+        match self {
+            Error::Message { args, .. } => args.iter().any(|arg| matches!(arg, Arg::Err(inner) if inner.contains(target))),
+            Error::Joined(errors) => errors.iter().any(|err| err.contains(target)),
+            _ => false,
+        }
+    }
+
     /// Reports whether this error, or one it wraps, is the application message
     /// `format`. Sentinels are compared by their catalog key.
     pub fn is(&self, format: &str) -> bool {
@@ -84,6 +109,7 @@ impl Error {
             Error::Message { format: own, args } => {
                 own == format || args.iter().any(|arg| matches!(arg, Arg::Err(inner) if inner.is(format)))
             }
+            Error::Joined(errors) => errors.iter().any(|err| err.is(format)),
             _ => false,
         }
     }
@@ -93,6 +119,7 @@ impl Error {
         match self {
             Error::MissingTool(_) => true,
             Error::Message { args, .. } => args.iter().any(|arg| matches!(arg, Arg::Err(inner) if inner.is_missing_tool())),
+            Error::Joined(errors) => errors.iter().any(Error::is_missing_tool),
             _ => false,
         }
     }
@@ -118,6 +145,7 @@ impl Error {
             ),
             Error::Canceled => i18n::text(language, "operação cancelada"),
             Error::DeadlineExceeded => i18n::text(language, "tempo limite excedido"),
+            Error::Joined(errors) => errors.iter().map(|err| err.text(language)).collect::<Vec<_>>().join("\n"),
         }
     }
 }
