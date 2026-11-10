@@ -589,15 +589,23 @@ impl App {
         self.row(&self.selected)
     }
 
-    /// The rows the list shows, most recently updated first.
+    /// The rows the list shows, top to bottom: pull requests grouped by
+    /// repository as drawn, issues most recently updated first.
     pub fn visible(&self) -> Vec<&Row> {
-        list::filter(
+        let rows = list::filter(
             &self.rows,
             self.kind,
             self.relation,
             &self.query.text,
             &self.instance,
-        )
+        );
+        if self.kind == Kind::Issue {
+            return rows;
+        }
+        list::group_by_repository(&rows)
+            .into_iter()
+            .flat_map(|group| group.rows)
+            .collect()
     }
 
     pub fn count(&self, kind: Kind, relation: Relation) -> usize {
@@ -1150,6 +1158,22 @@ pub(crate) mod tests {
             app.instance.is_empty(),
             "choosing the instance again clears it"
         );
+    }
+
+    #[test]
+    fn navigation_follows_the_grouped_order_on_screen() {
+        let app = demo();
+        // platform/cli has two pull requests with another repository's between them by age.
+        let repos: Vec<&str> = app
+            .visible()
+            .iter()
+            .map(|row| row.item.repo.as_str())
+            .collect();
+        let first = repos
+            .iter()
+            .position(|repo| *repo == "platform/cli")
+            .unwrap();
+        assert_eq!(repos[first + 1], "platform/cli", "{repos:?}");
     }
 
     #[test]

@@ -112,6 +112,18 @@ where
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
+/// A connection's nodes, where both the list and its entries may be `null`
+/// (for example an approver the viewer may not read). Entries that resolved
+/// are kept.
+fn nodes<'de, D, T>(deserializer: D) -> std::result::Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let nodes = Option::<Vec<Option<T>>>::deserialize(deserializer)?.unwrap_or_default();
+    Ok(nodes.into_iter().flatten().collect())
+}
+
 fn timestamp<'de, D>(deserializer: D) -> std::result::Result<Option<DateTime<Utc>>, D::Error>
 where
     D: Deserializer<'de>,
@@ -148,7 +160,7 @@ struct GraphQlError {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, bound(deserialize = "T: Deserialize<'de> + Default"))]
 struct Nodes<T> {
-    #[serde(deserialize_with = "nullable")]
+    #[serde(deserialize_with = "nodes")]
     nodes: Vec<T>,
 }
 
@@ -252,7 +264,7 @@ struct Job {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 struct Connection {
-    #[serde(deserialize_with = "nullable")]
+    #[serde(deserialize_with = "nodes")]
     nodes: Vec<MergeRequest>,
     #[serde(deserialize_with = "nullable")]
     page_info: PageInfo,
@@ -1467,5 +1479,22 @@ if [ -f "$dir/response.$n" ]; then cat "$dir/response.$n"; else echo '{}'; fi
             let err = client.thread(&fake.ctx(), &item).unwrap_err();
             assert_eq!(err.text("en"), "team/service!8 not found");
         }
+    }
+
+    #[test]
+    fn null_connection_entries_do_not_reject_the_response() {
+        let users: Nodes<User> =
+            serde_json::from_str(r#"{"nodes":[null,{"username":"ana"}]}"#).unwrap();
+        assert_eq!(
+            users
+                .nodes
+                .iter()
+                .map(|user| user.username.as_str())
+                .collect::<Vec<_>>(),
+            ["ana"]
+        );
+        let connection: Connection =
+            serde_json::from_str(r#"{"nodes":[null],"pageInfo":null}"#).unwrap();
+        assert!(connection.nodes.is_empty());
     }
 }

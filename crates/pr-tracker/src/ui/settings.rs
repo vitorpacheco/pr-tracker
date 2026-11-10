@@ -1,7 +1,5 @@
 //! The editable copy of the configuration behind the settings dialog.
 
-use std::collections::BTreeMap;
-
 use pr_tracker_core::config::{CommentPreset, Config, Instance, Provider, Repo};
 use rune::TextEdit;
 
@@ -277,12 +275,13 @@ impl SettingsForm {
         cfg.desktop_terminal = self.desktop_terminal.text.trim().to_string();
         cfg.terminal = self.terminal.clone();
         cfg.diff_tool = self.diff_tool.clone();
-        cfg.tool_paths = TOOLS
-            .iter()
-            .zip(&self.tools)
-            .filter(|(_, edit)| !edit.text.trim().is_empty())
-            .map(|(tool, edit)| (tool.to_string(), edit.text.trim().to_string()))
-            .collect::<BTreeMap<_, _>>();
+        // Overrides for tools the dialog does not list (a terminal, say) stay.
+        for (tool, edit) in TOOLS.iter().zip(&self.tools) {
+            match edit.text.trim() {
+                "" => cfg.tool_paths.remove(*tool),
+                path => cfg.tool_paths.insert(tool.to_string(), path.to_string()),
+            };
+        }
         cfg.instances = self
             .instances
             .iter()
@@ -323,6 +322,7 @@ impl SettingsForm {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
 
     fn sample() -> Config {
         let mut cfg = Config::default();
@@ -416,6 +416,16 @@ mod tests {
         assert_eq!(
             form.to_config().tool_paths,
             BTreeMap::from([("git".to_string(), "/usr/bin/git".to_string())])
+        );
+    }
+
+    #[test]
+    fn tool_paths_the_dialog_does_not_list_are_kept() {
+        let mut cfg = sample();
+        cfg.tool_paths.insert("kitty".into(), "/opt/kitty".into());
+        assert_eq!(
+            SettingsForm::new(&cfg).to_config().tool_paths,
+            cfg.tool_paths
         );
     }
 }
