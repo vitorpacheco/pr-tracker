@@ -8,3 +8,4 @@ coverage.out
 /desktop/build/bin/
 
 /.t/
+/target/

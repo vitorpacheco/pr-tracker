@@ -1,0 +1,11 @@
+[package]
+name = "pr-tracker"
+description = "Track pull requests, merge requests and issues across GitHub, GitLab and Gitea"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+pr-tracker-core = { path = "../core" }
