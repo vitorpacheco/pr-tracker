@@ -17,7 +17,7 @@ The toolchain is pinned in `rust-toolchain.toml` (Rust 1.99.1 with clippy and ru
 - `make snapshot` renders the demo window to `dist/preview/window.png` without opening a window; pass `ARGS="--scene settings --theme light"` to vary it. `pr-tracker --list-scenes` prints the scenes, which are defined in `crates/pr-tracker/src/ui/mod.rs`.
 - `make package` builds the host platform's archive in `dist/` (`pr-tracker_<version>_<os>_<arch>.tar.gz`, `.zip` on Windows); `make checksums` writes `dist/checksums.txt`. There is no cross-compilation: each platform is packaged on its own runner.
 - `make install` installs into `$(PREFIX)/bin` (default `~/.local/bin`).
-- CI lives in `.github/workflows/`: `ci.yml` (lint, tests on Linux/macOS/Windows, native packages for six OS/architecture combinations, cargo-audit), `nightly.yml` (pre-release `nightly` on every push to `main`), `release.yml` (tags `v*`), `vulncheck.yml` (weekly scan).
+- CI lives in `.github/workflows/`: `ci.yml` (lint, tests on Linux/macOS/Windows, cargo-audit; native packages for six OS/architecture combinations only on nightly, release and manual runs), `nightly.yml` (pre-release `nightly` on every push to `main`), `release.yml` (tags `v*`), `vulncheck.yml` (weekly scan).
 
 ## Coding Style & Naming Conventions
 

@@ -1,12 +1,11 @@
-# Lint, tests, native packages and dependency vulnerability scan.
-# Pushes to main and version tags run this through nightly.yml / release.yml
-# (workflow_call), so the published artifacts are always gated by it.
+# Lint, tests and dependency vulnerability scan. Pushes to main and version
+# tags run this through nightly.yml / release.yml (workflow_call), so the
+# published artifacts are always gated by it. Native packages are built only
+# for those, or on demand: a pull request is checked, not packaged.
 name: CI
 
 on:
   pull_request:
-  push:
-    branches-ignore: [main]
   workflow_call:
     inputs:
       version:
@@ -62,6 +61,8 @@ jobs:
 
   package:
     name: Pacote (${{ matrix.os }}/${{ matrix.arch }})
+    if: github.event_name != 'pull_request'
+    needs: [lint, test, vuln]
     strategy:
       fail-fast: false
       matrix:

@@ -428,7 +428,7 @@ content outside translation calls.
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| `ci.yml` | PRs and pushes to other branches | Up-to-date `Cargo.lock`, lint (`cargo fmt`, clippy), tests on Linux, macOS, and Windows, native packages for all six OS/architecture combinations, and `cargo-audit` |
+| `ci.yml` | PRs, and called by the nightly and release workflows | Up-to-date `Cargo.lock`, lint (`cargo fmt`, clippy), tests on Linux, macOS, and Windows, and `cargo-audit`. Native packages for all six OS/architecture combinations are built only for nightly and release runs (or a manual run), after the checks pass |
 | `nightly.yml` | Push to `main` | Run CI and recreate the `nightly` pre-release, pointing to the new commit (`nightly-YYYYMMDD-<sha>`) |
 | `release.yml` | Push of a `v*` tag | Run CI and publish the packages with generated notes; suffixed tags such as `v1.0.0-rc.1` become pre-releases |
 | `vulncheck.yml` | Every Monday and manually | Run `cargo-audit` on `main` to catch new advisories without requiring a commit |

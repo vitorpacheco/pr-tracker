@@ -173,6 +173,7 @@ mod tests {
 
     #[test]
     fn explicit_path_overrides_path_and_does_not_fall_back() {
+        let _guard = crate::i18n::tests::env_lock();
         let executable = std::env::current_exe().unwrap();
         let mut paths =
             BTreeMap::from([("gh".to_string(), executable.to_string_lossy().into_owned())]);
@@ -190,6 +191,7 @@ mod tests {
 
     #[test]
     fn child_environment_does_not_mutate_process() {
+        let _guard = crate::i18n::tests::env_lock();
         let before = std::env::var_os("PATH");
         let executable = std::env::current_exe().unwrap();
         let paths =
