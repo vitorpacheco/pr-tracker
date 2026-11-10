@@ -211,7 +211,7 @@ impl Application {
                 cache_errors.push(err.clone());
             }
         }
-        next.items.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        next.items.sort_by_key(|item| std::cmp::Reverse(item.updated_at));
         for item in &next.items {
             let key = item.key();
             if let Some(path) = result.clones.get(&key) {
