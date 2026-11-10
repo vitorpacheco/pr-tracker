@@ -998,8 +998,7 @@ mod tests {
     mod cli {
         use std::collections::BTreeMap;
         use std::fs;
-        use std::os::unix::fs::PermissionsExt;
-        use std::sync::{Mutex, MutexGuard};
+        use std::process::Command;
 
         use super::super::*;
         use super::instance;
@@ -1021,10 +1020,6 @@ echo "$n" > "$dir/count"
 if [ -f "$dir/response.$n" ]; then cat "$dir/response.$n"; else echo '{}'; fi
 "#;
 
-        // A process forked by another test while the script is still open for
-        // writing makes executing it fail with ETXTBSY, so the fakes take turns.
-        static TURN: Mutex<()> = Mutex::new(());
-
         #[derive(Debug, PartialEq)]
         struct Call {
             host: String,
@@ -1033,17 +1028,23 @@ if [ -f "$dir/response.$n" ]; then cat "$dir/response.$n"; else echo '{}'; fi
 
         struct Fake {
             dir: tempfile::TempDir,
-            _turn: MutexGuard<'static, ()>,
         }
 
         impl Fake {
             fn new() -> Self {
-                let turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                 let dir = tempfile::tempdir().unwrap();
                 let script = dir.path().join("glab");
-                fs::write(&script, SCRIPT).unwrap();
-                fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
-                Self { dir, _turn: turn }
+                // A child writes the script: a descriptor opened for writing in
+                // this process could leak into a child forked by any other
+                // test and make executing the script fail with ETXTBSY.
+                let status = Command::new("sh")
+                    .args(["-c", r#"printf '%s' "$2" > "$1" && chmod 755 "$1""#, "sh"])
+                    .arg(&script)
+                    .arg(SCRIPT)
+                    .status()
+                    .unwrap();
+                assert!(status.success());
+                Self { dir }
             }
 
             fn ctx(&self) -> Ctx {
