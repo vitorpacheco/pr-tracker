@@ -236,6 +236,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pr_tracker_core::provider::Relation;
     use rune::{Env, Mods, Runtime};
 
     fn runtime() -> Runtime<App> {
@@ -374,12 +375,52 @@ mod tests {
         press(&mut runtime, "kind-issues");
         assert_eq!(runtime.state.kind, Kind::Issue);
         press(&mut runtime, "kind-prs");
-        press(&mut runtime, "filter-2");
+        press(&mut runtime, "view-2");
         assert_eq!(
             runtime.state.visible().len(),
             2,
             "Mine shows the authored pull requests"
         );
+    }
+
+    #[test]
+    fn view_tabs_stand_in_for_a_collapsed_sidebar() {
+        let mut runtime = runtime();
+        assert!(
+            runtime.find("filter-2").is_none(),
+            "the sidebar already lists the views"
+        );
+        press(&mut runtime, "sidebar-toggle");
+        frames(&mut runtime, 40);
+        press(&mut runtime, "filter-2");
+        assert_eq!(runtime.state.relation, Relation::AUTHORED);
+    }
+
+    #[test]
+    fn preset_comments_sit_with_the_composer() {
+        let mut runtime = runtime();
+        assert!(
+            runtime.find("preset-0").is_none(),
+            "the details tab stays about the pull request"
+        );
+        press(&mut runtime, "tab-conversation");
+        press(&mut runtime, "preset-0");
+        assert!(runtime.state.confirm.is_some(), "a preset asks first");
+    }
+
+    #[test]
+    fn draft_state_is_changed_from_the_more_menu() {
+        let mut runtime = runtime();
+        assert!(runtime.find("toggle-draft").is_none());
+        press(&mut runtime, "more-actions");
+        // Below the open and track entries and their two separators.
+        press(&mut runtime, "more-menu-item9");
+        let confirm = runtime
+            .state
+            .confirm
+            .as_ref()
+            .expect("the toggle asks first");
+        assert_eq!(confirm.request.action, Action::MarkDraft);
     }
 
     #[test]

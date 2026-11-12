@@ -14,7 +14,9 @@ use super::state::{App, DetailTab};
 use super::text::{relative_age, status_label};
 use super::theme::Look;
 use super::view::tab;
-use super::widgets::{self, BannerKind, activity, banner, pill, rule, section, tinted};
+use super::widgets::{
+    self, BannerKind, activity, avatar, banner, card, pill, rule, section, tinted,
+};
 
 fn has_integration(provider: Provider) -> bool {
     matches!(
@@ -50,23 +52,28 @@ fn header(app: &App, selected: &Row, look: &Look) -> El {
             app.tr(if item.draft { "Rascunho" } else { "Aberto" }),
             if item.draft { look.muted } else { look.green },
             look,
-        ))
-        .child(el().grow(1.0));
-    if !item.is_issue() && has_integration(item.provider) {
-        let (action, label) = if item.draft {
-            (Action::MarkReady, "Marcar como Ready")
-        } else {
-            (Action::MarkDraft, "Marcar como Draft")
+        ));
+    if item.ci != CiState::None {
+        let ink = match item.ci {
+            CiState::Success => look.green,
+            CiState::Failure => look.red,
+            CiState::Pending => look.yellow,
+            _ => look.muted,
         };
         reference = reference.child(
-            Button::new(app.tr(label))
-                .variant(ButtonVariant::Ghost)
-                .disabled(busy)
-                .on_press(move |app: &mut App| app.ask(action, label, false, false, None))
-                .build(k)
-                .key("toggle-draft"),
+            pill(
+                format!("CI · {}", status_label(app.language, item.ci.as_str())),
+                ink,
+                look,
+            )
+            .key("inspector-ci"),
         );
     }
+    reference = reference.child(el().grow(1.0)).child(
+        text(relative_age(item.updated_at, Utc::now(), app.language))
+            .font(k.ty.small)
+            .color(look.muted),
+    );
     let mut header = col()
         .w_full()
         .gap(8.0)
@@ -80,11 +87,21 @@ fn header(app: &App, selected: &Row, look: &Look) -> El {
                 .selectable(true),
         )
         .child(
-            text(format!("{} · {}", item.repo, item.author))
-                .font(k.ty.ui)
-                .color(look.muted)
-                .truncate(),
+            row()
+                .w_full()
+                .gap(8.0)
+                .center_y()
+                .child(avatar(&item.author, look))
+                .child(text(item.author.clone()).font(k.ty.ui).color(look.text))
+                .child(
+                    text(item.repo.clone())
+                        .font(k.ty.ui)
+                        .color(look.muted)
+                        .truncate()
+                        .grow(1.0),
+                ),
         );
+    let mut branch_actions = Vec::new();
     if !item.is_issue() {
         let branch = |name: &str| {
             row()
@@ -106,61 +123,34 @@ fn header(app: &App, selected: &Row, look: &Look) -> El {
                     .truncate(),
                 )
         };
-        let has_worktree = selected.worktree.is_some();
-        let help = if has_worktree {
-            "Buscar novos commits da branch de origem e atualizar o worktree local"
-        } else {
-            "Crie um worktree para atualizar a branch local"
-        };
-        header = header.child(
-            row()
-                .w_full()
-                .gap(6.0)
-                .center_y()
-                .flex_wrap()
-                .child(branch(&item.source_branch))
-                .child(text("→").font(k.ty.ui).color(look.muted))
-                .child(branch(&item.target_branch))
-                .child(
-                    Button::new(app.tr("Atualizar branch local"))
-                        .variant(ButtonVariant::Ghost)
-                        .disabled(busy || !has_worktree)
-                        .help(app.tr(help))
-                        .on_press(|app: &mut App| {
-                            app.ask(
-                                Action::UpdateWorktree,
-                                "Atualizar branch local",
-                                false,
-                                false,
-                                None,
-                            )
-                        })
-                        .build(k)
-                        .key("update-local-branch"),
-                ),
-        );
-    }
-    if !item.is_issue() && has_integration(item.provider) {
-        let blocked = item.provider == Provider::GitHub && !item.can_update_branch;
-        let help = if item.conflicts {
-            "Resolva os conflitos antes de atualizar a branch"
-        } else if blocked {
-            "Branch atualizada ou sem permissão para atualizar no GitHub"
-        } else {
-            "Incorporar a branch base na origem do PR/MR no servidor"
-        };
-        let mut sync = row().w_full().gap(6.0).center_y().flex_wrap();
+        let mut branches = row()
+            .w_full()
+            .gap(6.0)
+            .center_y()
+            .flex_wrap()
+            .child(branch(&item.source_branch))
+            .child(text("→").font(k.ty.ui).color(look.muted))
+            .child(branch(&item.target_branch));
         if item.conflicts {
-            sync = sync.child(
+            branches = branches.child(
                 pill(app.tr("Conflitos"), look.red, look)
                     .help(app.tr("Conflitos precisam ser resolvidos antes do merge.")),
             );
         }
         if item.behind_base {
-            sync = sync.child(pill(app.tr("Branch desatualizada"), look.yellow, look));
+            branches = branches.child(pill(app.tr("Branch desatualizada"), look.yellow, look));
         }
-        header = header.child(
-            sync.child(
+        header = header.child(branches);
+        if has_integration(item.provider) {
+            let blocked = item.provider == Provider::GitHub && !item.can_update_branch;
+            let help = if item.conflicts {
+                "Resolva os conflitos antes de atualizar a branch"
+            } else if blocked {
+                "Branch atualizada ou sem permissão para atualizar no GitHub"
+            } else {
+                "Incorporar a branch base na origem do PR/MR no servidor"
+            };
+            branch_actions.push(
                 Button::new(app.tr("Atualizar com branch base"))
                     .variant(ButtonVariant::Outline)
                     .disabled(busy || item.conflicts || blocked)
@@ -176,7 +166,30 @@ fn header(app: &App, selected: &Row, look: &Look) -> El {
                     })
                     .build(k)
                     .key("update-branch"),
-            ),
+            );
+        }
+        let has_worktree = selected.worktree.is_some();
+        let help = if has_worktree {
+            "Buscar novos commits da branch de origem e atualizar o worktree local"
+        } else {
+            "Crie um worktree para atualizar a branch local"
+        };
+        branch_actions.push(
+            Button::new(app.tr("Atualizar branch local"))
+                .variant(ButtonVariant::Outline)
+                .disabled(busy || !has_worktree)
+                .help(app.tr(help))
+                .on_press(|app: &mut App| {
+                    app.ask(
+                        Action::UpdateWorktree,
+                        "Atualizar branch local",
+                        false,
+                        false,
+                        None,
+                    )
+                })
+                .build(k)
+                .key("update-local-branch"),
         );
     }
     if !item.labels.is_empty() {
@@ -186,6 +199,16 @@ fn header(app: &App, selected: &Row, look: &Look) -> El {
                     .iter()
                     .map(|label| pill(label.clone(), look.blue, look)),
             ),
+        );
+    }
+    if !branch_actions.is_empty() {
+        header = header.child(
+            row()
+                .key("branch-actions")
+                .w_full()
+                .gap(6.0)
+                .flex_wrap()
+                .children(branch_actions),
         );
     }
     header
@@ -284,15 +307,17 @@ fn details_tab(app: &App, selected: &Row, look: &Look) -> Vec<El> {
                     .selectable(true),
             )
             .child(
-                Button::new(app.tr(label))
-                    .variant(ButtonVariant::Outline)
-                    .shortcut("w")
-                    .disabled(app.busy.contains_key(&selected.key))
-                    .on_press(move |app: &mut App| {
-                        app.ask(Action::UpdateWorktree, label, false, false, None)
-                    })
-                    .build(k)
-                    .key("worktree-button"),
+                row().child(
+                    Button::new(app.tr(label))
+                        .variant(ButtonVariant::Outline)
+                        .shortcut("w")
+                        .disabled(app.busy.contains_key(&selected.key))
+                        .on_press(move |app: &mut App| {
+                            app.ask(Action::UpdateWorktree, label, false, false, None)
+                        })
+                        .build(k)
+                        .key("worktree-button"),
+                ),
             ),
     );
     out
@@ -338,42 +363,68 @@ fn checks_tab(app: &App, selected: &Row, look: &Look) -> Vec<El> {
     vec![checks]
 }
 
+/// The instance's preset comments, each one press away from the confirmation.
+fn presets(app: &App, selected: &Row, look: &Look) -> Option<El> {
+    let k = &look.kit;
+    let presets = app.comment_presets();
+    if presets.is_empty() {
+        return None;
+    }
+    let busy = app.busy.contains_key(&selected.key);
+    let buttons = presets.iter().enumerate().map(|(index, preset)| {
+        let text = preset.body.clone();
+        Button::new(preset.label.clone())
+            .variant(ButtonVariant::Outline)
+            .disabled(busy)
+            .on_press(move |app: &mut App| {
+                app.ask(
+                    Action::Comment,
+                    "Enviar comentário",
+                    false,
+                    false,
+                    Some(text.clone()),
+                )
+            })
+            .build(k)
+            .key(format!("preset-{index}"))
+    });
+    Some(
+        col()
+            .key("comment-presets")
+            .w_full()
+            .gap(6.0)
+            .child(
+                text(app.tr("Comentários predefinidos"))
+                    .font(k.ty.small_medium)
+                    .color(look.muted),
+            )
+            .child(row().w_full().gap(6.0).flex_wrap().children(buttons)),
+    )
+}
+
 fn conversation_tab(app: &App, selected: &Row, look: &Look) -> Vec<El> {
     let k = &look.kit;
     let mut out = Vec::new();
     if let Some(thread) = &app.thread {
-        let body = if thread.body.trim().is_empty() {
-            app.tr("_Sem descrição._")
-        } else {
-            thread.body.clone()
-        };
-        out.push(markdown(&body, look).key("description"));
         for (index, comment) in thread.comments.iter().enumerate() {
-            let mut entry = col()
-                .key(format!("comment-{index}"))
-                .w_full()
-                .gap(6.0)
-                .padding(10.0)
-                .radius(k.radius.md)
-                .fill(look.raised)
-                .child(
-                    row()
-                        .w_full()
-                        .gap(8.0)
-                        .center_y()
-                        .child(
-                            text(comment.author.clone())
-                                .font(k.ty.ui_medium)
-                                .color(look.text)
-                                .truncate()
-                                .grow(1.0),
-                        )
-                        .child(
-                            text(relative_age(comment.created_at, Utc::now(), app.language))
-                                .font(k.ty.small)
-                                .color(look.muted),
-                        ),
-                );
+            let mut entry = card(look).key(format!("comment-{index}")).gap(6.0).child(
+                row()
+                    .w_full()
+                    .gap(8.0)
+                    .center_y()
+                    .child(
+                        text(comment.author.clone())
+                            .font(k.ty.ui_medium)
+                            .color(look.text)
+                            .truncate()
+                            .grow(1.0),
+                    )
+                    .child(
+                        text(relative_age(comment.created_at, Utc::now(), app.language))
+                            .font(k.ty.small)
+                            .color(look.muted),
+                    ),
+            );
             if !comment.review.is_empty() {
                 let ink = match comment.review.as_str() {
                     REVIEW_APPROVED => look.green,
@@ -398,22 +449,22 @@ fn conversation_tab(app: &App, selected: &Row, look: &Look) -> Vec<El> {
         }
     }
     let busy = app.busy.contains_key(&selected.key);
+    let mut composer = col().key("composer").w_full().gap(6.0).pt(8.0).child(
+        text(app.tr("Adicionar comentário"))
+            .font(k.ty.ui_medium)
+            .color(look.text),
+    );
+    if let Some(presets) = presets(app, selected, look) {
+        composer = composer.child(presets);
+    }
     out.push(
-        col()
-            .key("composer")
-            .w_full()
-            .gap(6.0)
-            .pt(8.0)
-            .child(
-                text(app.tr("Adicionar comentário"))
-                    .font(k.ty.ui_medium)
-                    .color(look.text),
-            )
+        composer
             .child(
                 TextArea::new(&app.draft)
                     .label(app.tr("Adicionar comentário"))
                     .placeholder(app.tr("Escreva em Markdown…"))
                     .auto_grow(4, 12)
+                    .width(None)
                     .on_edit(|app: &mut App| &mut app.draft)
                     .build(k)
                     .key("comment"),
@@ -518,8 +569,15 @@ fn more_menu(app: &App, selected: &Row, look: &Look, layer: &mut Vec<El>) -> El 
                         });
                     }),
             )
-            .separator()
-            .item(ask("Fechar sem merge", Action::Close, false).danger(true));
+            .separator();
+        if has_integration(item.provider) {
+            menu = menu.item(if item.draft {
+                ask("Marcar como Ready", Action::MarkReady, false)
+            } else {
+                ask("Marcar como Draft", Action::MarkDraft, false)
+            });
+        }
+        menu = menu.item(ask("Fechar sem merge", Action::Close, false).danger(true));
         if selected.worktree.is_some() {
             menu = menu
                 .item(ask("Aprovar e remover worktree", Action::Approve, true))
@@ -544,7 +602,9 @@ fn actions(app: &App, selected: &Row, look: &Look, layer: &mut Vec<El>) -> El {
         .px(16.0)
         .py(10.0)
         .gap(8.0)
-        .center_y();
+        .center_y()
+        .fill(look.panel)
+        .shadow(-4.0, 14.0, look.shadow);
     if !selected.item.is_issue() {
         bar = bar
             .child(
@@ -634,39 +694,6 @@ pub fn inspector(app: &App, look: &Look, layer: &mut Vec<El>) -> El {
         .gap(12.0)
         .child(header(app, selected, look))
         .child(detail_tabs);
-    let presets = app.comment_presets();
-    if !presets.is_empty() {
-        let busy = app.busy.contains_key(&selected.key);
-        let buttons = presets.iter().enumerate().map(|(index, preset)| {
-            let text = preset.body.clone();
-            Button::new(preset.label.clone())
-                .variant(ButtonVariant::Outline)
-                .disabled(busy)
-                .on_press(move |app: &mut App| {
-                    app.ask(
-                        Action::Comment,
-                        "Enviar comentário",
-                        false,
-                        false,
-                        Some(text.clone()),
-                    )
-                })
-                .build(k)
-                .key(format!("preset-{index}"))
-        });
-        body = body.child(
-            col()
-                .key("comment-presets")
-                .w_full()
-                .gap(6.0)
-                .child(
-                    text(app.tr("Comentários predefinidos"))
-                        .font(k.ty.small_medium)
-                        .color(look.muted),
-                )
-                .child(row().w_full().gap(6.0).flex_wrap().children(buttons)),
-        );
-    }
     if app.detail_loading {
         body = body.child(activity(app.tr("Carregando conversa…"), look).key("detail-loading"));
     }

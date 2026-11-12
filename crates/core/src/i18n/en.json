@@ -541,6 +541,8 @@
   "Atualizando branch com a base no servidor…": "Updating branch with base on server…",
   "atualização com a branch base solicitada em ": "branch update with base requested for ",
   "Branch desatualizada": "Branch out of date",
+  "Aparência": "Appearance",
+  "Fluxo de trabalho": "Workflow",
   "Atualizar com branch base": "Update with base branch",
   "Resolva os conflitos antes de atualizar a branch": "Resolve conflicts before updating the branch",
   "Branch atualizada ou sem permissão para atualizar no GitHub": "Branch up to date or no permission to update on GitHub",

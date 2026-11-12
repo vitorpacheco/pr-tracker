@@ -117,6 +117,8 @@ pub struct Look {
     pub red: Color,
     pub yellow: Color,
     pub blue: Color,
+    /// What lifted surfaces cast: black, stronger on a dark background.
+    pub shadow: Color,
 }
 
 /// A custom palette always applies; the system one only while the preference
@@ -174,7 +176,9 @@ pub fn look(preference: ThemePreference, palette: Option<&Palette>, system_dark:
         state.border = ink.alpha(0.45);
         state.bg = ink.alpha(0.12);
     }
+    let shadow = Color::BLACK.alpha(if kit.dark { 0.42 } else { 0.1 });
     Look {
+        shadow,
         kit,
         background,
         panel,

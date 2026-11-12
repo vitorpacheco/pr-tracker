@@ -3,7 +3,10 @@
 use pr_tracker_core::app::Action;
 use pr_tracker_core::config::Provider;
 use rune::{Cursor, El, FileDialogOptions, ScrollSpec, TextEdit, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, Checkbox, Dialog, Placement, Select, TextArea, TextInput};
+use rune_kit::{
+    Button, ButtonVariant, Checkbox, Dialog, Placement, Select, SelectAppearance, TextArea,
+    TextInput,
+};
 
 use super::run_command;
 use super::settings::{
@@ -12,7 +15,7 @@ use super::settings::{
 };
 use super::state::App;
 use super::theme::{Look, ThemePreference};
-use super::widgets::{BannerKind, activity, banner, eyebrow, kbd, rule};
+use super::widgets::{BannerKind, activity, banner, card, eyebrow, kbd, rule};
 
 fn paragraph(message: String, look: &Look) -> El {
     text(message).font(look.kit.ty.ui).color(look.muted).wrap()
@@ -295,6 +298,7 @@ fn choice(
     let control = Select::new(key.clone(), &labels)
         .label(label.clone())
         .current(shown)
+        .appearance(SelectAppearance::Field)
         .open(open)
         // The trigger stretches across its column, so the list lines up with
         // the value at its start rather than the far end.
@@ -317,7 +321,8 @@ fn choice(
         })
         // The kit keys the trigger `<key>-trigger` and anchors the listbox to
         // that key, so the trigger must keep it.
-        .build(&look.kit, layer);
+        .build(&look.kit, layer)
+        .w_full();
     let _ = app;
     labeled(label, control, look)
 }
@@ -330,13 +335,10 @@ fn translated(app: &App, options: &[(&str, &str)]) -> Vec<(String, String)> {
 }
 
 fn fieldset(key: String, title: String, look: &Look) -> El {
-    col()
+    card(look)
         .key(key)
-        .w_full()
         .gap(10.0)
-        .padding(12.0)
-        .radius(look.kit.radius.md)
-        .border(1.0, look.border)
+        .fill(look.background)
         .child(text(title).font(look.kit.ty.ui_medium).color(look.text))
 }
 
@@ -789,7 +791,7 @@ pub fn settings(app: &App, look: &Look, layer: &mut Vec<El>, height: f32) {
         })
         .build(k)
         .key("theme-export");
-    body = body
+    let appearance = fieldset("settings-appearance".into(), app.tr("Aparência"), look)
         .child(
             grid()
                 .child(choice(
@@ -834,65 +836,69 @@ pub fn settings(app: &App, look: &Look, layer: &mut Vec<El>, height: f32) {
         .child(paragraph(
             app.tr("Vazio segue o tema do sistema; caminho relativo à configuração"),
             look,
-        ))
-        .child(
-            grid()
-                .child(input(
-                    app.tr("Intervalo de atualização"),
-                    &form.refresh_interval,
-                    "5m".into(),
-                    Field::RefreshInterval,
-                    look,
-                ))
-                .child(input(
-                    app.tr("Pasta de worktrees"),
-                    &form.worktree_dir,
-                    app.tr("Padrão da aplicação"),
-                    Field::WorktreeDir,
-                    look,
-                )),
-        )
-        .child(
-            grid()
-                .child(choice(
-                    app,
-                    form,
-                    "settings-terminal".into(),
-                    "Terminal".into(),
-                    &translated(app, &TERMINALS),
-                    &form.terminal,
-                    |app, value| {
-                        if let Some(form) = &mut app.settings {
-                            form.terminal = value.to_string();
-                        }
-                    },
-                    look,
-                    &mut popups,
-                ))
-                .child(input(
-                    app.tr("Terminal desktop"),
-                    &form.desktop_terminal,
-                    app.tr("Detectar automaticamente (kitty, foot, wezterm…)"),
-                    Field::DesktopTerminal,
-                    look,
-                ))
-                .child(choice(
-                    app,
-                    form,
-                    "settings-diff".into(),
-                    "Diff".into(),
-                    &translated(app, &DIFF_TOOLS),
-                    &form.diff_tool,
-                    |app, value| {
-                        if let Some(form) = &mut app.settings {
-                            form.diff_tool = value.to_string();
-                        }
-                    },
-                    look,
-                    &mut popups,
-                )),
-        )
-        .child(heading("Caminhos das ferramentas"));
+        ));
+    let workflow = fieldset(
+        "settings-workflow".into(),
+        app.tr("Fluxo de trabalho"),
+        look,
+    )
+    .child(
+        grid()
+            .child(input(
+                app.tr("Intervalo de atualização"),
+                &form.refresh_interval,
+                "5m".into(),
+                Field::RefreshInterval,
+                look,
+            ))
+            .child(input(
+                app.tr("Pasta de worktrees"),
+                &form.worktree_dir,
+                app.tr("Padrão da aplicação"),
+                Field::WorktreeDir,
+                look,
+            )),
+    )
+    .child(
+        grid()
+            .child(choice(
+                app,
+                form,
+                "settings-terminal".into(),
+                "Terminal".into(),
+                &translated(app, &TERMINALS),
+                &form.terminal,
+                |app, value| {
+                    if let Some(form) = &mut app.settings {
+                        form.terminal = value.to_string();
+                    }
+                },
+                look,
+                &mut popups,
+            ))
+            .child(input(
+                app.tr("Terminal desktop"),
+                &form.desktop_terminal,
+                app.tr("Detectar automaticamente (kitty, foot, wezterm…)"),
+                Field::DesktopTerminal,
+                look,
+            ))
+            .child(choice(
+                app,
+                form,
+                "settings-diff".into(),
+                "Diff".into(),
+                &translated(app, &DIFF_TOOLS),
+                &form.diff_tool,
+                |app, value| {
+                    if let Some(form) = &mut app.settings {
+                        form.diff_tool = value.to_string();
+                    }
+                },
+                look,
+                &mut popups,
+            )),
+    );
     let mut tools = grid();
     for (index, tool) in TOOLS.iter().enumerate() {
         tools = tools.child(input(
@@ -903,7 +909,18 @@ pub fn settings(app: &App, look: &Look, layer: &mut Vec<El>, height: f32) {
             look,
         ));
     }
-    body = body.child(tools).child(heading("Instâncias"));
+    body = body
+        .child(appearance)
+        .child(workflow)
+        .child(
+            fieldset(
+                "settings-tools".into(),
+                app.tr("Caminhos das ferramentas"),
+                look,
+            )
+            .child(tools),
+        )
+        .child(heading("Instâncias"));
     for (index, instance) in form.instances.iter().enumerate() {
         body = body.child(instance_fields(
             app,
