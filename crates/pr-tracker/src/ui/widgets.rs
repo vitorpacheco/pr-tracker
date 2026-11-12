@@ -31,6 +31,11 @@ pub static ISSUE: Icon = Icon {
     view: 16.0,
     body: r#"<circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/>"#,
 };
+pub static REPO: Icon = Icon {
+    name: "prt-repo",
+    view: 16.0,
+    body: r#"<path d="M4.5 2.5h8v11h-8A1.5 1.5 0 0 1 3 12V4a1.5 1.5 0 0 1 1.5-1.5zM3 12a1.5 1.5 0 0 1 1.5-1.5h8M6 5.5h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>"#,
+};
 pub static COMMENT: Icon = Icon {
     name: "prt-comment",
     view: 16.0,
