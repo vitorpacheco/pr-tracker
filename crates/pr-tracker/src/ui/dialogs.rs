@@ -3,7 +3,7 @@
 use pr_tracker_core::app::Action;
 use pr_tracker_core::config::Provider;
 use rune::{Cursor, El, FileDialogOptions, ScrollSpec, TextEdit, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, Checkbox, Dialog, Select, TextArea, TextInput};
+use rune_kit::{Button, ButtonVariant, Checkbox, Dialog, Placement, Select, TextArea, TextInput};
 
 use super::run_command;
 use super::settings::{
@@ -296,6 +296,9 @@ fn choice(
         .label(label.clone())
         .current(shown)
         .open(open)
+        // The trigger stretches across its column, so the list lines up with
+        // the value at its start rather than the far end.
+        .placement(Placement::BottomStart)
         .on_toggle(move |app: &mut App| {
             if let Some(form) = &mut app.settings {
                 form.open_select = if form.open_select.as_deref() == Some(toggle_key.as_str()) {
@@ -312,8 +315,9 @@ fn choice(
             }
             close(app);
         })
-        .build(&look.kit, layer)
-        .key(key);
+        // The kit keys the trigger `<key>-trigger` and anchors the listbox to
+        // that key, so the trigger must keep it.
+        .build(&look.kit, layer);
     let _ = app;
     labeled(label, control, look)
 }

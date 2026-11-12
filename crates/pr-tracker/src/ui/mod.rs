@@ -202,6 +202,12 @@ fn spec() -> AppSpec<App> {
             }),
             ("checks", |app| app.detail_tab = DetailTab::Checks),
             ("settings", |app| app.open_settings()),
+            ("settings-select", |app| {
+                app.open_settings();
+                if let Some(form) = &mut app.settings {
+                    form.open_select = Some("settings-language".into());
+                }
+            }),
             ("palette", |app| app.toggle_palette()),
             ("confirm-merge", |app| {
                 app.ask(Action::Merge, "Fazer merge", false, false, None)
@@ -390,5 +396,28 @@ mod tests {
             runtime.find("settings-save").is_some(),
             "the dialog is drawn"
         );
+    }
+
+    #[test]
+    fn a_settings_select_opens_its_options_under_the_field() {
+        let mut runtime = runtime();
+        press(&mut runtime, "open-settings");
+        for key in ["settings-theme", "settings-language", "settings-terminal"] {
+            let trigger = format!("{key}-trigger");
+            press(&mut runtime, &trigger);
+            let (field_x, field_y) = runtime.find(&trigger).expect("the field");
+            let (list_x, list_y) = runtime
+                .find(&format!("{key}-content"))
+                .unwrap_or_else(|| panic!("{key} shows its options"));
+            assert!(
+                list_y > field_y && list_y - field_y < 120.0,
+                "{key}: options at y {list_y} open just below the field at y {field_y}"
+            );
+            assert!(
+                (list_x - field_x).abs() < 400.0,
+                "{key}: options at x {list_x} stay with the field at x {field_x}"
+            );
+            press(&mut runtime, &trigger);
+        }
     }
 }
