@@ -625,32 +625,36 @@ fn list_pane(app: &App, look: &Look) -> El {
         rows = rows.child(empty(app, look));
     } else if app.kind == Kind::Pr {
         for group in list::group_by_repository(&visible) {
+            // A filled bar, so the repository reads as a heading for the
+            // rows under it instead of as one more line of the list.
             rows = rows.child(
-                row()
-                    .key(format!("group-{}-{}", group.instance, group.repo))
-                    .w_full()
-                    .px(12.0)
-                    .pt(12.0)
-                    .pb(4.0)
-                    .gap(8.0)
-                    .items_end()
-                    .child(
-                        text(group.repo.to_string())
-                            .font(k.ty.ui_medium)
-                            .color(look.text)
-                            .truncate(),
-                    )
-                    .child(
-                        text(group.rows.len().to_string())
-                            .font(k.ty.small)
-                            .color(look.muted),
-                    )
-                    .child(
-                        text(group.instance.to_string())
-                            .font(k.ty.small)
-                            .color(look.muted)
-                            .truncate(),
-                    ),
+                col().w_full().pt(10.0).pb(2.0).child(
+                    row()
+                        .key(format!("group-{}-{}", group.instance, group.repo))
+                        .w_full()
+                        .px(12.0)
+                        .py(7.0)
+                        .gap(8.0)
+                        .center_y()
+                        .radius(k.radius.md)
+                        .fill(look.raised)
+                        .border(1.0, look.border)
+                        .child(tinted(&widgets::REPO, 14.0, look.accent))
+                        .child(
+                            text(group.repo.to_string())
+                                .font(k.ty.body_medium)
+                                .color(look.text)
+                                .truncate(),
+                        )
+                        .child(pill(group.rows.len().to_string(), look.muted, look))
+                        .child(row().grow(1.0))
+                        .child(
+                            text(group.instance.to_string())
+                                .font(k.ty.small_medium)
+                                .color(look.muted)
+                                .truncate(),
+                        ),
+                ),
             );
             for row_data in group.rows {
                 rows = rows.child(item_row(app, row_data, look));
