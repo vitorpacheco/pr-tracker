@@ -145,9 +145,31 @@ pub fn eyebrow(label: impl Into<String>, look: &Look) -> El {
         .color(look.muted)
 }
 
-/// A titled block in the inspector.
+/// Lifts a surface off the pane behind it: a tight contact shadow and a
+/// soft one below.
+pub fn lifted(surface: El, look: &Look) -> El {
+    surface
+        .shadow(1.0, 2.0, look.shadow)
+        .shadow(6.0, 16.0, look.shadow)
+}
+
+/// A bordered, lifted surface that groups related content.
+pub fn card(look: &Look) -> El {
+    lifted(
+        col()
+            .w_full()
+            .gap(8.0)
+            .padding(12.0)
+            .radius(look.kit.radius.md)
+            .fill(look.panel)
+            .border(1.0, look.border),
+        look,
+    )
+}
+
+/// A titled card in the inspector.
 pub fn section(title: impl Into<String>, look: &Look) -> El {
-    col().w_full().gap(8.0).pt(14.0).child(
+    card(look).child(
         text(title.into())
             .font(look.kit.ty.ui_medium)
             .color(look.text),

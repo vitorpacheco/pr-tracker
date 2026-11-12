@@ -1,7 +1,9 @@
 //! The window's frame: toolbar, sidebar and the list of items.
 
 use chrono::Utc;
-use pr_tracker_core::provider::{CiState, Kind, Relation};
+use pr_tracker_core::provider::{
+    CiState, Kind, REVIEW_APPROVED, REVIEW_CHANGES_REQUESTED, Relation,
+};
 use rune::{Cursor, Cx, El, ScrollSpec, Tx, col, row, text};
 use rune_kit::shell::{Sidebar, SidebarRow, SidebarSection, SplitView, Toolbar};
 use rune_kit::{Button, ButtonVariant, IconButton, IconButtonVariant, Spinner, TextInput};
@@ -10,7 +12,9 @@ use super::list::{self, Row};
 use super::state::App;
 use super::text::{relative_age, status_label};
 use super::theme::{self, Look};
-use super::widgets::{self, BannerKind, activity, avatar, banner, eyebrow, kbd, pill, tinted};
+use super::widgets::{
+    self, BannerKind, activity, avatar, banner, eyebrow, kbd, lifted, pill, tinted,
+};
 use super::{dialogs, inspector};
 
 /// The element key of an item's row.
@@ -366,6 +370,29 @@ fn item_row(app: &App, row_data: &Row, look: &Look) -> El {
                 .help(app.tr("Conflitos precisam ser resolvidos antes do merge.")),
         );
     }
+    if !item.is_issue() {
+        let review = match item.review.as_str() {
+            REVIEW_APPROVED => Some(("✓ Aprovado", look.green)),
+            REVIEW_CHANGES_REQUESTED => Some(("Alterações solicitadas", look.red)),
+            _ => None,
+        };
+        if let Some((label, ink)) = review {
+            line = line.child(pill(app.tr(label), ink, look));
+        }
+        if item.additions + item.deletions > 0 {
+            line = line
+                .child(
+                    text(format!("+{}", item.additions))
+                        .font(k.ty.small)
+                        .color(look.green),
+                )
+                .child(
+                    text(format!("−{}", item.deletions))
+                        .font(k.ty.small)
+                        .color(look.red),
+                );
+        }
+    }
     let title_ink = if selected {
         look.selection_text
     } else {
@@ -421,7 +448,7 @@ fn item_row(app: &App, row_data: &Row, look: &Look) -> El {
                 ),
         );
     let key = row_data.key.clone();
-    row()
+    let surface = row()
         .key(row_key(&row_data.key))
         .role("row")
         .label(format!(
@@ -453,7 +480,12 @@ fn item_row(app: &App, row_data: &Row, look: &Look) -> El {
         .child(main)
         .child(author)
         .child(ci)
-        .child(updated)
+        .child(updated);
+    if selected {
+        lifted(surface, look)
+    } else {
+        surface
+    }
 }
 
 fn empty(app: &App, look: &Look) -> El {
@@ -555,8 +587,15 @@ fn list_pane(app: &App, look: &Look) -> El {
             .font(k.ty.small)
             .color(look.muted),
         );
+    // The sidebar lists the same views, so the tabs only stand in for it
+    // while it is collapsed.
     let mut filters = row().key("filters").gap(4.0).flex_wrap();
-    for (label, relation) in tabs(app.kind) {
+    let views = if app.sidebar.is_open() {
+        Vec::new()
+    } else {
+        tabs(app.kind).to_vec()
+    };
+    for (label, relation) in views {
         filters = filters.child(tab(
             format!("filter-{}", relation.0),
             app.tr(label),
@@ -664,7 +703,7 @@ fn list_pane(app: &App, look: &Look) -> El {
         .gap(10.0)
         .child(heading)
         .children(notifications(app, look))
-        .child(filters)
+        .children((!app.sidebar.is_open()).then_some(filters))
         .child(table_head)
         .child(
             rows.scroll(ScrollSpec {
